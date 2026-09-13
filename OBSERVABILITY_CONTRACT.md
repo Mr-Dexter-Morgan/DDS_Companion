@@ -83,6 +83,6 @@ Observability is subordinate to archive correctness:
 - health callback failure must not kill watcher;
 - one capture failure must not stop observation of others.
 
-## 0.4.0 GUI constraint
+## 0.4.x GUI constraint
 
 The first GUI should treat these services as its model layer. It may add presentation-specific models/adapters, but should not move domain logic back into widgets.

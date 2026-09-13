@@ -1,0 +1,48 @@
+DDS Companion 0.4.1 — Windows Live Test Checklist
+=================================================
+
+Target display
+--------------
+[ ] Test first on 1366x768-class display / normal Windows scaling.
+[ ] Dashboard has no overlap or clipped Storage panel.
+[ ] Vertical scroll reaches every Dashboard panel.
+[ ] Metric cards are 2x2 in Compact layout.
+[ ] Lower Dashboard cards stack cleanly.
+
+Navigation / polish
+-------------------
+[ ] Idle nav state is readable and calm.
+[ ] Hover state is visibly different from idle.
+[ ] Selected state remains visibly different after moving the mouse away.
+[ ] Refresh looks like a compact secondary button.
+[ ] Top bar has no Open library button.
+[ ] Dashboard has no Open library folder button.
+[ ] Library page still has Open library folder.
+
+Launchers
+---------
+[ ] run_companion.bat starts the GUI without a persistent console window.
+[ ] run_companion_debug.bat starts the GUI with a diagnostic console.
+[ ] First-time dependency bootstrap still offers PySide6 install if missing.
+
+Runtime / archive regression
+----------------------------
+[ ] Existing archive message count is preserved.
+[ ] Health reaches RUNNING.
+[ ] Watcher heartbeat continues updating.
+[ ] Open DDS_Data works.
+[ ] Open logs works.
+[ ] Library Open library folder works.
+[ ] Settings path Open buttons work.
+[ ] A fresh Discord capture/change appears without restarting Companion.
+[ ] Closing the GUI stops cleanly.
+
+Optional display checks
+-----------------------
+[ ] 1920x1080 uses Standard layout cleanly.
+[ ] 2K/4K or high-DPI display uses a comfortable non-clipped layout.
+
+Result
+------
+[ ] PASS → 0.4.1 may be promoted from BUILT / LOCAL TESTING.
+[ ] FAIL → record exact display/scaling and screenshot; patch in a new version.

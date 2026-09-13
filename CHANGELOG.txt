@@ -1,46 +1,53 @@
-DDS Companion 0.4.0 — Desktop Dashboard
-========================================
+DDS Companion 0.4.1 — GUI Polish / Responsive Layout
+=====================================================
 
 Status: BUILT / LOCAL TESTING
 
-Added
------
-- First PySide6 desktop interface.
-- Dark graphite + restrained blue/violet visual system.
-- Dashboard / Library / Activity / Health / Settings navigation.
-- Live Dashboard bound to Stats/Health/Activity snapshots.
-- Total storage, session delta, messages, contexts and media counters.
-- Storage breakdown including SQLite family, DDS JSON, cache, media and logs.
-- LibraryService read-only Server → Channel → Thread hierarchy.
-- Activity table from persisted activity_events.
-- Health page for Database / DDS_Data / Importer / Watcher.
-- One-click Open library folder / Open DDS_Data / Open logs actions.
-- Settings path cards for database/cache/media/backups/logs.
-- Runtime-generated DDS icon.
-- GUI dependency bootstrap and PySide6 installer helper.
-- Separate run_cli.bat preserving the proven headless watcher.
+Purpose
+-------
+0.4.1 is a focused polish release over the live-tested 0.4.0 desktop GUI.
+It does not change the archive schema, importer contract or watcher behavior.
 
-Architecture
-------------
-- Added dds_companion.gui.runtime.GuiRuntime.
-- SQLite remains confined to one background runtime thread.
-- Qt receives snapshots through signal callbacks, not direct SQL calls.
-- Added optional CaptureWatcher.on_tick callback; observer exceptions are isolated.
-- Added LibraryService so Qt does not depend on the archive schema.
-- Manual UI refresh uses a thread-safe Event.
+Changed
+-------
+- Dashboard is now scroll-safe instead of relying on a fixed-height layout.
+- Added Compact / Standard / Large layout profiles selected from usable screen
+  geometry, logical DPI, device-pixel ratio and current window width.
+- Compact mode rearranges metric cards into a 2x2 grid and stacks lower
+  dashboard panels vertically, preventing the 1366x768 storage panel overlap.
+- Standard/Large modes preserve the wider desktop card layout.
+- Window initial size now respects available screen geometry instead of always
+  requesting 1320x840.
+- Layout profile is re-evaluated on window resize, screen changes, available
+  geometry changes and logical-DPI changes.
+- Sidebar navigation now has clearly different idle, hover and selected states.
+- Removed duplicate Open Library actions from the top bar and Dashboard.
+  Library page is now the single Open library folder location.
+- Refresh is now a compact secondary action rather than plain ghost text.
+- Normal launcher hands the GUI to pythonw.exe/run_companion.pyw so a console
+  is not kept open during normal use.
+- Added run_companion_debug.bat for an intentional console/debug session.
+
+Unchanged
+---------
+- Accumulating SQLite archive behavior.
+- Watcher settle/retry/isolation semantics.
+- Activity / Health / Stats services.
+- Library Server → Channel → Thread model.
+- DDS_Data source contract.
+- No media download, search, Drive sync, tray, autostart or installer yet.
 
 Validation
 ----------
-- 21/21 automated tests PASS.
-- All 18 previous regression tests remain PASS.
-- Library hierarchy test PASS.
-- GUI runtime start/snapshot/clean-stop test PASS.
-- Live capture change through watcher/importer/activity test PASS.
-- Python compileall PASS.
+- Python compileall: PASS.
+- Full automated suite: 27/27 PASS.
+- Previous 21 tests remain PASS.
+- Added 3 layout-profile tests for 1366x768, 1080p and dense 4K cases.
+- Added 3 source-contract tests for scroll safety, launcher split and duplicate
+  Open Library action removal.
 
-Known validation gap
---------------------
-- The build environment does not have PySide6 installed, so native Qt rendering
-  has not been visually executed here.
-- The release must remain BUILT / LOCAL TESTING until the real Windows machine
-  confirms window rendering, navigation, quick folder actions and live UI update.
+Live-test boundary
+------------------
+PySide6 is not available in the build container, so the actual 0.4.1 Qt render
+must still be checked on Windows.  In particular: 1366x768 compact flow,
+sidebar state colors, normal no-persistent-console launch and folder buttons.

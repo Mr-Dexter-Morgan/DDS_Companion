@@ -4,7 +4,7 @@ import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent, QGuiApplication, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from dds_companion import __version__
 from dds_companion.core.paths import build_runtime_paths
 
+from .layout_profile import choose_layout_profile
 from .pages import ActivityPage, DashboardPage, HealthPage, LibraryPage, SettingsPage
 from .runtime import GuiRuntime
 from .theme import MUTED, TEXT
@@ -41,8 +42,10 @@ class MainWindow(QMainWindow):
     def __init__(self, *, dds_data: str | None = None, app_data: str | None = None, poll_ms: int = 750, settle_ms: int = 500):
         super().__init__()
         self.setWindowTitle(f"DDS Companion {__version__}")
-        self.resize(1320, 840)
-        self.setMinimumSize(1080, 680)
+        self.setMinimumSize(960, 600)
+        self._layout_profile: str | None = None
+        self._screen_signals_connected = False
+        self._observed_screen = None
 
         self.bus = SignalBus()
         self.paths = build_runtime_paths(dds_data, app_data)
@@ -77,6 +80,8 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self._connect_signals()
+        self._size_for_primary_screen()
+        self._apply_layout_profile(force=True)
         self.runtime_thread.start()
 
     def _build_ui(self) -> None:
@@ -143,7 +148,8 @@ class MainWindow(QMainWindow):
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(0)
 
-        topbar = QFrame()
+        self.topbar = QFrame()
+        topbar = self.topbar
         topbar.setObjectName("Topbar")
         topbar.setFixedHeight(62)
         top = QHBoxLayout(topbar)
@@ -155,11 +161,6 @@ class MainWindow(QMainWindow):
         self.live_label.setToolTip("Последнее живое событие watcher/Activity")
         top.addWidget(self.live_label, 1)
 
-        self.top_open_btn = QPushButton("Open library")
-        self.top_open_btn.setProperty("secondary", True)
-        self.top_open_btn.clicked.connect(self.open_library)
-        top.addWidget(self.top_open_btn)
-
         self.top_status = QLabel("STARTING")
         self.top_status.setObjectName("StatusPill")
         set_state_property(self.top_status, "STARTING")
@@ -169,7 +170,6 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.dashboard = DashboardPage(
             self.runtime.request_refresh,
-            self.open_library,
             self.open_dds,
             self.open_logs,
         )
@@ -192,6 +192,92 @@ class MainWindow(QMainWindow):
         self.status_path.setStyleSheet(f"color:{MUTED};padding-right:8px;")
         status.addPermanentWidget(self.status_path)
         self.setStatusBar(status)
+
+    def _size_for_primary_screen(self) -> None:
+        screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            self.resize(1320, 840)
+            return
+        geometry = screen.availableGeometry()
+        profile = choose_layout_profile(
+            available_width=geometry.width(),
+            available_height=geometry.height(),
+            logical_dpi=screen.logicalDotsPerInch(),
+            device_pixel_ratio=screen.devicePixelRatio(),
+            window_width=geometry.width(),
+        )
+        desired = {
+            "compact": (1240, 700),
+            "standard": (1320, 840),
+            "large": (1500, 940),
+        }[profile]
+        width = min(desired[0], max(self.minimumWidth(), int(geometry.width() * 0.94)))
+        height = min(desired[1], max(self.minimumHeight(), int(geometry.height() * 0.94)))
+        self.resize(width, height)
+
+    def _current_screen(self):
+        return self.screen() or QGuiApplication.primaryScreen()
+
+    def _apply_layout_profile(self, *, force: bool = False) -> None:
+        screen = self._current_screen()
+        if screen is None:
+            return
+        geometry = screen.availableGeometry()
+        profile = choose_layout_profile(
+            available_width=geometry.width(),
+            available_height=geometry.height(),
+            logical_dpi=screen.logicalDotsPerInch(),
+            device_pixel_ratio=screen.devicePixelRatio(),
+            window_width=self.width(),
+        )
+        if not force and profile == self._layout_profile:
+            return
+        self._layout_profile = profile
+
+        if profile == "compact":
+            self.sidebar.setFixedWidth(190)
+            self.topbar.setFixedHeight(54)
+        elif profile == "large":
+            self.sidebar.setFixedWidth(236)
+            self.topbar.setFixedHeight(68)
+        else:
+            self.sidebar.setFixedWidth(216)
+            self.topbar.setFixedHeight(62)
+
+        for page in self.pages:
+            apply_profile = getattr(page, "apply_layout_profile", None)
+            if apply_profile:
+                apply_profile(profile)
+
+    def _bind_screen(self, screen) -> None:
+        if screen is None or screen is self._observed_screen:
+            return
+        self._observed_screen = screen
+        screen.availableGeometryChanged.connect(lambda _rect: self._apply_layout_profile(force=True))
+        screen.logicalDotsPerInchChanged.connect(lambda _dpi: self._apply_layout_profile(force=True))
+
+    def _on_screen_changed(self, screen) -> None:
+        self._bind_screen(screen)
+        self._apply_layout_profile(force=True)
+
+    def _connect_screen_signals(self) -> None:
+        if self._screen_signals_connected:
+            return
+        handle = self.windowHandle()
+        if handle is None:
+            return
+        handle.screenChanged.connect(self._on_screen_changed)
+        self._bind_screen(handle.screen())
+        self._screen_signals_connected = True
+
+    def showEvent(self, event: QShowEvent) -> None:
+        super().showEvent(event)
+        self._connect_screen_signals()
+        self._apply_layout_profile(force=True)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        super().resizeEvent(event)
+        self._apply_layout_profile()
 
     def _connect_signals(self) -> None:
         self.bus.snapshot.connect(self._on_snapshot)

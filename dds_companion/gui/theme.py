@@ -35,6 +35,7 @@ QScrollArea {{
     background: transparent;
 }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
+QWidget#PageScrollContent {{ background: transparent; }}
 QScrollBar:vertical {{
     background: transparent;
     width: 10px;
@@ -85,21 +86,23 @@ QPushButton[nav="true"] {{
     text-align: left;
     padding: 10px 12px;
     border-radius: 9px;
-    border: 1px solid transparent;
-    color: {MUTED};
-    background: transparent;
+    border: 1px solid #161c28;
+    color: #9aa4b8;
+    background: #10151f;
     font-weight: 600;
 }}
 QPushButton[nav="true"]:hover {{
     color: {TEXT};
-    background: #151a25;
+    background: #1a2230;
+    border-color: #2a3548;
 }}
-QPushButton[nav="true"]:checked {{
+QPushButton[nav="true"]:checked,
+QPushButton[nav="true"]:checked:hover {{
     color: white;
-    background: #1a1f2d;
-    border-color: #2c3450;
+    background: #27263d;
+    border-color: #6668f1;
+    font-weight: 750;
 }}
-QPushButton[nav="true"]:checked::before {{ background: {ACCENT}; }}
 QPushButton[primary="true"] {{
     color: white;
     background: {ACCENT};
@@ -121,6 +124,10 @@ QPushButton[secondary="true"] {{
 QPushButton[secondary="true"]:hover {{
     background: #1b2130;
     border-color: #333c52;
+}}
+QPushButton[secondary="true"][compact="true"] {{
+    padding: 6px 10px;
+    min-width: 0px;
 }}
 QPushButton[ghost="true"] {{
     color: {MUTED};

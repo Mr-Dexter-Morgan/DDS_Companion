@@ -1,14 +1,24 @@
-# DDS Companion 0.4.0 — UI Contract
+# DDS Companion 0.4.1 — UI Contract
 
 ## Visual direction
 
-- Dark, restrained, professional desktop utility.
-- Graphite base, slightly lighter panels, blue/violet accent.
-- Accent is semantic, not decorative noise.
-- Native window chrome is retained for predictable Windows behavior.
-- No fake hacker terminal aesthetic.
-- No animation required for core usability.
-- Dashboard must remain readable at a glance.
+- Dark, restrained desktop utility; graphite base with blue/violet accent.
+- No fake hacker-terminal aesthetic.
+- Total storage and health remain immediately discoverable.
+- Layout adapts by rearranging content, not by blindly scaling the whole UI.
+
+## Responsive profiles
+
+The GUI evaluates `availableGeometry()`, `logicalDotsPerInch()`,
+`devicePixelRatio()` and current window width.
+
+- **Compact** — short/laptop displays such as 1366x768: tighter margins,
+  2x2 metric grid, vertically stacked lower Dashboard cards and scroll-safe body.
+- **Standard** — typical 1080p desktop layout.
+- **Large** — roomy 2K/4K/high-density presentation with more breathing room.
+
+Profile is recalculated on resize, screen changes, usable-geometry changes and
+logical-DPI changes.
 
 ## Navigation
 
@@ -20,26 +30,27 @@ Persistent left rail:
 4. Health
 5. Settings
 
-Brand and version stay visible. A small `LOCAL FIRST` card states that the archive remains local.
+Navigation has three deliberately distinct visual states: idle, hover and
+selected.  Brand/version and the `LOCAL FIRST` card remain visible.
 
 ## Top bar
 
 Always visible:
 
 - latest transient/persisted activity text;
-- `Open library` quick action;
 - overall `RUNNING / DEGRADED / ERROR / STARTING / STOPPED` pill.
+
+There is no duplicate Open Library action in the top bar.
 
 ## Dashboard
 
-Top actions:
+Quick actions:
 
-- Open library folder
 - Open DDS_Data
 - Open logs
-- Refresh
+- compact secondary Refresh
 
-Primary metric cards:
+Primary metrics:
 
 - Total known storage
 - Message count
@@ -53,70 +64,32 @@ Secondary panels:
 - Storage breakdown
 - Current-session growth
 
+The body is scroll-safe.  Compact mode prioritizes non-overlap over fitting all
+panels above the fold.
+
 ## Library
 
-Read-only structural tree:
+Read-only structural tree: `Server → Channel → Thread`.
 
-`Server → Channel → Thread`
+This page is the single UI location for **Open library folder**.
 
-Each node displays message count and immutable Discord ID. A local tree filter can narrow visible nodes. It does not pretend to be full-text message search.
+## Activity / Health / Settings
 
-## Activity
+Semantics remain the same as 0.4.0.  Settings remain read-only for policy
+values; path cards can still copy/open Companion, DDS_Data, SQLite, logs, media,
+cache and backups.
 
-Table columns:
+## Launch modes
 
-- local time
-- level
-- subsystem
-- event type
-- human summary
+- `run_companion.bat` → normal user launch; after dependency check it hands off
+  to `pythonw.exe` / `run_companion.pyw`, so no console remains open.
+- `run_companion_debug.bat` → explicit diagnostic launch with console retained.
+- First-time PySide6 installation is allowed to use the console.
 
-Backed by persisted Activity API, newest first.
+## Architecture boundary
 
-## Health
-
-Shows:
-
-- overall state
-- Database
-- DDS_Data
-- Importer
-- Watcher
-- subsystem summary and updated time
-- last error / clean state
-
-## Settings
-
-0.4.0 intentionally keeps policies read-only. It exposes Paths & Storage with direct actions for:
-
-- Companion library/data root
-- DDS_Data
-- SQLite database folder
-- Logs
-- Media cache
-- Cache
-- Backups
-
-Each path can be selected/copied and opened through the native file manager.
-
-Watcher poll/settle values are visible. Editing policies belongs to a later release so the first GUI milestone does not mix presentation with configuration mutation.
-
-## Threading boundary
-
-- SQLite connection lives on the Companion runtime thread.
-- Qt main thread receives plain snapshots/events.
-- GUI widgets never perform archive writes.
-- Observer callback failures are ignored by archive/watch code.
-- Manual refresh is a thread-safe request flag, not a cross-thread SQLite call.
-
-## Non-goals for 0.4.0
-
-- Media downloading
-- Full-text message search
-- Message edit/version browser
-- Drive sync
-- Tray/background-on-window-close behavior
-- Editable watcher/media/sync policies
-- Installer/productization
-
-These are deliberately excluded to keep one clear release task: **first production-shaped desktop dashboard over the verified Companion core**.
+- SQLite connection remains on the Companion runtime thread.
+- Qt receives plain snapshots/events.
+- GUI widgets never write archive rows.
+- Manual refresh remains a thread-safe request.
+- Closing the app requests a clean watcher/runtime stop.

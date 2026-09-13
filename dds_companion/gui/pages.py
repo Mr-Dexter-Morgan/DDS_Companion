@@ -39,11 +39,19 @@ from .widgets import (
 
 
 class Page(QWidget):
-    def __init__(self, title: str, subtitle: str, parent: QWidget | None = None):
+    def __init__(
+        self,
+        title: str,
+        subtitle: str,
+        parent: QWidget | None = None,
+        *,
+        scrollable: bool = False,
+    ):
         super().__init__(parent)
-        root = QVBoxLayout(self)
-        root.setContentsMargins(24, 20, 24, 22)
-        root.setSpacing(18)
+        self._layout_profile = "standard"
+        self.root_layout = QVBoxLayout(self)
+        self.root_layout.setContentsMargins(24, 20, 24, 22)
+        self.root_layout.setSpacing(18)
         header = QVBoxLayout()
         header.setSpacing(3)
         self.title_label = QLabel(title)
@@ -53,43 +61,73 @@ class Page(QWidget):
         self.subtitle_label.setWordWrap(True)
         header.addWidget(self.title_label)
         header.addWidget(self.subtitle_label)
-        root.addLayout(header)
-        self.body = QVBoxLayout()
-        self.body.setSpacing(16)
-        root.addLayout(self.body, 1)
+        self.root_layout.addLayout(header)
+
+        self.scroll_area: QScrollArea | None = None
+        if scrollable:
+            self.scroll_area = QScrollArea()
+            self.scroll_area.setWidgetResizable(True)
+            self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.scroll_area.setFrameShape(QFrame.NoFrame)
+            body_widget = QWidget()
+            body_widget.setObjectName("PageScrollContent")
+            body_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+            self.body = QVBoxLayout(body_widget)
+            self.body.setContentsMargins(0, 0, 6, 4)
+            self.body.setSpacing(16)
+            self.scroll_area.setWidget(body_widget)
+            self.root_layout.addWidget(self.scroll_area, 1)
+        else:
+            self.body = QVBoxLayout()
+            self.body.setSpacing(16)
+            self.root_layout.addLayout(self.body, 1)
+
+    def apply_layout_profile(self, profile: str) -> None:
+        self._layout_profile = profile
+        if profile == "compact":
+            self.root_layout.setContentsMargins(16, 13, 16, 14)
+            self.root_layout.setSpacing(11)
+            self.body.setSpacing(10)
+        elif profile == "large":
+            self.root_layout.setContentsMargins(30, 24, 30, 28)
+            self.root_layout.setSpacing(20)
+            self.body.setSpacing(18)
+        else:
+            self.root_layout.setContentsMargins(24, 20, 24, 22)
+            self.root_layout.setSpacing(18)
+            self.body.setSpacing(16)
 
 
 class DashboardPage(Page):
-    def __init__(self, on_refresh, on_open_library, on_open_dds, on_open_logs, parent=None):
+    def __init__(self, on_refresh, on_open_dds, on_open_logs, parent=None):
         super().__init__(
             "Dashboard",
             "Состояние архива, watcher и рост хранилища — всё важное в одном экране.",
             parent,
+            scrollable=True,
         )
         self.latest_snapshot: dict = {}
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        open_library = QPushButton("Open library folder")
-        open_library.setProperty("primary", True)
-        open_library.clicked.connect(on_open_library)
         open_dds = QPushButton("Open DDS_Data")
         open_dds.setProperty("secondary", True)
         open_dds.clicked.connect(on_open_dds)
         open_logs = QPushButton("Open logs")
         open_logs.setProperty("secondary", True)
         open_logs.clicked.connect(on_open_logs)
-        refresh = QPushButton("Обновить")
-        refresh.setProperty("ghost", True)
+        refresh = QPushButton("↻  Обновить")
+        refresh.setProperty("secondary", True)
+        refresh.setProperty("compact", True)
         refresh.clicked.connect(on_refresh)
-        actions.addWidget(open_library)
         actions.addWidget(open_dds)
         actions.addWidget(open_logs)
         actions.addStretch(1)
         actions.addWidget(refresh)
         self.body.addLayout(actions)
 
-        metrics = QGridLayout()
+        self.metrics_grid = QGridLayout()
+        metrics = self.metrics_grid
         metrics.setHorizontalSpacing(12)
         metrics.setVerticalSpacing(12)
         self.storage_card = MetricCard("Общее хранилище", "—", "SQLite + DDS JSON + cache/media/logs")
@@ -104,7 +142,8 @@ class DashboardPage(Page):
             metrics.setColumnStretch(col, 1)
         self.body.addLayout(metrics)
 
-        lower = QGridLayout()
+        self.lower_grid = QGridLayout()
+        lower = self.lower_grid
         lower.setHorizontalSpacing(12)
         lower.setVerticalSpacing(12)
 
@@ -196,6 +235,56 @@ class DashboardPage(Page):
         lower.setRowStretch(0, 1)
         lower.setRowStretch(1, 1)
         self.body.addLayout(lower, 1)
+
+    def apply_layout_profile(self, profile: str) -> None:
+        super().apply_layout_profile(profile)
+
+        metrics = self.metrics_grid
+        lower = self.lower_grid
+        for widget in (self.storage_card, self.messages_card, self.context_card, self.media_card):
+            metrics.removeWidget(widget)
+        for widget in (self.activity_card, self.health_card, self.storage_detail, self.session_card):
+            lower.removeWidget(widget)
+
+        if profile == "compact":
+            metric_positions = (
+                (self.storage_card, 0, 0),
+                (self.messages_card, 0, 1),
+                (self.context_card, 1, 0),
+                (self.media_card, 1, 1),
+            )
+            for widget, row, col in metric_positions:
+                metrics.addWidget(widget, row, col)
+            for col in range(4):
+                metrics.setColumnStretch(col, 1 if col < 2 else 0)
+
+            lower.addWidget(self.activity_card, 0, 0)
+            lower.addWidget(self.health_card, 1, 0)
+            lower.addWidget(self.storage_detail, 2, 0)
+            lower.addWidget(self.session_card, 3, 0)
+            lower.setColumnStretch(0, 1)
+            lower.setColumnStretch(1, 0)
+            lower.setColumnStretch(2, 0)
+            lower.setHorizontalSpacing(0)
+            lower.setVerticalSpacing(10)
+        else:
+            metrics.addWidget(self.storage_card, 0, 0)
+            metrics.addWidget(self.messages_card, 0, 1)
+            metrics.addWidget(self.context_card, 0, 2)
+            metrics.addWidget(self.media_card, 0, 3)
+            for col in range(4):
+                metrics.setColumnStretch(col, 1)
+
+            lower.addWidget(self.activity_card, 0, 0, 1, 2)
+            lower.addWidget(self.health_card, 0, 2)
+            lower.addWidget(self.storage_detail, 1, 0, 1, 2)
+            lower.addWidget(self.session_card, 1, 2)
+            lower.setColumnStretch(0, 1)
+            lower.setColumnStretch(1, 1)
+            lower.setColumnStretch(2, 1)
+            spacing = 16 if profile == "large" else 12
+            lower.setHorizontalSpacing(spacing)
+            lower.setVerticalSpacing(spacing)
 
     def update_snapshot(self, snapshot: dict) -> None:
         self.latest_snapshot = snapshot

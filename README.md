@@ -1,4 +1,4 @@
-# DDS Companion 0.4.0 — Desktop Dashboard
+# DDS Companion 0.4.1 — Responsive GUI Polish
 
 Project: **DDS — Discord Data Snatcher**  
 Authors: **Mr_Dexter_Morgan, Masya**
@@ -7,35 +7,46 @@ Authors: **Mr_Dexter_Morgan, Masya**
 
 Status: **BUILT / LOCAL TESTING**
 
-0.4.0 gives the verified Companion core its first real desktop interface. The archive pipeline remains the same local pipeline proven in 0.1.0–0.3.0; the GUI consumes plain snapshots/events from that core instead of owning database logic itself.
+0.4.1 is a focused polish release over the live-tested 0.4.0 desktop interface.
+The archive/import/watcher core is unchanged; this patch fixes the real Windows
+layout and launcher issues found during the first GUI run.
 
-## What this release adds
+## What changed
 
-- PySide6 dark desktop shell.
-- Navigation: **Dashboard / Library / Activity / Health / Settings**.
-- Live Dashboard backed by the real Stats/Health/Activity services.
-- Total known storage always visible.
-- Separate known vs cached media counts.
-- Session growth: messages, imports, activity events and storage delta.
-- Human-readable current activity.
-- Per-subsystem health for Database, DDS_Data, Importer and Watcher.
-- Library tree: **Server → Channel → Thread** with message counts.
-- Activity table backed by persisted `activity_events`.
-- Paths & Storage page with one-click folder access.
-- Quick actions: **Open library folder / Open DDS_Data / Open logs**.
-- SQLite database, cache, media and backups can be opened directly from Settings.
-- Runtime-created DDS app icon; no external icon path can go missing.
-- Existing CLI remains available through `run_cli.bat`.
-- Existing one-shot importer remains available through `run_once.bat`.
+- Dashboard is now scroll-safe at laptop-height resolutions.
+- Compact / Standard / Large layout profiles use screen geometry, DPI and DPR.
+- 1366x768-class screens use a 2x2 metric grid and vertically stacked lower cards.
+- Sidebar idle / hover / selected states are visually distinct.
+- Duplicate **Open library** actions were removed from Topbar and Dashboard.
+  Library page is the single **Open library folder** location.
+- **Refresh** is a compact secondary button.
+- Normal launch hands off to `pythonw.exe` / `run_companion.pyw` so a console is
+  not kept open; `run_companion_debug.bat` intentionally keeps a console.
+
+## Normal launch
+
+Double-click:
+
+```text
+run_companion.bat
+```
+
+If PySide6 is already installed, the batch launcher performs a quick dependency
+check and starts the GUI through `pythonw.exe`.  If PySide6 is missing, it keeps
+the console available to offer first-time installation.
+
+For diagnostics:
+
+```text
+run_companion_debug.bat
+```
 
 ## Architecture boundary
-
-The Qt UI does **not** execute archive SQL directly.
 
 ```text
 Discord Desktop
       ↓
-DDS 0.5.2 plugin
+DDS BetterDiscord plugin
       ↓
 DDS_Data / capture.json
       ↓
@@ -46,41 +57,8 @@ Activity / Health / Stats / Library services
 PySide6 presentation layer
 ```
 
-The GUI runtime keeps the SQLite connection on one background runtime thread. Qt receives serializable snapshots through thread-safe signals. Presentation callbacks are observers and are isolated from the watcher/import pipeline.
-
-Closing the application asks the watcher to stop cleanly. A normal UI close does not delete or mirror-trim archive data.
-
-## Installation / first launch
-
-Requirements:
-
-- Windows 10/11 for the live target.
-- Python 3.11+.
-- PySide6 for the GUI.
-
-Run:
-
-```text
-run_companion.bat
-```
-
-If PySide6 is missing, the launcher offers to install it using:
-
-```text
-requirements-gui.txt
-```
-
-You can also install it manually with:
-
-```text
-install_gui_dependencies.bat
-```
-
-The headless watcher is still available:
-
-```text
-run_cli.bat
-```
+Qt does not own archive SQL.  The SQLite connection stays on one background
+runtime thread; the GUI receives serializable snapshots through signals.
 
 ## Default paths
 
@@ -90,7 +68,7 @@ DDS plugin export:
 %APPDATA%\BetterDiscord\DDS_Data
 ```
 
-Companion data:
+Companion runtime data:
 
 ```text
 %LOCALAPPDATA%\DDS_Companion
@@ -102,46 +80,26 @@ SQLite:
 %LOCALAPPDATA%\DDS_Companion\database\dds.sqlite3
 ```
 
-## Dashboard contract
+## Responsive contract
 
-The first screen must answer three questions immediately:
+The window evaluates usable screen geometry, `logicalDotsPerInch()`,
+`devicePixelRatio()` and current window width.  It changes card flow/margins
+rather than uniformly scaling every widget.
 
-1. **Is Companion healthy?**
-2. **What is it doing now?**
-3. **How much has it archived?**
+The Dashboard remains scrollable, so constrained displays favor readability and
+non-overlap instead of trying to force every panel above the fold.
 
-The Dashboard therefore shows overall state, four subsystem states, total storage, message/context/media counts, session growth, storage breakdown and latest activity without requiring navigation.
+## Validation
 
-## Library contract
+- Python compileall: **PASS**
+- Automated suite: **27/27 PASS**
+- Previous 21 tests: **PASS**
+- 1366x768 / 1080p / dense-4K layout-profile tests: **PASS**
+- Launcher/action/scroll-safety source contracts: **PASS**
 
-0.4.0 intentionally provides archive structure browsing, not message full-text search. The tree is:
+Actual 0.4.1 Qt rendering still requires the Windows live checklist because the
+build container does not have PySide6 installed.  Do not promote this candidate
+to VERIFIED until that check is complete.
 
-```text
-Server
-└── Channel
-    └── Thread
-```
-
-Message search/version history remains a later architectural stage and is not faked in this release.
-
-## Reliability rules preserved
-
-- One malformed capture must not terminate the watcher.
-- One bad UI/activity observer must not terminate the watcher.
-- Source capture deletion must not delete accumulated archive rows.
-- Existing 0.1/0.2/0.3 SQLite archives upgrade in place.
-- Drive/network availability is not required for local capture/import.
-- UI convenience actions only open local paths; they do not alter archive content.
-
-## Local validation
-
-- Python compile: **PASS**
-- 0.1/0.2/0.3 regression suite: **PASS**
-- New Library hierarchy test: **PASS**
-- New GUI runtime startup/clean-stop integration test: **PASS**
-- New live capture-change → Activity integration test: **PASS**
-- Total automated tests: **21/21 PASS**
-
-The build environment used for this release does not include PySide6, so the actual Qt window render is intentionally marked **awaiting live Windows validation**. Backend/UI-boundary behavior is tested without Qt; the visual render and native folder buttons must be verified on the user's Windows machine before the release becomes VERIFIED.
-
-See `VALIDATION.txt`, `UI_CONTRACT.md`, and `LIVE_TEST_CHECKLIST_0.4.0.txt`.
+See `VALIDATION.txt`, `UI_CONTRACT.md`, `CHANGELOG.txt` and
+`LIVE_TEST_CHECKLIST_0.4.1.txt`.
