@@ -1,0 +1,17 @@
+[project]
+name = "dds-companion"
+version = "0.1.0"
+description = "Local archive processor for DDS — Discord Data Snatcher"
+requires-python = ">=3.11"
+authors = [
+  {name = "Mr_Dexter_Morgan"},
+  {name = "Masya"}
+]
+dependencies = []
+
+[project.scripts]
+dds-companion = "dds_companion.app:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

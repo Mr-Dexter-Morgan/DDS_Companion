@@ -1,0 +1,39 @@
+{
+  "version": "0.1.0",
+  "dds_data": "/tmp/tmp.zdLpc8pvsH/DDS_Data",
+  "app_data": "/tmp/tmp.zdLpc8pvsH/Companion",
+  "database": "/tmp/tmp.zdLpc8pvsH/Companion/database/dds.sqlite3",
+  "import": {
+    "files_seen": 1,
+    "imported": 1,
+    "skipped_unchanged": 0,
+    "failed": 0,
+    "messages_inserted": 1,
+    "messages_updated": 0,
+    "attachments_registered": 0,
+    "embeds_registered": 0
+  },
+  "stats": {
+    "messages": 1,
+    "guilds": 1,
+    "channels": 1,
+    "threads": 0,
+    "users": 1,
+    "attachments": 0,
+    "embeds": 0,
+    "imports": 1,
+    "failed_jobs": 0,
+    "sqlite_bytes": 4096,
+    "dds_json_bytes": 1069,
+    "total_known_storage_bytes": 5165,
+    "last_successful_import": "2026-09-13T17:49:45.346301+00:00"
+  },
+  "health": {
+    "state": "RUNNING",
+    "database_ok": true,
+    "sqlite_quick_check": "ok",
+    "dds_data_found": true,
+    "unresolved_failed_jobs": 0,
+    "last_error": null
+  }
+}

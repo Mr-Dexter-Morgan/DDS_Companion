@@ -1,0 +1,40 @@
+DDS Companion — Discord Data Snatcher
+Version: 0.1.0
+Date: 2026-09-13
+Authors: Mr_Dexter_Morgan, Masya
+Status: BUILT / LOCAL TESTING
+
+Foundation Importer release.
+
+Added:
+- Default DDS_Data path resolution.
+- Stable DDS Companion runtime data root.
+- SQLite schema v1 with WAL, foreign keys and busy timeout.
+- Tables for accounts, guilds, channels, threads, users, messages,
+  attachments, embeds, message references, capture imports, failed jobs,
+  application state and schema metadata.
+- Recursive channel/thread capture.json discovery.
+- DDS Capture Schema v2 validation.
+- Safe one-shot JSON import into SQLite transactions.
+- Stable Discord-ID deduplication / message upsert.
+- Parent-channel + thread relationship preservation.
+- Attachment/embed metadata registration only; no binary media download.
+- SHA-256 capture fingerprinting and unchanged-snapshot suppression.
+- Per-file failure isolation: one malformed capture is recorded and does not
+  terminate the rest of the import scan.
+- Human-readable archive statistics and subsystem health summary.
+- Unit tests for deduplication, changed-message update, thread relations and
+  malformed-capture isolation.
+
+Explicitly not included:
+- live filesystem watcher;
+- PySide6 UI;
+- media cache/downloads;
+- search;
+- Google Drive sync;
+- installer/updater.
+
+Compatibility target:
+- DDS Plugin 0.5.2
+- DDS Capture Schema v2
+- Python 3.11+
