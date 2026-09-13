@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
-
-SCHEMA_SQL = r"""
+BASE_SCHEMA_SQL = r"""
 CREATE TABLE IF NOT EXISTS schema_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -167,9 +166,56 @@ CREATE TABLE IF NOT EXISTS application_state (
 );
 """
 
+V2_SCHEMA_SQL = r"""
+CREATE TABLE IF NOT EXISTS activity_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    occurred_at TEXT NOT NULL,
+    level TEXT NOT NULL,
+    subsystem TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    details_json TEXT,
+    capture_path TEXT,
+    guild_id TEXT,
+    parent_channel_id TEXT,
+    thread_id TEXT,
+    messages_new INTEGER NOT NULL DEFAULT 0,
+    messages_refreshed INTEGER NOT NULL DEFAULT 0,
+    attachments_registered INTEGER NOT NULL DEFAULT 0,
+    embeds_registered INTEGER NOT NULL DEFAULT 0,
+    storage_delta_bytes INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_events_occurred_at
+    ON activity_events(occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_events_subsystem
+    ON activity_events(subsystem, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_events_type
+    ON activity_events(event_type, occurred_at DESC);
+
+CREATE TABLE IF NOT EXISTS subsystem_health (
+    subsystem TEXT PRIMARY KEY,
+    state TEXT NOT NULL,
+    summary TEXT,
+    last_ok_at TEXT,
+    last_error_at TEXT,
+    updated_at TEXT NOT NULL,
+    details_json TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_subsystem_health_state ON subsystem_health(state);
+"""
+
 
 def apply_migrations(connection: sqlite3.Connection) -> None:
-    connection.executescript(SCHEMA_SQL)
+    """Apply additive migrations in place.
+
+    0.3.0 deliberately keeps the existing archive schema intact and only adds
+    observability tables. Old 0.1.x/0.2.x databases therefore upgrade without
+    copying, resetting, or rewriting archived Discord data.
+    """
+    connection.executescript(BASE_SCHEMA_SQL)
+    connection.executescript(V2_SCHEMA_SQL)
     connection.execute(
         "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",

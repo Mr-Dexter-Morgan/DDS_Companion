@@ -105,6 +105,61 @@ class WatcherTests(unittest.TestCase):
             self.conn.execute("SELECT value FROM application_state WHERE key='last_error'").fetchone()
         )
 
+    def test_state_and_heartbeat_callbacks_are_isolated_and_stop_stays_stopped(self):
+        from threading import Event
+
+        states = []
+        heartbeats = []
+        stop = Event()
+        stop.set()
+        watcher = CaptureWatcher(
+            self.dds,
+            self.importer,
+            self.conn,
+            heartbeat_seconds=1,
+            on_state=states.append,
+            on_heartbeat=lambda: heartbeats.append("beat"),
+        )
+        watcher.run(stop)
+        self.assertEqual(states, ["RUNNING", "STOPPED"])
+        self.assertEqual(heartbeats, ["beat"])
+
+    def test_bad_observer_callback_cannot_kill_watcher(self):
+        from threading import Event
+
+        stop = Event()
+        stop.set()
+        watcher = CaptureWatcher(
+            self.dds,
+            self.importer,
+            self.conn,
+            on_state=lambda _state: (_ for _ in ()).throw(RuntimeError("observer failed")),
+            on_heartbeat=lambda: (_ for _ in ()).throw(RuntimeError("observer failed")),
+        )
+        counters = watcher.run(stop)
+        self.assertEqual(counters.scans, 0)
+
+    def test_bad_event_observer_cannot_break_capture_import(self):
+        path = self.write_capture(sample_capture(content="v1"))
+        self.importer.import_file(path)
+        watcher = CaptureWatcher(
+            self.dds,
+            self.importer,
+            self.conn,
+            settle_seconds=0.5,
+            heartbeat_seconds=9999,
+            on_event=lambda _event: (_ for _ in ()).throw(RuntimeError("observer failed")),
+        )
+        watcher.prime()
+        self.write_capture(sample_capture(content="v2 after observer failure"))
+        watcher.scan_once(now=10.0)
+        watcher.scan_once(now=10.6)
+        content = self.conn.execute(
+            "SELECT content FROM messages WHERE id='444444444444444444'"
+        ).fetchone()[0]
+        self.assertEqual(content, "v2 after observer failure")
+        self.assertEqual(watcher.counters.imported, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -58,6 +58,8 @@ class CaptureWatcher:
         retry_delay: float = 0.15,
         heartbeat_seconds: float = 10.0,
         on_event: Callable[[WatcherEvent], None] | None = None,
+        on_state: Callable[[str], None] | None = None,
+        on_heartbeat: Callable[[], None] | None = None,
     ):
         self.dds_data_root = Path(dds_data_root)
         self.importer = importer
@@ -68,6 +70,8 @@ class CaptureWatcher:
         self.retry_delay = max(0.01, float(retry_delay))
         self.heartbeat_seconds = max(1.0, float(heartbeat_seconds))
         self.on_event = on_event
+        self.on_state = on_state
+        self.on_heartbeat = on_heartbeat
         self.known: dict[Path, FileSignature] = {}
         self.pending: dict[Path, PendingFile] = {}
         self.counters = WatcherCounters()
@@ -163,6 +167,7 @@ class CaptureWatcher:
         stop = stop_event or Event()
         self._set_state("watcher_state", "RUNNING")
         self._set_state("watcher_started_at", utc_now())
+        self._safe_state_callback("RUNNING")
         self._heartbeat()
 
         try:
@@ -172,7 +177,8 @@ class CaptureWatcher:
         finally:
             self._set_state("watcher_state", "STOPPED")
             self._set_state("watcher_stopped_at", utc_now())
-            self._heartbeat()
+            self._safe_state_callback("STOPPED")
+            self._heartbeat(notify=False)
 
         return self.counters
 
@@ -226,15 +232,32 @@ class CaptureWatcher:
                 (key, value, utc_now()),
             )
 
-    def _heartbeat(self) -> None:
+    def _heartbeat(self, *, notify: bool = True) -> None:
         stamp = utc_now()
         self._set_state("watcher_last_heartbeat", stamp)
         self._last_heartbeat_monotonic = time.monotonic()
+        if notify and self.on_heartbeat is not None:
+            try:
+                self.on_heartbeat()
+            except Exception:
+                pass
 
     def _maybe_heartbeat(self, now_mono: float) -> None:
         if now_mono - self._last_heartbeat_monotonic >= self.heartbeat_seconds:
             self._heartbeat()
 
+    def _safe_state_callback(self, state: str) -> None:
+        if self.on_state is not None:
+            try:
+                self.on_state(state)
+            except Exception:
+                pass
+
     def _emit(self, event: WatcherEvent) -> None:
         if self.on_event is not None:
-            self.on_event(event)
+            try:
+                self.on_event(event)
+            except Exception:
+                # Runtime monitoring / CLI / future GUI are observers. Their failure
+                # must never terminate filesystem observation or archive ingestion.
+                pass
