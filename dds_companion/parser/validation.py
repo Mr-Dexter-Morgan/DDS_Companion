@@ -30,7 +30,7 @@ def validate_capture(data: Any) -> dict[str, Any]:
     schema_version = capture.get("schemaVersion")
     if schema_version != 2:
         raise CaptureValidationError(
-            f"Unsupported capture schemaVersion={schema_version!r}; DDS Companion 0.1.0 expects schemaVersion=2"
+            f"Unsupported capture schemaVersion={schema_version!r}; DDS Companion expects schemaVersion=2"
         )
 
     guild = _require_dict(capture.get("guild"), "guild")

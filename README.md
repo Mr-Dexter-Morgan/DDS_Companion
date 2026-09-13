@@ -1,50 +1,122 @@
-# DDS Companion 0.1.0 — Foundation Importer
+# DDS Companion 0.2.0 — Watcher Layer
 
 **Authors:** Mr_Dexter_Morgan, Masya  
-**Project:** DDS — Discord Data Snatcher  
-**Status:** BUILT / LOCAL TESTING
+**Companion status:** BUILT / LOCAL TESTING  
+**Upstream DDS Plugin:** 0.5.2 — VERIFIED / STABLE MILESTONE
 
-This is the first DDS Companion release. It consumes the stable `DDS_Data` filesystem contract produced by DDS Plugin `0.5.2` and builds a durable normalized SQLite archive.
+DDS Companion 0.2.0 turns the 0.1.0 foundation importer into a continuously running local companion.
 
-## Scope of 0.1.0
+## What it does
 
-This release intentionally does one architectural job: **turn current DDS JSON captures into an accumulating SQLite archive safely**.
+On startup Companion:
 
-Implemented:
-- automatic default discovery of `DDS_Data`;
-- explicit `--dds-data` override;
-- stable Companion runtime data root;
-- SQLite bootstrap + schema migration v1;
-- WAL, foreign keys, busy timeout, transactional imports;
-- recursive discovery of channel and thread `capture.json` files;
-- Capture Schema v2 validation;
-- guild / parent channel / thread relationship preservation;
-- account and author normalization;
-- message upsert by immutable Discord message ID;
-- attachment and embed metadata registration;
-- message-reference registration;
-- import fingerprinting by `capture_path + SHA-256`;
-- unchanged snapshot suppression;
-- malformed capture isolation into `failed_jobs`;
-- archive statistics and SQLite health summary;
-- **no media download**;
-- **no Discord token access**;
-- **no hidden history fetching**;
-- **no Google Drive dependency**.
+1. locates `%APPDATA%\BetterDiscord\DDS_Data`;
+2. opens/reuses `%LOCALAPPDATA%\DDS_Companion\database\dds.sqlite3`;
+3. performs one full synchronization of all existing `capture.json` files;
+4. starts watching `DDS_Data` continuously;
+5. waits for changed files to become stable before reading them;
+6. imports new/changed captures into the accumulating SQLite archive;
+7. keeps running when one capture is malformed or temporarily unreadable;
+8. preserves archived SQLite data even if a source `capture.json` later disappears.
 
-## Why the archive accumulates
+No media files are downloaded. Attachments and embeds remain metadata-only.
 
-DDS Plugin keeps one current `capture.json` per channel/thread and updates it as Discord loads different message windows. Companion does **not** mirror-delete older rows when a newer snapshot no longer contains them. Once a message has been observed and imported, it stays in SQLite. Later snapshots update the same Discord message ID if its content/metadata changed.
+## Run on Windows
 
-## Default paths
+Double-click:
 
-DDS input on Windows:
+```text
+run_companion.bat
+```
+
+The default mode is now persistent watcher mode. Leave the window open while Discord + DDS are running.
+
+Stop cleanly with:
+
+```text
+Ctrl+C
+```
+
+For the old one-shot behavior:
+
+```text
+run_once.bat
+```
+
+or:
+
+```text
+python -m dds_companion.app --once
+```
+
+## Expected startup
+
+A healthy real-machine startup should look approximately like:
+
+```text
+DDS Companion v0.2.0  [RUNNING]
+DDS_Data : C:\Users\...\AppData\Roaming\BetterDiscord\DDS_Data
+Database : C:\Users\...\AppData\Local\DDS_Companion\database\dds.sqlite3
+Watcher  : ACTIVE  poll=750 ms, settle=500 ms
+
+Import   : seen=..., imported=..., unchanged=..., failed=0
+Messages : +... new, ... existing refreshed; archive total=...
+Context  : guilds=..., channels=..., threads=...
+Media    : attachments=..., embeds=... (metadata only)
+Storage  : ...
+
+Watching DDS_Data. Press Ctrl+C to stop cleanly.
+```
+
+When DDS changes a capture you should then see something like:
+
+```text
+[19:42:10] WATCH   changed: guilds/.../capture.json (settling)
+[19:42:11] IMPORT  guilds/.../capture.json -> +1 new, 25 existing refreshed, attachments=..., embeds=...
+```
+
+`existing refreshed` means an already-known message was encountered in the newer capture and upserted. It does **not** yet mean DDS Companion has classified it as a semantic Discord edit; true message-version history belongs to a later milestone.
+
+## Reliability choices
+
+### No extra watcher dependency
+
+0.2.0 deliberately uses a conservative standard-library polling watcher instead of requiring `watchdog` or a platform-specific native backend. This keeps deployment simple and removes another failure surface.
+
+### Settle window
+
+DDS 0.5.2 normally publishes JSON safely, but its BetterDiscord filesystem compatibility layer can fall back to direct writes. Companion therefore waits until a changed file remains stable for a short period before parsing it.
+
+Defaults:
+
+```text
+poll:   750 ms
+settle: 500 ms
+```
+
+They can be overridden:
+
+```text
+python -m dds_companion.app --poll-ms 500 --settle-ms 350
+```
+
+### Failure isolation and recovery
+
+A bad capture is recorded in `failed_jobs` and the watcher continues. If that same file is corrected and later imports successfully, its unresolved failure entries are marked resolved automatically.
+
+### Archive is authoritative
+
+The DDS plugin exposes current snapshots. SQLite is the accumulating archive. Removing a capture file from `DDS_Data` does not erase already imported history.
+
+## Data paths
+
+Default input:
 
 ```text
 %APPDATA%\BetterDiscord\DDS_Data
 ```
 
-Companion data on Windows:
+Default Companion data:
 
 ```text
 %LOCALAPPDATA%\DDS_Companion\
@@ -55,34 +127,35 @@ Companion data on Windows:
 └── backups\
 ```
 
-`media`, `cache`, and `backups` are reserved for later releases; 0.1.0 does not download media.
+## CLI
 
-## Run
-
-From the release folder:
-
-```bat
+```text
 python -m dds_companion.app
-```
-
-Explicit paths:
-
-```bat
-python -m dds_companion.app --dds-data "C:\Users\YOU\AppData\Roaming\BetterDiscord\DDS_Data" --app-data "D:\DDS_Companion_Data"
-```
-
-Machine-readable output:
-
-```bat
+python -m dds_companion.app --once
 python -m dds_companion.app --json
+python -m dds_companion.app --dds-data "D:\path\DDS_Data"
+python -m dds_companion.app --app-data "D:\path\DDS_Companion"
+python -m dds_companion.app --poll-ms 750 --settle-ms 500
 ```
 
-## Test
+In watch mode `--json` emits an initial JSON object followed by JSON Lines watcher events.
 
-```bat
-python -m unittest discover -s dds_companion\tests -v
+## Validation performed before publication
+
+```text
+compileall                         PASS
+0.1.0 importer regression tests   4/4 PASS
+0.2.0 watcher tests               4/4 PASS
+watcher integration smoke test    PASS
+clean SIGINT shutdown             PASS
 ```
 
-## Not in this release
+## Live test for VERIFIED status
 
-The live filesystem watcher is deliberately deferred to the next Companion release. `0.1.0` proves parser → normalizer → SQLite storage first, matching the DDS rule: test one architectural layer before adding the next one.
+1. Start `run_companion.bat`.
+2. Confirm `Watcher : ACTIVE`.
+3. With DDS 0.5.2 enabled, switch to a Discord channel/thread or load one more message so its `capture.json` changes.
+4. Without restarting Companion, confirm a `WATCH changed` line followed by `IMPORT`.
+5. Press `Ctrl+C` and confirm a clean watcher summary.
+
+That single real Windows test is the gate for marking 0.2.0 VERIFIED.

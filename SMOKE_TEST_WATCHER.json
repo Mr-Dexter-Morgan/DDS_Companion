@@ -1,0 +1,12 @@
+{
+  "checks": {
+    "startup": true,
+    "watcher_active": true,
+    "change_detected": true,
+    "change_imported": true,
+    "clean_shutdown": true,
+    "exit_code_zero": true
+  },
+  "output": "DDS Companion v0.2.0  [RUNNING]\nDDS_Data : /tmp/tmpsk__ztw4/DDS_Data\nDatabase : /tmp/tmpsk__ztw4/App/database/dds.sqlite3\nWatcher  : ACTIVE  poll=100 ms, settle=100 ms\n\nImport   : seen=1, imported=1, unchanged=0, failed=0\nMessages : +1 new, 0 existing refreshed; archive total=1\nContext  : guilds=1, channels=1, threads=0\nMedia    : attachments=1, embeds=1 (metadata only)\nStorage  : SQLite=4.00 KB, DDS JSON=1.56 KB, known total=5.56 KB\n\nWatching DDS_Data. Press Ctrl+C to stop cleanly.\n[18:17:37] WATCH   changed: guilds/111111111111111111/channels/222222222222222222/capture.json (settling)\n[18:17:38] IMPORT  guilds/111111111111111111/channels/222222222222222222/capture.json -> +0 new, 1 existing refreshed, attachments=1, embeds=1\n\nStopping DDS Companion watcher cleanly...\nWatcher stopped: scans=13, changed=1, new=0, imports=1, failed=0\n",
+  "exit_code": 0
+}

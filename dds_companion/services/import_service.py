@@ -309,6 +309,7 @@ class ImportService:
                 )
 
                 self._set_state("last_successful_import", now)
+                self._resolve_failures_for_target(str(parsed.path.resolve()), now)
 
         except Exception:
             raise
@@ -336,13 +337,39 @@ class ImportService:
             (key, value, utc_now()),
         )
 
-    def record_failure(self, job_kind: str, target: str, exc: Exception) -> None:
-        with self.connection:
+    def _resolve_failures_for_target(self, target: str, resolved_at: str | None = None) -> None:
+        stamp = resolved_at or utc_now()
+        self.connection.execute(
+            "UPDATE failed_jobs SET resolved_at=? WHERE target=? AND resolved_at IS NULL",
+            (stamp, target),
+        )
+        unresolved = self.connection.execute(
+            "SELECT COUNT(*) FROM failed_jobs WHERE resolved_at IS NULL"
+        ).fetchone()[0]
+        if unresolved == 0:
             self.connection.execute(
-                """
-                INSERT INTO failed_jobs(job_kind, target, error_type, error_message, created_at)
-                VALUES(?, ?, ?, ?, ?)
-                """,
-                (job_kind, target, type(exc).__name__, str(exc), utc_now()),
+                "DELETE FROM application_state WHERE key='last_error'"
             )
-            self._set_state("last_error", f"{type(exc).__name__}: {exc}")
+
+    def record_failure(self, job_kind: str, target: str, exc: Exception) -> None:
+        error_type = type(exc).__name__
+        error_message = str(exc)
+        with self.connection:
+            duplicate = self.connection.execute(
+                """
+                SELECT 1 FROM failed_jobs
+                WHERE job_kind=? AND target=? AND error_type=? AND error_message=?
+                  AND resolved_at IS NULL
+                LIMIT 1
+                """,
+                (job_kind, target, error_type, error_message),
+            ).fetchone()
+            if duplicate is None:
+                self.connection.execute(
+                    """
+                    INSERT INTO failed_jobs(job_kind, target, error_type, error_message, created_at)
+                    VALUES(?, ?, ?, ?, ?)
+                    """,
+                    (job_kind, target, error_type, error_message, utc_now()),
+                )
+            self._set_state("last_error", f"{error_type}: {error_message}")

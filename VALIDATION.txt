@@ -1,0 +1,18 @@
+DDS Companion 0.2.0 — Validation Report
+Date: 2026-09-13
+Authors: Mr_Dexter_Morgan, Masya
+
+PASS  Python compileall
+PASS  Importer regression tests: 4/4
+PASS  Watcher tests: 4/4
+PASS  Watcher integration smoke test
+PASS  Change detection
+PASS  Settle-before-import behavior
+PASS  Malformed capture isolation
+PASS  Failure resolution after corrected capture
+PASS  Archive preserved after source capture deletion
+PASS  Clean SIGINT / Ctrl+C shutdown path
+PASS  0.1.0 SQLite -> 0.2.0 in-place compatibility smoke test
+
+Total unit tests: 8/8 PASS
+Live Windows + real DDS 0.5.2 watcher test: PENDING
