@@ -1,7 +1,7 @@
 [project]
 name = "dds-companion"
-version = "0.3.0"
-description = "Local archive processor for DDS — Discord Data Snatcher"
+version = "0.4.0"
+description = "Local archive processor and desktop dashboard for DDS — Discord Data Snatcher"
 requires-python = ">=3.11"
 authors = [
   {name = "Mr_Dexter_Morgan"},
@@ -9,8 +9,12 @@ authors = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+gui = ["PySide6>=6.7,<7"]
+
 [project.scripts]
 dds-companion = "dds_companion.app:main"
+dds-companion-gui = "dds_companion.gui.app:main"
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -1,0 +1,49 @@
+DDS Companion 0.4.0 — Windows Live Test Checklist
+=================================================
+
+Goal: verify the first real PySide6 desktop UI against the existing DDS archive.
+
+1. Extract DDS_Companion_0.4.0.zip to a new folder.
+2. Run run_companion.bat.
+3. If PySide6 is missing, answer Y to the install prompt.
+4. Confirm the window opens without a traceback.
+5. Dashboard:
+   - overall status becomes RUNNING;
+   - Database / DDS_Data / Importer / Watcher are RUNNING;
+   - message/context/media/storage values are non-zero and plausible;
+   - existing archive is preserved (no reset).
+6. Quick actions:
+   - Open library folder opens %LOCALAPPDATA%\DDS_Companion;
+   - Open DDS_Data opens the BetterDiscord DDS_Data folder;
+   - Open logs opens the Companion logs folder.
+7. Library:
+   - servers appear;
+   - channels appear under the correct server;
+   - forum/thread captures appear under the correct parent channel;
+   - counts look plausible.
+8. Activity:
+   - startup/session events are visible;
+   - no filesystem-change spam floods the table.
+9. Health:
+   - all four core subsystems are shown;
+   - updated timestamps advance;
+   - Last error says clean/no error when appropriate.
+10. Browse/scroll a Discord thread that causes DDS 0.5.2 to update capture.json.
+11. Confirm UI updates without restart:
+   - top activity text changes;
+   - Activity gains a human-readable import event;
+   - message/session counters increase if new messages were captured;
+   - Library structure/counts refresh if relevant.
+12. Settings:
+   - all paths are populated;
+   - database/media/cache/backups/logs buttons open useful locations.
+13. Close the window normally and confirm it exits cleanly.
+
+Please send screenshots of:
+- Dashboard
+- Library
+- Activity
+- Health
+- Settings (optional if paths contain anything you prefer not to show)
+
+Also send any console traceback or visual glitch exactly as shown.

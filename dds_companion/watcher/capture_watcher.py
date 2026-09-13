@@ -163,7 +163,12 @@ class CaptureWatcher:
         self._maybe_heartbeat(now_mono)
         return events
 
-    def run(self, stop_event: Event | None = None) -> WatcherCounters:
+    def run(
+        self,
+        stop_event: Event | None = None,
+        *,
+        on_tick: Callable[[], None] | None = None,
+    ) -> WatcherCounters:
         stop = stop_event or Event()
         self._set_state("watcher_state", "RUNNING")
         self._set_state("watcher_started_at", utc_now())
@@ -173,6 +178,13 @@ class CaptureWatcher:
         try:
             while not stop.is_set():
                 self.scan_once()
+                if on_tick is not None:
+                    try:
+                        on_tick()
+                    except Exception:
+                        # Dashboard refresh is presentation work. It is deliberately
+                        # isolated from the archive watcher.
+                        pass
                 stop.wait(self.poll_interval)
         finally:
             self._set_state("watcher_state", "STOPPED")

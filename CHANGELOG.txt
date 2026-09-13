@@ -1,58 +1,46 @@
-DDS Companion
-Version: 0.3.0
-Date: 2026-09-13
-Authors: Mr_Dexter_Morgan, Masya
+DDS Companion 0.4.0 — Desktop Dashboard
+========================================
 
-Activity & Health Core release.
+Status: BUILT / LOCAL TESTING
 
-Changes since 0.2.0:
-- Added durable ActivityService backed by SQLite activity_events.
-- Added in-memory Activity subscriptions for CLI now and GUI later.
-- Subscriber exceptions are isolated and cannot terminate archive processing.
-- Added human import Activity with capture path, Discord context and import counters.
-- Added persisted session lifecycle Activity.
-- Added HealthService with subsystem_health table.
-- Added subsystem states: STARTING, RUNNING, DEGRADED, ERROR, STOPPED, UNKNOWN.
-- Added database, DDS_Data, importer and watcher subsystem health.
-- Added persisted watcher heartbeat and stale-heartbeat detection.
-- Importer health remains DEGRADED while unresolved failures remain.
-- Added StatsService snapshot API with process-session baseline.
-- Added session messages/imports/activity/storage deltas.
-- Added known-media vs cached-media counters.
-- SQLite storage accounting now includes main DB + WAL + SHM.
-- Added cache/media/log storage accounting.
-- Added RuntimeMonitor bridge from watcher facts to Activity + Health.
-- Watcher now exposes isolated state and heartbeat callbacks.
-- Console startup now exposes Health, Session and Activity rows.
-- Live imports are presented as durable ACTIVITY events rather than only low-level watcher output.
-- Added OBSERVABILITY_CONTRACT.md for the future 0.4.0 GUI model boundary.
+Added
+-----
+- First PySide6 desktop interface.
+- Dark graphite + restrained blue/violet visual system.
+- Dashboard / Library / Activity / Health / Settings navigation.
+- Live Dashboard bound to Stats/Health/Activity snapshots.
+- Total storage, session delta, messages, contexts and media counters.
+- Storage breakdown including SQLite family, DDS JSON, cache, media and logs.
+- LibraryService read-only Server → Channel → Thread hierarchy.
+- Activity table from persisted activity_events.
+- Health page for Database / DDS_Data / Importer / Watcher.
+- One-click Open library folder / Open DDS_Data / Open logs actions.
+- Settings path cards for database/cache/media/backups/logs.
+- Runtime-generated DDS icon.
+- GUI dependency bootstrap and PySide6 installer helper.
+- Separate run_cli.bat preserving the proven headless watcher.
 
-Database:
-- Schema version 1 -> 2.
-- Adds activity_events.
-- Adds subsystem_health.
-- Existing archive tables are preserved in place.
+Architecture
+------------
+- Added dds_companion.gui.runtime.GuiRuntime.
+- SQLite remains confined to one background runtime thread.
+- Qt receives snapshots through signal callbacks, not direct SQL calls.
+- Added optional CaptureWatcher.on_tick callback; observer exceptions are isolated.
+- Added LibraryService so Qt does not depend on the archive schema.
+- Manual UI refresh uses a thread-safe Event.
 
-Compatibility:
-- DDS Capture Schema v2.
-- DDS Plugin v0.5.2 stable milestone.
-- Existing DDS Companion 0.2.0 SQLite database upgrades in place.
-- No reset, copy, or archive rewrite is required.
+Validation
+----------
+- 21/21 automated tests PASS.
+- All 18 previous regression tests remain PASS.
+- Library hierarchy test PASS.
+- GUI runtime start/snapshot/clean-stop test PASS.
+- Live capture change through watcher/importer/activity test PASS.
+- Python compileall PASS.
 
-Validation:
-- Python compileall: PASS.
-- Unit tests: 18/18 PASS.
-- Full watcher -> Activity process integration: PASS.
-- Clean SIGINT / Ctrl+C shutdown exit code 0: PASS.
-- Watcher final persisted state STOPPED: PASS.
-- Stale watcher health detection: PASS.
-- Subscriber exception isolation: PASS.
-- Import failure -> DEGRADED -> recovery path: PASS.
-- Full process malformed capture -> corrected capture recovery: PASS.
-- Real 0.2.0-generated SQLite -> 0.3.0 migration: PASS.
-- Existing message preservation: PASS.
-- Existing capture fingerprint dedup after migration: PASS.
-
-Status:
-- BUILT / LOCAL TESTING.
-- Requires live Windows validation against the user's real DDS_Data + existing SQLite before VERIFIED.
+Known validation gap
+--------------------
+- The build environment does not have PySide6 installed, so native Qt rendering
+  has not been visually executed here.
+- The release must remain BUILT / LOCAL TESTING until the real Windows machine
+  confirms window rendering, navigation, quick folder actions and live UI update.

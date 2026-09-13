@@ -1,29 +1,39 @@
-DDS Companion 0.3.0 — Validation Report
-Date: 2026-09-13
-Authors: Mr_Dexter_Morgan, Masya
+DDS Companion 0.4.0 — Local Validation
+======================================
 
-PASS  Python compileall
-PASS  Importer regression tests: 4/4
-PASS  Watcher regression/lifecycle tests: 7/7
-PASS  Observability tests: 7/7
-PASS  Total unit tests: 18/18
-PASS  Activity persistence
-PASS  Activity subscriber failure isolation
-PASS  Import Activity Discord context/counters
-PASS  Health core subsystem snapshot
-PASS  Stale watcher heartbeat -> DEGRADED
-PASS  Import failure -> DEGRADED -> successful recovery
-PASS  Session Stats baseline/deltas
-PASS  Known media / cached media split
-PASS  Schema v1 -> v2 additive migration
-PASS  Full process watcher -> Activity integration
-PASS  Full process malformed capture -> DEGRADED -> corrected capture recovery
-PASS  Clean SIGINT / Ctrl+C shutdown (exit code 0)
-PASS  Final watcher health persisted as STOPPED
-PASS  Real DDS Companion 0.2.0-created DB -> 0.3.0 in-place upgrade
-PASS  Existing archived message preserved during upgrade
-PASS  Existing capture remains fingerprint-deduplicated after upgrade
+Date: 2026-09-14
+Status: BUILT / LOCAL TESTING
 
-Runtime dependency changes: NONE (Python stdlib only)
-Live Windows + real DDS 0.5.2 / DDS_Data test: PENDING
-Release status: BUILT / LOCAL TESTING
+Compile
+-------
+PASS — python -m compileall dds_companion
+
+Automated suite
+---------------
+PASS — 21/21 tests
+
+Regression coverage retained:
+- importer / dedup / changed snapshot / bad JSON isolation
+- thread parent relationship
+- Activity persistence + subscriber isolation
+- Health core + stale watcher
+- Stats session baseline
+- schema v1 → v2 additive upgrade
+- watcher settle / new / changed / delete / failure recovery
+- bad observer isolation
+- clean watcher state/heartbeat behavior
+
+New 0.4.0 coverage:
+1. LibraryService reconstructs Guild → Channel → Thread and message counts.
+2. GuiRuntime opens a real SQLite archive, imports DDS capture data, emits a
+   RUNNING snapshot and stops cleanly on request.
+3. GuiRuntime detects a changed capture and emits capture_imported with the
+   expected +1 new / 1 refreshed message counts.
+
+Qt render validation
+--------------------
+NOT RUN in build environment: PySide6 is not installed there.
+
+This is an explicit validation boundary, not a silent PASS. The GUI source was
+syntax-compiled and its backend/threading integration is tested without Qt.
+Native Windows visual/render/folder-action validation is required before VERIFIED.

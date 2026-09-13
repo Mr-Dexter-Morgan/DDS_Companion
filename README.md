@@ -1,105 +1,62 @@
-# DDS Companion 0.3.0 — Activity & Health Core
+# DDS Companion 0.4.0 — Desktop Dashboard
 
-**Authors:** Mr_Dexter_Morgan, Masya  
-**Companion status:** BUILT / LOCAL TESTING  
-**Previous stable Companion:** 0.2.0 — VERIFIED  
-**Upstream DDS Plugin:** 0.5.2 — VERIFIED / STABLE MILESTONE
+Project: **DDS — Discord Data Snatcher**  
+Authors: **Mr_Dexter_Morgan, Masya**
 
-DDS Companion 0.3.0 adds the observability core that the future GUI will consume. The archive/import/watcher pipeline from 0.1.0 and 0.2.0 remains intact; 0.3.0 adds durable human-readable Activity, subsystem Health, richer Stats and session deltas.
+> Are you sure your data is secure?
 
-The important architectural rule is: **the future UI must display core state, not become the core.** A broken printer or GUI listener must not terminate DDS importing.
+Status: **BUILT / LOCAL TESTING**
 
-## What changed
+0.4.0 gives the verified Companion core its first real desktop interface. The archive pipeline remains the same local pipeline proven in 0.1.0–0.3.0; the GUI consumes plain snapshots/events from that core instead of owning database logic itself.
 
-### ActivityService
+## What this release adds
 
-Activity is now a first-class internal API and SQLite entity, not only console text.
+- PySide6 dark desktop shell.
+- Navigation: **Dashboard / Library / Activity / Health / Settings**.
+- Live Dashboard backed by the real Stats/Health/Activity services.
+- Total known storage always visible.
+- Separate known vs cached media counts.
+- Session growth: messages, imports, activity events and storage delta.
+- Human-readable current activity.
+- Per-subsystem health for Database, DDS_Data, Importer and Watcher.
+- Library tree: **Server → Channel → Thread** with message counts.
+- Activity table backed by persisted `activity_events`.
+- Paths & Storage page with one-click folder access.
+- Quick actions: **Open library folder / Open DDS_Data / Open logs**.
+- SQLite database, cache, media and backups can be opened directly from Settings.
+- Runtime-created DDS app icon; no external icon path can go missing.
+- Existing CLI remains available through `run_cli.bat`.
+- Existing one-shot importer remains available through `run_once.bat`.
 
-It provides:
+## Architecture boundary
 
-- durable `activity_events` records;
-- in-memory subscriptions for CLI today and PySide6 later;
-- human summaries such as `+9 messages imported, 0 existing refreshed`;
-- source capture path plus guild/channel/thread context when known;
-- message/media counters per import event;
-- severity + subsystem + event type;
-- subscriber failure isolation: one broken presentation listener cannot stop archiving.
-
-Transient filesystem chatter (`created`, `changed`, `unchanged`) is intentionally not persisted as Activity spam. Successful imports, failed imports, source removals, session lifecycle, and other meaningful events are persisted.
-
-### HealthService
-
-Health is persisted per subsystem in `subsystem_health`.
-
-Current subsystem model:
-
-- `database`
-- `dds_data`
-- `importer`
-- `watcher`
-
-Supported states:
+The Qt UI does **not** execute archive SQL directly.
 
 ```text
-STARTING
-RUNNING
-DEGRADED
-ERROR
-STOPPED
-UNKNOWN
+Discord Desktop
+      ↓
+DDS 0.5.2 plugin
+      ↓
+DDS_Data / capture.json
+      ↓
+Companion watcher + importer + SQLite
+      ↓
+Activity / Health / Stats / Library services
+      ↓ plain dictionaries / observer events
+PySide6 presentation layer
 ```
 
-Overall Companion state remains:
+The GUI runtime keeps the SQLite connection on one background runtime thread. Qt receives serializable snapshots through thread-safe signals. Presentation callbacks are observers and are isolated from the watcher/import pipeline.
 
-```text
-RUNNING / DEGRADED / ERROR
-```
+Closing the application asks the watcher to stop cleanly. A normal UI close does not delete or mirror-trim archive data.
 
-A watcher heartbeat is persisted. If a prior process claimed `RUNNING` but the heartbeat becomes stale, Health can classify it as `DEGRADED` instead of trusting stale state forever.
+## Installation / first launch
 
-### StatsService
+Requirements:
 
-Stats now has a stable snapshot API with a process-session baseline.
-
-It exposes:
-
-- total messages;
-- guild/channel/thread/user counts;
-- attachments / embeds;
-- capture imports;
-- Activity event count;
-- failed jobs total + unresolved;
-- known media vs cached media files;
-- SQLite storage including `-wal` / `-shm` files;
-- DDS_Data size;
-- cache/media/log sizes;
-- total known storage;
-- last successful import;
-- messages/imports/activity added this session;
-- storage delta this session.
-
-Until the dedicated Media milestone exists, `known_media` means registered attachment metadata rows. Embed metadata remains visible separately and is not falsely counted as a cached file.
-
-## Database migration
-
-Schema version is now:
-
-```text
-2
-```
-
-0.3.0 adds only:
-
-```text
-activity_events
-subsystem_health
-```
-
-The existing archive tables are not rebuilt or reset.
-
-A real 0.2.0-created SQLite database was upgraded in-place during local validation. Existing messages and capture fingerprints were preserved and the unchanged capture remained deduplicated.
-
-## Expected Windows startup
+- Windows 10/11 for the live target.
+- Python 3.11+.
+- PySide6 for the GUI.
 
 Run:
 
@@ -107,126 +64,84 @@ Run:
 run_companion.bat
 ```
 
-A healthy startup should resemble:
+If PySide6 is missing, the launcher offers to install it using:
 
 ```text
-DDS Companion v0.3.0  [RUNNING]
-DDS_Data : C:\Users\...\AppData\Roaming\BetterDiscord\DDS_Data
-Database : C:\Users\...\AppData\Local\DDS_Companion\database\dds.sqlite3
-Watcher  : ACTIVE  poll=750 ms, settle=500 ms
-Health   : DB=RUNNING | DDS=RUNNING | Importer=RUNNING | Watcher=RUNNING
-
-Import   : seen=..., imported=..., unchanged=..., failed=0
-Messages : +... new, ... existing refreshed; archive total=...
-Context  : guilds=..., channels=..., threads=...
-Media    : known=... attachments, cached=0 files; embeds=... (metadata only)
-Storage  : SQLite=..., DDS JSON=..., known total=...
-Session  : +... messages, +... imports, storage +...
-Activity : total=..., session=+... events; failed jobs unresolved=0
-
-Watching DDS_Data. Press Ctrl+C to stop cleanly.
+requirements-gui.txt
 ```
 
-When DDS changes a capture, the low-level watcher signal remains visible, followed by a human Activity event:
+You can also install it manually with:
 
 ```text
-[21:31:52] WATCH    changed: guilds\...\capture.json (settling)
-[21:31:52] ACTIVITY +9 messages imported, 0 existing refreshed | guilds\...\capture.json
+install_gui_dependencies.bat
 ```
 
-## Failure behavior
-
-A malformed or otherwise failing capture:
-
-1. is isolated from the watcher loop;
-2. is recorded in `failed_jobs`;
-3. creates an `ERROR` Activity record;
-4. moves importer health to `DEGRADED`;
-5. does not stop observation of other capture files.
-
-When that capture later imports successfully, its unresolved failed job is resolved. Importer health returns to `RUNNING` only when no unresolved import failures remain.
-
-## Presentation isolation
-
-Activity subscribers are deliberately isolated:
+The headless watcher is still available:
 
 ```text
-Core -> ActivityService -> [CLI printer]
-                        -> [future PySide6 Dashboard]
-                        -> [future tray/status surface]
+run_cli.bat
 ```
 
-If one subscriber throws an exception, other subscribers still receive the event and archive processing continues.
+## Default paths
 
-## Run modes
-
-Persistent watcher:
+DDS plugin export:
 
 ```text
-run_companion.bat
+%APPDATA%\BetterDiscord\DDS_Data
 ```
 
-One-shot import:
+Companion data:
 
 ```text
-run_once.bat
+%LOCALAPPDATA%\DDS_Companion
 ```
 
-or:
+SQLite:
 
 ```text
-python -m dds_companion.app --once
+%LOCALAPPDATA%\DDS_Companion\database\dds.sqlite3
 ```
 
-Machine-readable startup + event stream:
+## Dashboard contract
+
+The first screen must answer three questions immediately:
+
+1. **Is Companion healthy?**
+2. **What is it doing now?**
+3. **How much has it archived?**
+
+The Dashboard therefore shows overall state, four subsystem states, total storage, message/context/media counts, session growth, storage breakdown and latest activity without requiring navigation.
+
+## Library contract
+
+0.4.0 intentionally provides archive structure browsing, not message full-text search. The tree is:
 
 ```text
-python -m dds_companion.app --json
+Server
+└── Channel
+    └── Thread
 ```
 
-## Validation performed before publication
+Message search/version history remains a later architectural stage and is not faked in this release.
 
-```text
-Python compileall                                      PASS
-0.1.x importer regression tests                       4/4 PASS
-0.2.x watcher regression/lifecycle tests              7/7 PASS
-0.3.0 observability tests                              7/7 PASS
-Total unit tests                                      18/18 PASS
-Activity persistence + subscriber isolation           PASS
-Health RUNNING / DEGRADED + stale heartbeat            PASS
-Failure recovery health transition                    PASS
-Malformed capture -> corrected capture process test    PASS
-Session stats / media split                           PASS
-Watcher + Activity integration process smoke test     PASS
-Clean SIGINT / Ctrl+C exit code 0                     PASS
-0.2.0-created SQLite -> 0.3.0 in-place migration      PASS
-Archive preservation across migration                 PASS
-Unchanged capture dedup after migration               PASS
-```
+## Reliability rules preserved
 
-## Live Windows gate for VERIFIED
+- One malformed capture must not terminate the watcher.
+- One bad UI/activity observer must not terminate the watcher.
+- Source capture deletion must not delete accumulated archive rows.
+- Existing 0.1/0.2/0.3 SQLite archives upgrade in place.
+- Drive/network availability is not required for local capture/import.
+- UI convenience actions only open local paths; they do not alter archive content.
 
-0.3.0 is intentionally **not** marked VERIFIED until it runs against the real Windows archive.
+## Local validation
 
-Live test:
+- Python compile: **PASS**
+- 0.1/0.2/0.3 regression suite: **PASS**
+- New Library hierarchy test: **PASS**
+- New GUI runtime startup/clean-stop integration test: **PASS**
+- New live capture-change → Activity integration test: **PASS**
+- Total automated tests: **21/21 PASS**
 
-1. start `run_companion.bat` over the existing Companion database;
-2. confirm the startup `Health` row is all `RUNNING`;
-3. confirm existing messages are still present and unchanged captures deduplicate;
-4. open or scroll a Discord channel/thread so DDS 0.5.2 changes a capture;
-5. confirm `WATCH` is followed by an `ACTIVITY ... imported` line;
-6. press `Ctrl+C` and confirm clean shutdown.
+The build environment used for this release does not include PySide6, so the actual Qt window render is intentionally marked **awaiting live Windows validation**. Backend/UI-boundary behavior is tested without Qt; the visual render and native folder buttons must be verified on the user's Windows machine before the release becomes VERIFIED.
 
-No destructive failure injection is required on the real archive; malformed-capture and recovery paths are covered by automated tests.
-
-## Scope deliberately NOT added in 0.3.0
-
-- no PySide6 GUI yet;
-- no media download;
-- no full-text search;
-- no Drive sync;
-- no Discord credential/token access;
-- no hidden-history fetching;
-- no message-version/deletion classification yet.
-
-The next intended milestone after live verification is **0.4.0 — first PySide6 Dashboard**, consuming these Activity/Health/Stats APIs rather than reaching into watcher/SQLite internals itself.
+See `VALIDATION.txt`, `UI_CONTRACT.md`, and `LIVE_TEST_CHECKLIST_0.4.0.txt`.
