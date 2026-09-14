@@ -1,53 +1,41 @@
-DDS Companion 0.4.1 — GUI Polish / Responsive Layout
-=====================================================
+DDS Companion 0.4.2 — Settings Information Architecture
+========================================================
 
 Status: BUILT / LOCAL TESTING
 
 Purpose
 -------
-0.4.1 is a focused polish release over the live-tested 0.4.0 desktop GUI.
-It does not change the archive schema, importer contract or watcher behavior.
+0.4.2 is a focused UI patch over the live-tested 0.4.1 GUI. It separates
+important Companion settings from low-priority filesystem paths so the Settings
+page can grow without being dominated by storage locations.
 
 Changed
 -------
-- Dashboard is now scroll-safe instead of relying on a fixed-height layout.
-- Added Compact / Standard / Large layout profiles selected from usable screen
-  geometry, logical DPI, device-pixel ratio and current window width.
-- Compact mode rearranges metric cards into a 2x2 grid and stacks lower
-  dashboard panels vertically, preventing the 1366x768 storage panel overlap.
-- Standard/Large modes preserve the wider desktop card layout.
-- Window initial size now respects available screen geometry instead of always
-  requesting 1320x840.
-- Layout profile is re-evaluated on window resize, screen changes, available
-  geometry changes and logical-DPI changes.
-- Sidebar navigation now has clearly different idle, hover and selected states.
-- Removed duplicate Open Library actions from the top bar and Dashboard.
-  Library page is now the single Open library folder location.
-- Refresh is now a compact secondary action rather than plain ghost text.
-- Normal launcher hands the GUI to pythonw.exe/run_companion.pyw so a console
-  is not kept open during normal use.
-- Added run_companion_debug.bat for an intentional console/debug session.
+- Settings now has two internal tabs:
+  - Основные — default tab for user-facing and runtime settings.
+  - Paths & Storage — service paths and one-click folder access.
+- Watcher policy moved to the default Основные tab.
+- All path rows (Library, DDS_Data, SQLite, logs, media, cache, backups) moved to
+  the dedicated Paths & Storage tab.
+- Added dedicated tab styling consistent with the existing dark UI.
+- Paths & Storage remains independently scrollable on constrained displays.
+- No fake editable controls were introduced; settings remain read-only until
+  persistence/validation exists for each option.
 
 Unchanged
 ---------
-- Accumulating SQLite archive behavior.
-- Watcher settle/retry/isolation semantics.
-- Activity / Health / Stats services.
-- Library Server → Channel → Thread model.
-- DDS_Data source contract.
-- No media download, search, Drive sync, tray, autostart or installer yet.
+- Archive schema, importer, watcher and observability behavior.
+- Dashboard, Library, Activity and Health behavior.
+- Normal pythonw launcher and responsive layout profiles from 0.4.1.
 
 Validation
 ----------
 - Python compileall: PASS.
-- Full automated suite: 27/27 PASS.
-- Previous 21 tests remain PASS.
-- Added 3 layout-profile tests for 1366x768, 1080p and dense 4K cases.
-- Added 3 source-contract tests for scroll safety, launcher split and duplicate
-  Open Library action removal.
+- Full automated suite: 28/28 PASS.
+- Previous 27 tests remain PASS.
+- Added Settings tab/source contract test: PASS.
 
 Live-test boundary
 ------------------
-PySide6 is not available in the build container, so the actual 0.4.1 Qt render
-must still be checked on Windows.  In particular: 1366x768 compact flow,
-sidebar state colors, normal no-persistent-console launch and folder buttons.
+PySide6 is not available in the build container. Actual tab layout and click
+behavior must still be checked on Windows before promotion to VERIFIED.

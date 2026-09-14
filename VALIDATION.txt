@@ -1,48 +1,27 @@
-DDS Companion 0.4.1 — Local Validation
-======================================
+DDS Companion 0.4.2 — Validation
+================================
 
-Date: 2026-09-14
-Status: BUILT / LOCAL TESTING
+Build environment
+-----------------
+Python source build container; PySide6 is intentionally not installed.
 
-Reason for patch
-----------------
-0.4.0 rendered successfully on the live Windows target and preserved the real
-142-message archive with all Health subsystems RUNNING, but the 1366x768
-Dashboard exposed a lower Storage panel overlap/clipping issue.  The live UI
-also showed redundant Open Library actions and insufficient visual separation
-between navigation states.
-
-Compile
--------
-PASS — python -m compileall dds_companion
-
-Automated suite
----------------
-PASS — 27/27 tests
-
-All previous 21 importer/watcher/observability/GUI-runtime tests remain PASS.
-
-New 0.4.1 coverage
-------------------
-1. 1366x768-class usable geometry selects Compact layout.
-2. 1920x1080-class usable geometry selects Standard layout.
-3. Dense 4K-class display selects Large layout using logical DPI / DPR.
-4. Normal launcher contract uses pythonw.exe + run_companion.pyw.
-5. Debug launcher contract retains python console execution.
-6. Topbar/Dashboard duplicate Open Library actions are absent and Dashboard is
-   backed by QScrollArea scroll-safe content.
-
-Qt render validation
+Automated validation
 --------------------
-NOT RUN in build container: PySide6 is not installed there.
+- python -m compileall -q dds_companion: PASS
+- python -m unittest discover -v dds_companion/tests: PASS (28/28)
+- Previous 27 tests from 0.4.1: PASS
+- New Settings IA contract test: PASS
 
-Required Windows checks before VERIFIED:
-- Dashboard at 1366x768 has no overlap/clipping; scrolling reaches Storage.
-- Idle / hover / selected sidebar states are visibly distinct.
-- Refresh is a compact secondary button.
-- Open library folder exists only on Library page.
-- Normal run_companion.bat leaves no persistent console window.
-- run_companion_debug.bat keeps the diagnostic console intentionally.
-- Folder actions still open the expected native folders.
-- Health remains RUNNING and archive count is preserved.
-- Clean close stops the runtime without archive loss.
+New source contract verifies
+----------------------------
+- Settings uses QTabWidget.
+- Основные is the first/default tab.
+- Paths & Storage is a separate tab.
+- Watcher policy stays on primary settings surface.
+- Path rows stay grouped on the secondary surface.
+- Settings tab styling exists in the central theme.
+
+Not claimed here
+----------------
+Actual PySide6 rendering/click behavior is not claimed as tested in the build
+container. Windows live validation remains required.

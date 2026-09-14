@@ -67,6 +67,16 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         self.assertIn("scrollable=True", pages)
         self.assertIn("QScrollArea", pages)
 
+    def test_settings_separates_primary_controls_from_paths_and_storage(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        theme = (self.root / "dds_companion/gui/theme.py").read_text(encoding="utf-8")
+        self.assertIn("QTabWidget", pages)
+        self.assertIn('self.tabs.addTab(general, "Основные")', pages)
+        self.assertIn('self.tabs.addTab(paths_page, "Paths & Storage")', pages)
+        self.assertIn('SectionHeader("Watcher policy"', pages)
+        self.assertIn('SectionHeader("Paths & Storage"', pages)
+        self.assertIn("QTabWidget#SettingsTabs", theme)
+
 
 if __name__ == "__main__":
     unittest.main()

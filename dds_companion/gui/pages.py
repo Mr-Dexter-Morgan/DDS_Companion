@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -622,16 +623,62 @@ class SettingsPage(Page):
     def __init__(self, parent=None):
         super().__init__(
             "Settings",
-            "Пути и быстрый доступ к рабочим данным. Изменяемые политики добавим отдельным этапом, не смешивая их с GUI-фундаментом.",
+            "Основные настройки — на первом плане. Пути и служебное хранилище вынесены отдельно.",
             parent,
         )
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        content = QWidget()
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(0, 0, 4, 4)
-        layout.setSpacing(10)
-        layout.addWidget(SectionHeader("Paths & Storage", "Открывай нужную папку в один клик"))
+
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("SettingsTabs")
+        self.body.addWidget(self.tabs, 1)
+
+        # Main settings stay lightweight and visible first.  We deliberately do
+        # not expose fake/editable controls until the runtime has persistence
+        # and validation for them.
+        general = QWidget()
+        general_layout = QVBoxLayout(general)
+        general_layout.setContentsMargins(0, 14, 0, 0)
+        general_layout.setSpacing(12)
+
+        runtime = Card()
+        rt = QVBoxLayout(runtime)
+        rt.setContentsMargins(16, 14, 16, 14)
+        rt.setSpacing(8)
+        rt.addWidget(SectionHeader("Watcher policy", "Текущая политика наблюдения; пока read-only"))
+        self.watcher_policy = QLabel("poll — · settle —")
+        self.watcher_policy.setStyleSheet(f"color:{TEXT};font-weight:650;")
+        rt.addWidget(self.watcher_policy)
+        general_layout.addWidget(runtime)
+
+        priority = Card()
+        priority_layout = QVBoxLayout(priority)
+        priority_layout.setContentsMargins(16, 14, 16, 14)
+        priority_layout.setSpacing(6)
+        priority_layout.addWidget(SectionHeader("Основные настройки", "Здесь будут пользовательские параметры Companion"))
+        priority_hint = QLabel(
+            "Пути больше не занимают главный экран Settings. Новые важные параметры "
+            "будут добавляться сюда по мере появления их безопасного сохранения и проверки."
+        )
+        priority_hint.setObjectName("SectionHint")
+        priority_hint.setWordWrap(True)
+        priority_layout.addWidget(priority_hint)
+        general_layout.addWidget(priority)
+        general_layout.addStretch(1)
+
+        paths_page = QWidget()
+        paths_outer = QVBoxLayout(paths_page)
+        paths_outer.setContentsMargins(0, 10, 0, 0)
+        paths_outer.setSpacing(0)
+        paths_scroll = QScrollArea()
+        paths_scroll.setWidgetResizable(True)
+        paths_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        paths_scroll.setFrameShape(QFrame.NoFrame)
+        paths_content = QWidget()
+        paths_content.setObjectName("SettingsPathsContent")
+        paths_layout = QVBoxLayout(paths_content)
+        paths_layout.setContentsMargins(0, 4, 4, 4)
+        paths_layout.setSpacing(10)
+        paths_layout.addWidget(SectionHeader("Paths & Storage", "Служебные пути и быстрый доступ к данным"))
+
         self.rows: dict[str, PathRow] = {}
         labels = [
             ("app_data", "Library / Companion data"),
@@ -645,20 +692,13 @@ class SettingsPage(Page):
         for key, label in labels:
             row = PathRow(label, "—")
             self.rows[key] = row
-            layout.addWidget(row)
+            paths_layout.addWidget(row)
+        paths_layout.addStretch(1)
+        paths_scroll.setWidget(paths_content)
+        paths_outer.addWidget(paths_scroll, 1)
 
-        layout.addSpacing(8)
-        runtime = Card()
-        rt = QVBoxLayout(runtime)
-        rt.setContentsMargins(16, 14, 16, 14)
-        rt.addWidget(SectionHeader("Watcher policy", "Пока read-only: значения проверенного 0.3.0 контура"))
-        self.watcher_policy = QLabel("poll — · settle —")
-        self.watcher_policy.setStyleSheet(f"color:{TEXT};font-weight:650;")
-        rt.addWidget(self.watcher_policy)
-        layout.addWidget(runtime)
-        layout.addStretch(1)
-        scroll.setWidget(content)
-        self.body.addWidget(scroll, 1)
+        self.tabs.addTab(general, "Основные")
+        self.tabs.addTab(paths_page, "Paths & Storage")
 
     def update_snapshot(self, snapshot: dict) -> None:
         paths = snapshot.get("paths", {})
@@ -668,3 +708,4 @@ class SettingsPage(Page):
         self.watcher_policy.setText(
             f"poll={watcher.get('poll_ms', '—')} ms   ·   settle={watcher.get('settle_ms', '—')} ms"
         )
+

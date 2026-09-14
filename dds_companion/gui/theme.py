@@ -138,6 +138,33 @@ QPushButton[ghost="true"] {{
 }}
 QPushButton[ghost="true"]:hover {{ color: {TEXT}; background: #151a25; }}
 QPushButton:disabled {{ color: #555e6e; background: #141821; border-color: #1c2230; }}
+QTabWidget#SettingsTabs::pane {{
+    border: none;
+    background: transparent;
+    top: -1px;
+}}
+QTabWidget#SettingsTabs QTabBar::tab {{
+    color: {MUTED};
+    background: #10151f;
+    border: 1px solid #1b2230;
+    border-bottom-color: {BORDER};
+    padding: 8px 14px;
+    margin-right: 6px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    font-weight: 650;
+}}
+QTabWidget#SettingsTabs QTabBar::tab:hover {{
+    color: {TEXT};
+    background: #171e2a;
+    border-color: #2b3548;
+}}
+QTabWidget#SettingsTabs QTabBar::tab:selected {{
+    color: white;
+    background: #27263d;
+    border-color: #6668f1;
+}}
+QWidget#SettingsPathsContent {{ background: transparent; }}
 QLabel#PageTitle {{ font-size: 19pt; font-weight: 750; color: {TEXT}; }}
 QLabel#PageSubtitle {{ font-size: 9.5pt; color: {MUTED}; }}
 QLabel#CardEyebrow {{ font-size: 8.5pt; font-weight: 650; color: {MUTED}; }}

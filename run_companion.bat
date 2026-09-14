@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title DDS Companion 0.4.1
+title DDS Companion 0.4.2
 
 python -c "import PySide6" >nul 2>&1
 if errorlevel 1 goto missing_gui
@@ -13,7 +13,7 @@ exit /b 0
 
 :missing_gui
 echo.
-echo DDS Companion 0.4.1 GUI dependency PySide6 is not installed.
+echo DDS Companion 0.4.2 GUI dependency PySide6 is not installed.
 echo.
 choice /C YN /N /M "Install it now? [Y/N]: "
 if errorlevel 2 exit /b 4
