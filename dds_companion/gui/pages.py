@@ -528,6 +528,7 @@ class HealthPage(Page):
             "Health",
             "Проверка жизненно важных подсистем, heartbeat и ошибок, которые не должны останавливать архив.",
             parent,
+            scrollable=True,
         )
         self.overall = Card()
         o = QHBoxLayout(self.overall)
@@ -554,6 +555,8 @@ class HealthPage(Page):
             ("dds_data", "DDS_Data"),
             ("importer", "Importer"),
             ("watcher", "Watcher"),
+            ("discord", "Discord"),
+            ("updates", "Update check"),
         ]
         for index, (key, label) in enumerate(names):
             card = Card()
@@ -573,6 +576,7 @@ class HealthPage(Page):
             summary.setWordWrap(True)
             updated = QLabel("Обновлено: —")
             updated.setObjectName("SectionHint")
+            updated.setWordWrap(True)
             lay.addLayout(top)
             lay.addWidget(summary)
             lay.addWidget(updated)
@@ -613,10 +617,28 @@ class HealthPage(Page):
             state_label.setText(sub_state)
             state_label.setStyleSheet(f"color:{state_color(sub_state)};font-weight:750;")
             summary_label.setText(info.get("summary", "—"))
-            updated_label.setText(f"Обновлено: {local_time(info.get('updated_at'), seconds=True)}")
-        last_error = health.get("last_error")
-        self.last_error.setText(last_error or "Ошибок нет")
-        self.last_error.setStyleSheet(f"color:{DANGER if last_error else MUTED};")
+            if key == "discord":
+                updated_label.setText(f"Проверено: {local_time(info.get('updated_at'), seconds=True)}")
+            elif key == "updates":
+                details = info.get("details", {})
+                interval = details.get("interval_hours", "—")
+                attempt = local_time(details.get("last_attempt_at"), seconds=True)
+                next_check = local_time(details.get("next_check_at"), seconds=True)
+                updated_label.setText(
+                    f"Interval: {interval} h  ·  Last attempt: {attempt}  ·  Next: {next_check}"
+                )
+            else:
+                updated_label.setText(f"Heartbeat: {local_time(info.get('updated_at'), seconds=True)}")
+        last_error_info = health.get("last_error_info")
+        if last_error_info:
+            subsystem = last_error_info.get("subsystem", "unknown")
+            occurred = local_time(last_error_info.get("occurred_at"), seconds=True)
+            message = last_error_info.get("message", "Unknown error")
+            self.last_error.setText(f"{subsystem}  ·  {occurred}\n{message}")
+            self.last_error.setStyleSheet(f"color:{DANGER};")
+        else:
+            self.last_error.setText("Ошибок нет")
+            self.last_error.setStyleSheet(f"color:{MUTED};")
 
 
 class SettingsPage(Page):

@@ -1,4 +1,4 @@
-# DDS Companion 0.4.2 — Settings IA Patch
+# DDS Companion 0.4.3 — Health Telemetry Patch
 
 Project: **DDS — Discord Data Snatcher**  
 Authors: **Mr_Dexter_Morgan, Masya**
@@ -7,44 +7,51 @@ Authors: **Mr_Dexter_Morgan, Masya**
 
 Status: **BUILT / LOCAL TESTING**
 
-0.4.2 is a focused patch over the live-tested 0.4.1 GUI. It reorganizes the
-Settings page so important user/runtime settings have the primary space and
-filesystem paths are kept in a separate secondary tab.
+0.4.3 is a focused live-telemetry patch over 0.4.2. It keeps the archive/import
+core and the successful Dashboard / Library / Activity layout intact while
+making Health more truthful and useful during real Windows operation.
 
 ## What changed
 
-Settings now opens on **Основные**. The existing watcher policy is shown there,
-and this tab is reserved for future user-facing options as they become safely
-persistent and validated.
-
-All service locations moved to **Paths & Storage**:
-
-- Library / Companion data
-- DDS_Data plugin export
-- SQLite database
-- Logs
-- Media cache
-- Cache
-- Backups
-
-The path page keeps its own vertical scrolling and the existing Copy/Open
-actions.
+- Compact sidebar no longer truncates **DDS Companion** to `DDS Compan`.
+- Health is scroll-safe and now exposes six cards:
+  - Database
+  - DDS_Data
+  - Importer
+  - Watcher
+  - Discord
+  - Update check
+- Database and DDS_Data are live probes in every Health snapshot instead of
+  simply repeating startup state.
+- Watcher heartbeat expiry is represented explicitly as **STALE**; overall
+  Companion health still becomes DEGRADED when a critical subsystem is stale.
+- Discord process status is checked on Windows without adding a new dependency.
+  `Discord.exe`, `DiscordCanary.exe` and `DiscordPTB.exe` are recognized.
+  Discord not running is informational and does not degrade the archive.
+- Update-check telemetry is prepared without performing network requests yet.
+  Health shows the configured interval and reads last-attempt / last-success /
+  next-check values from `application_state` when a future updater writes them.
+  Until then the state is **NEVER** and the default interval is 6 hours.
+- The last unresolved failure now carries subsystem/job kind and timestamp.
+  Once the durable failure is resolved, Health returns to **Ошибок нет** instead
+  of presenting an obsolete error as active.
 
 ## What did not change
 
-The archive/import/watcher core is unchanged. Dashboard, Library, Activity,
-Health, responsive layout profiles and the normal no-console launcher remain as
-in 0.4.1.
+- No archive schema migration.
+- Importer, watcher capture semantics and deduplication remain unchanged.
+- Dashboard, Library, Activity and Settings information architecture remain as in
+  0.4.2.
+- No Media Backfill, media cache policy, GitHub updater, AI export or Drive sync
+  is enabled in this release.
 
 ## Validation
 
 - Python compileall: **PASS**
-- Automated suite: **28/28 PASS**
-- Regression suite from 0.4.1: **PASS**
-- Settings two-tab source contract: **PASS**
+- Full automated suite: **35/35 PASS**
+- Clean regression coverage includes importer/watcher/archive behavior.
+- New tests cover STALE watcher state, live DDS_Data probe, update telemetry,
+  unresolved-error metadata and Discord tasklist parsing.
 
-Actual Qt rendering of the new Settings tabs still requires the Windows live
-check because PySide6 is not installed in the build container.
-
-See `CHANGELOG.txt`, `VALIDATION.txt`, `UI_CONTRACT.md` and
-`LIVE_TEST_CHECKLIST_0.4.2.txt`.
+Actual Qt rendering and Windows process detection still require the live Windows
+check in `LIVE_TEST_CHECKLIST_0.4.3.txt`.

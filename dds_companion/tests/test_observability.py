@@ -83,7 +83,7 @@ class ObservabilityTests(unittest.TestCase):
         self.assertEqual(snapshot["subsystems"]["dds_data"]["state"], "RUNNING")
         self.assertEqual(snapshot["subsystems"]["watcher"]["state"], "RUNNING")
 
-    def test_stale_watcher_is_degraded(self):
+    def test_stale_watcher_is_explicit_and_degrades_overall(self):
         self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
         stale = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
         with self.conn:
@@ -92,9 +92,60 @@ class ObservabilityTests(unittest.TestCase):
                 (stale,),
             )
         snapshot = self.health.snapshot(watcher_expected=True, stale_after_seconds=30)
-        self.assertEqual(snapshot["subsystems"]["watcher"]["state"], "DEGRADED")
+        self.assertEqual(snapshot["subsystems"]["watcher"]["state"], "STALE")
         self.assertTrue(snapshot["subsystems"]["watcher"]["stale"])
         self.assertEqual(snapshot["state"], "DEGRADED")
+
+
+
+    def test_dds_data_probe_reflects_current_filesystem_state(self):
+        self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
+        self.health.set_subsystem("importer", "RUNNING", "ok")
+        (self.dds / "manifest.json").unlink()
+        snapshot = self.health.snapshot(watcher_expected=True)
+        self.assertEqual(snapshot["subsystems"]["dds_data"]["state"], "DEGRADED")
+        self.assertEqual(snapshot["state"], "DEGRADED")
+
+    def test_update_telemetry_reads_existing_scheduler_state_without_networking(self):
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO application_state(key, value, updated_at) VALUES('update_interval_hours','12','2026-09-16T00:00:00+00:00')"
+            )
+            self.conn.execute(
+                "INSERT INTO application_state(key, value, updated_at) VALUES('update_last_attempt','2026-09-16T00:10:00+00:00','2026-09-16T00:10:00+00:00')"
+            )
+            self.conn.execute(
+                "INSERT INTO application_state(key, value, updated_at) VALUES('update_last_success','2026-09-16T00:10:00+00:00','2026-09-16T00:10:00+00:00')"
+            )
+        snapshot = self.health.snapshot(watcher_expected=False)
+        updates = snapshot["subsystems"]["updates"]
+        self.assertEqual(updates["state"], "OK")
+        self.assertEqual(updates["details"]["interval_hours"], 12)
+        self.assertEqual(updates["details"]["last_attempt_at"], "2026-09-16T00:10:00+00:00")
+        self.assertIsNotNone(updates["details"]["next_check_at"])
+
+    def test_informational_discord_and_updates_do_not_degrade_archive(self):
+        self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
+        self.health.set_subsystem("importer", "RUNNING", "ok")
+        snapshot = self.health.snapshot(watcher_expected=True)
+        self.assertIn(snapshot["subsystems"]["discord"]["state"], {"RUNNING", "NOT RUNNING", "UNKNOWN"})
+        self.assertEqual(snapshot["subsystems"]["updates"]["state"], "NEVER")
+        self.assertEqual(snapshot["subsystems"]["updates"]["details"]["interval_hours"], 6)
+        self.assertEqual(snapshot["state"], "RUNNING")
+
+    def test_last_error_info_has_subsystem_and_clears_after_recovery(self):
+        path = self.write_capture("bad then good")
+        self.importer.record_failure("watcher_import", str(path), ValueError("broken capture"))
+        failed = self.health.snapshot(watcher_expected=False)
+        self.assertEqual(failed["last_error_info"]["subsystem"], "watcher_import")
+        self.assertIn("broken capture", failed["last_error_info"]["message"])
+        self.assertIsNotNone(failed["last_error_info"]["occurred_at"])
+
+        # A successful import of the same target resolves the durable failure record.
+        self.importer.import_file(path)
+        recovered = self.health.snapshot(watcher_expected=False)
+        self.assertIsNone(recovered["last_error_info"])
+        self.assertIsNone(recovered["last_error"])
 
     def test_runtime_monitor_degrades_then_recovers_importer(self):
         monitor = RuntimeMonitor(self.activity, self.health)

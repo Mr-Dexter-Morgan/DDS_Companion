@@ -1,4 +1,4 @@
-DDS Companion 0.4.2 — Validation
+DDS Companion 0.4.3 — Validation
 ================================
 
 Build environment
@@ -8,20 +8,19 @@ Python source build container; PySide6 is intentionally not installed.
 Automated validation
 --------------------
 - python -m compileall -q dds_companion: PASS
-- python -m unittest discover -v dds_companion/tests: PASS (28/28)
-- Previous 27 tests from 0.4.1: PASS
-- New Settings IA contract test: PASS
-
-New source contract verifies
-----------------------------
-- Settings uses QTabWidget.
-- Основные is the first/default tab.
-- Paths & Storage is a separate tab.
-- Watcher policy stays on primary settings surface.
-- Path rows stay grouped on the secondary surface.
-- Settings tab styling exists in the central theme.
+- python -m unittest discover -v dds_companion/tests: PASS (35/35)
+- Existing importer/watcher/archive regression suite: PASS
+- Discord tasklist parser tests: PASS
+- Live DDS_Data state probe test: PASS
+- Watcher STALE-state test: PASS
+- Informational Discord/Updates do-not-degrade test: PASS
+- Update telemetry application_state test: PASS
+- Last unresolved error metadata/recovery test: PASS
+- Compact brand + Health source contract test: PASS
 
 Not claimed here
 ----------------
-Actual PySide6 rendering/click behavior is not claimed as tested in the build
-container. Windows live validation remains required.
+- Native PySide6 visual rendering of the six-card Health page.
+- Native Windows tasklist process detection.
+- Real GitHub update checks; 0.4.3 exposes telemetry only and performs no updater
+  network request.

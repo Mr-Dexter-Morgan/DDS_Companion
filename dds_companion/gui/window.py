@@ -235,7 +235,7 @@ class MainWindow(QMainWindow):
         self._layout_profile = profile
 
         if profile == "compact":
-            self.sidebar.setFixedWidth(190)
+            self.sidebar.setFixedWidth(210)
             self.topbar.setFixedHeight(54)
         elif profile == "large":
             self.sidebar.setFixedWidth(236)

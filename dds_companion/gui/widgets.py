@@ -61,6 +61,11 @@ def state_color(state: str) -> str:
         "RUNNING": SUCCESS,
         "STARTING": INFO,
         "DEGRADED": WARNING,
+        "STALE": WARNING,
+        "FAILED": WARNING,
+        "OK": SUCCESS,
+        "NEVER": MUTED,
+        "NOT RUNNING": MUTED,
         "ERROR": DANGER,
         "STOPPED": MUTED,
     }.get((state or "").upper(), DIM)

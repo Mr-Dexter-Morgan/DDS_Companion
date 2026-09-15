@@ -1,35 +1,40 @@
-# DDS Companion 0.4.2 — UI Contract
+# DDS Companion 0.4.3 — UI Contract
 
-## Settings information architecture
+## Preserve accepted surfaces
 
-`Settings` MUST open with the **Основные** tab selected.
+Dashboard, Library and Activity keep the 0.4.2 information architecture and
+must not be redesigned as part of the Health patch.
 
-### Основные
+## Compact brand
 
-Primary space for user-facing Companion behavior and policies. In 0.4.2 it
-contains the current read-only Watcher policy plus a restrained explanatory
-card. Do not add controls that look editable unless their values can actually
-be persisted, validated and restored.
+At the compact 1366x768 profile the sidebar must leave enough room for the full
+**DDS Companion** brand. Truncation to `DDS Compan` is a defect.
 
-### Paths & Storage
+## Health
 
-Secondary service/diagnostic page containing only filesystem locations and
-quick access actions:
+Health is scroll-safe and shows six runtime/informational cards:
 
-- Library / Companion data
+- Database
 - DDS_Data
-- SQLite database
-- Logs
-- Media cache
-- Cache
-- Backups
+- Importer
+- Watcher
+- Discord
+- Update check
 
-This tab MUST remain vertically scrollable and MUST preserve Copy/Open actions.
+Critical archive health comes from Database / DDS_Data / Importer / Watcher /
+runtime. Discord being closed and updater telemetry being absent are
+informational and must not degrade the archive.
 
-## Existing 0.4.1 contracts retained
+Watcher heartbeat expiry is displayed as **STALE**. STALE is yellow/warning and
+causes overall DEGRADED while the watcher is expected to be running.
 
-- Dashboard is scroll-safe.
-- Compact / Standard / Large profiles remain adaptive.
-- Sidebar idle / hover / selected states remain visually distinct.
-- Library is the single location for the main Open library folder action.
-- Normal launch uses pythonw; debug launch keeps a console.
+The Update check card must be truthful: until a real updater performs checks it
+shows NEVER and empty timestamps; it must not fabricate a successful check.
+
+The Last error area shows the active unresolved failure with subsystem/job kind
+and timestamp; a resolved historical failure is not presented as current.
+
+## Settings contract retained
+
+Settings opens on **Основные**. Paths & Storage remains the secondary,
+vertically-scrollable service-path surface with Copy/Open actions.

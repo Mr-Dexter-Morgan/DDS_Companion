@@ -1,41 +1,39 @@
-DDS Companion 0.4.2 — Settings Information Architecture
-========================================================
+DDS Companion 0.4.3 — Health Telemetry Patch
+=============================================
 
 Status: BUILT / LOCAL TESTING
 
 Purpose
 -------
-0.4.2 is a focused UI patch over the live-tested 0.4.1 GUI. It separates
-important Companion settings from low-priority filesystem paths so the Settings
-page can grow without being dominated by storage locations.
+Make the Health page describe the real runtime state more accurately while
+preserving the stable archive/import/watch pipeline and the accepted 0.4.2 UI.
 
 Changed
 -------
-- Settings now has two internal tabs:
-  - Основные — default tab for user-facing and runtime settings.
-  - Paths & Storage — service paths and one-click folder access.
-- Watcher policy moved to the default Основные tab.
-- All path rows (Library, DDS_Data, SQLite, logs, media, cache, backups) moved to
-  the dedicated Paths & Storage tab.
-- Added dedicated tab styling consistent with the existing dark UI.
-- Paths & Storage remains independently scrollable on constrained displays.
-- No fake editable controls were introduced; settings remain read-only until
-  persistence/validation exists for each option.
+- Fixed compact-layout brand truncation: DDS Companion now has enough sidebar
+  width at the 1366x768 compact profile.
+- Health page is scroll-safe and adds Discord + Update check cards.
+- Database and DDS_Data cards are live probes on every Health snapshot.
+- Watcher heartbeat expiry is surfaced as STALE instead of being folded into a
+  generic DEGRADED label.
+- Discord stable / Canary / PTB process detection added on Windows using the
+  built-in tasklist command; no new dependency.
+- Discord NOT RUNNING is informational and does not affect overall archive
+  health.
+- Update telemetry surface added with a 6-hour default interval. 0.4.3 does not
+  contact GitHub; it only displays scheduler state when it exists.
+- Last unresolved error now includes subsystem/job kind and occurrence time and
+  disappears after the durable failed job is resolved.
 
 Unchanged
 ---------
-- Archive schema, importer, watcher and observability behavior.
-- Dashboard, Library, Activity and Health behavior.
-- Normal pythonw launcher and responsive layout profiles from 0.4.1.
+- Archive schema and accumulated data.
+- Import/dedup/watcher semantics.
+- Dashboard, Library, Activity and Settings IA.
+- No media downloading or cloud synchronization.
 
 Validation
 ----------
 - Python compileall: PASS.
-- Full automated suite: 28/28 PASS.
-- Previous 27 tests remain PASS.
-- Added Settings tab/source contract test: PASS.
-
-Live-test boundary
-------------------
-PySide6 is not available in the build container. Actual tab layout and click
-behavior must still be checked on Windows before promotion to VERIFIED.
+- Full automated suite: 35/35 PASS.
+- 0.4.2 regression behavior retained.
