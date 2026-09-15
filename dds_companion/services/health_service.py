@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
@@ -8,9 +9,20 @@ from pathlib import Path
 
 from dds_companion.services.discord_probe import probe_discord_process
 
-VALID_STATES = {"RUNNING", "DEGRADED", "STALE", "ERROR", "STOPPED", "STARTING", "UNKNOWN"}
+VALID_STATES = {
+    "RUNNING",
+    "LIMITED",
+    "DEGRADED",  # legacy 0.4.3 DB rows are normalized on read
+    "STALE",
+    "ERROR",
+    "STOPPED",
+    "STARTING",
+    "UNKNOWN",
+}
 CRITICAL_SUBSYSTEMS = {"database", "dds_data", "importer", "watcher", "runtime"}
 DEFAULT_UPDATE_INTERVAL_HOURS = 6
+PLUGIN_HEARTBEAT_MIN_VERSION = (0, 5, 3)
+PLUGIN_HEARTBEAT_FILE = "plugin_heartbeat.json"
 
 
 def utc_now() -> str:
@@ -21,9 +33,26 @@ def _parse_iso(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value)
-    except ValueError:
+        parsed = datetime.fromisoformat(value)
+    except (ValueError, TypeError):
         return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _normalize_state(value: str | None) -> str:
+    state = str(value or "UNKNOWN").upper()
+    return "LIMITED" if state == "DEGRADED" else state
+
+
+def _version_tuple(value: str | None) -> tuple[int, int, int] | None:
+    if not value:
+        return None
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", str(value))
+    if not match:
+        return None
+    return tuple(int(part) for part in match.groups())
 
 
 class HealthService:
@@ -44,7 +73,7 @@ class HealthService:
         details: dict | None = None,
         error: str | None = None,
     ) -> bool:
-        normalized = state.upper()
+        normalized = _normalize_state(state)
         if normalized not in VALID_STATES:
             raise ValueError(f"Unsupported health state: {state}")
         stamp = utc_now()
@@ -56,7 +85,7 @@ class HealthService:
         last_error_at = previous["last_error_at"] if previous else None
         if normalized == "RUNNING":
             last_ok_at = stamp
-        if normalized in {"DEGRADED", "STALE", "ERROR"}:
+        if normalized in {"LIMITED", "STALE", "ERROR"}:
             last_error_at = stamp
 
         payload = dict(details or {})
@@ -104,10 +133,10 @@ class HealthService:
             error=None if db_ok else str(quick_check),
         )
 
-        dds_ok = self.dds_data_path.is_dir() and (self.dds_data_path / "manifest.json").exists()
+        dds_ok = self._dds_data_available()
         self.set_subsystem(
             "dds_data",
-            "RUNNING" if dds_ok else "DEGRADED",
+            "RUNNING" if dds_ok else "LIMITED",
             "DDS_Data available" if dds_ok else "DDS_Data or manifest.json is missing",
             details={"path": str(self.dds_data_path), "manifest_found": (self.dds_data_path / "manifest.json").exists()},
         )
@@ -139,7 +168,7 @@ class HealthService:
                 details = json.loads(row["details_json"] or "{}")
             except json.JSONDecodeError:
                 details = {"raw_details": row["details_json"]}
-            state = row["state"]
+            state = _normalize_state(row["state"])
             stale = False
             if row["subsystem"] == "watcher" and watcher_expected and state == "RUNNING":
                 updated = _parse_iso(row["updated_at"])
@@ -158,9 +187,9 @@ class HealthService:
                 "details": details,
             }
 
-        dds_ok = self.dds_data_path.is_dir() and (self.dds_data_path / "manifest.json").exists()
-        # Database and DDS_Data are cheap live probes.  Their cards must describe the
-        # filesystem/database *now*, not merely repeat the state recorded at startup.
+        dds_ok = self._dds_data_available()
+        # Database and DDS_Data are cheap live probes. Their cards describe the
+        # filesystem/database now, not merely the state recorded at startup.
         database_previous = subsystems.get("database", {})
         subsystems["database"] = {
             "state": "RUNNING" if db_ok else "ERROR",
@@ -173,7 +202,7 @@ class HealthService:
         }
         dds_previous = subsystems.get("dds_data", {})
         subsystems["dds_data"] = {
-            "state": "RUNNING" if dds_ok else "DEGRADED",
+            "state": "RUNNING" if dds_ok else "LIMITED",
             "summary": "DDS_Data available" if dds_ok else "DDS_Data or manifest.json is missing",
             "stale": False,
             "details": {
@@ -185,29 +214,104 @@ class HealthService:
             "updated_at": now.isoformat(),
         }
 
-        # Informational probes live in the Health view but must never turn the archive
-        # red merely because Discord is closed or update checking is not configured yet.
+        # The watcher thread may still be alive while its source folder is missing.
+        # Surface that honestly as WAITING rather than a misleading RUNNING state.
+        watcher_info = subsystems.get("watcher")
+        if watcher_expected and not dds_ok and watcher_info:
+            watcher_info = dict(watcher_info)
+            watcher_info["details"] = dict(watcher_info.get("details") or {})
+            watcher_info["details"]["underlying_state"] = watcher_info.get("state")
+            watcher_info["state"] = "WAITING"
+            watcher_info["summary"] = "waiting for DDS_Data source"
+            watcher_info["stale"] = False
+            subsystems["watcher"] = watcher_info
+
         subsystems["discord"] = self._discord_snapshot()
+        subsystems["plugin"] = self._plugin_snapshot(now, dds_ok=dds_ok)
         subsystems["updates"] = self._updates_snapshot(now)
 
-        overall = "RUNNING"
+        reasons: list[dict] = []
         critical_states = {
             name: data["state"]
             for name, data in subsystems.items()
             if name in CRITICAL_SUBSYSTEMS
         }
+
+        overall = "RUNNING"
         if not db_ok or critical_states.get("database") == "ERROR":
             overall = "ERROR"
-        elif unresolved or not dds_ok or any(
-            state in {"DEGRADED", "STALE", "ERROR"} for state in critical_states.values()
-        ):
-            overall = "DEGRADED"
-        elif watcher_expected and critical_states.get("watcher") not in {"RUNNING", "STARTING"}:
-            overall = "DEGRADED"
+            reasons.append({
+                "subsystem": "database",
+                "code": "database-error",
+                "message": subsystems["database"]["summary"],
+            })
+        else:
+            if unresolved:
+                reasons.append({
+                    "subsystem": "importer",
+                    "code": "unresolved-failures",
+                    "message": f"{unresolved} unresolved import failure(s)",
+                })
+            if not dds_ok:
+                reasons.append({
+                    "subsystem": "dds_data",
+                    "code": "source-missing",
+                    "message": "DDS_Data source is unavailable; archived data remains available",
+                })
+
+            importer_state = critical_states.get("importer")
+            if importer_state in {"LIMITED", "STALE", "ERROR"}:
+                reasons.append({
+                    "subsystem": "importer",
+                    "code": "importer-limited",
+                    "message": subsystems.get("importer", {}).get("summary", "Importer requires attention"),
+                })
+
+            watcher_state = critical_states.get("watcher")
+            if watcher_expected and watcher_state in {"LIMITED", "STALE", "ERROR"}:
+                reasons.append({
+                    "subsystem": "watcher",
+                    "code": "watcher-limited",
+                    "message": subsystems.get("watcher", {}).get("summary", "Watcher requires attention"),
+                })
+
+            discord_state = subsystems["discord"]["state"]
+            if discord_state == "NOT RUNNING":
+                reasons.append({
+                    "subsystem": "discord",
+                    "code": "discord-not-running",
+                    "message": "Discord is not running; live capture is unavailable",
+                })
+
+            plugin_state = subsystems["plugin"]["state"]
+            if plugin_state in {"UPDATE AVAILABLE", "LIMITED", "STALE", "NOT RUNNING", "ERROR"}:
+                reasons.append({
+                    "subsystem": "plugin",
+                    "code": "plugin-not-ready",
+                    "message": subsystems["plugin"]["summary"],
+                })
+
+            if reasons:
+                overall = "LIMITED"
+
+        if overall == "RUNNING":
+            overall_summary = "All capture and archive subsystems are operational"
+            tooltip = overall_summary
+        elif overall == "ERROR":
+            overall_summary = "Critical local archive failure"
+            tooltip = "\n".join(f"• {item['message']}" for item in reasons) or overall_summary
+        else:
+            first = reasons[0]["message"] if reasons else "Some capture features are unavailable"
+            extra = len(reasons) - 1
+            overall_summary = first if extra <= 0 else f"{first} · +{extra} more"
+            tooltip = "\n".join(f"• {item['message']}" for item in reasons)
 
         last_error_info = self._latest_unresolved_error()
         return {
             "state": overall,
+            "summary": overall_summary,
+            "tooltip": tooltip,
+            "reasons": reasons,
             "database_ok": db_ok,
             "sqlite_quick_check": quick_check,
             "dds_data_found": dds_ok,
@@ -215,6 +319,175 @@ class HealthService:
             "last_error": last_error_info["message"] if last_error_info else None,
             "last_error_info": last_error_info,
             "subsystems": subsystems,
+        }
+
+    def _dds_data_available(self) -> bool:
+        return self.dds_data_path.is_dir() and (self.dds_data_path / "manifest.json").exists()
+
+    def _manifest_snapshot(self) -> dict:
+        path = self.dds_data_path / "manifest.json"
+        if not path.is_file():
+            return {}
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    def _plugin_snapshot(self, now: datetime, *, dds_ok: bool) -> dict:
+        heartbeat_path = self.dds_data_path / PLUGIN_HEARTBEAT_FILE
+        manifest = self._manifest_snapshot()
+        manifest_version = manifest.get("ddsVersion")
+        capabilities = manifest.get("capabilities") if isinstance(manifest.get("capabilities"), list) else []
+        supports_heartbeat = "plugin-heartbeat-v1" in capabilities
+        version_tuple = _version_tuple(manifest_version)
+        if version_tuple is not None and version_tuple >= PLUGIN_HEARTBEAT_MIN_VERSION:
+            supports_heartbeat = True
+
+        base_details = {
+            "heartbeat_file": str(heartbeat_path),
+            "manifest_version": manifest_version,
+            "supports_heartbeat": supports_heartbeat,
+            "required_version": ".".join(str(v) for v in PLUGIN_HEARTBEAT_MIN_VERSION),
+        }
+
+        if not dds_ok:
+            return {
+                "state": "WAITING",
+                "summary": "waiting for DDS_Data before probing DDS Plugin",
+                "last_ok_at": None,
+                "last_error_at": None,
+                "updated_at": None,
+                "stale": False,
+                "details": base_details,
+            }
+
+        if not heartbeat_path.is_file():
+            if version_tuple is not None and version_tuple < PLUGIN_HEARTBEAT_MIN_VERSION:
+                return {
+                    "state": "UPDATE AVAILABLE",
+                    "summary": f"DDS Plugin {manifest_version} has no heartbeat support — update recommended",
+                    "last_ok_at": None,
+                    "last_error_at": None,
+                    "updated_at": None,
+                    "stale": False,
+                    "details": base_details,
+                }
+            if supports_heartbeat:
+                return {
+                    "state": "LIMITED",
+                    "summary": "DDS Plugin heartbeat file is missing",
+                    "last_ok_at": None,
+                    "last_error_at": now.isoformat(),
+                    "updated_at": None,
+                    "stale": False,
+                    "details": base_details,
+                }
+            return {
+                "state": "UNKNOWN",
+                "summary": "DDS Plugin heartbeat support could not be determined",
+                "last_ok_at": None,
+                "last_error_at": None,
+                "updated_at": None,
+                "stale": False,
+                "details": base_details,
+            }
+
+        try:
+            payload = json.loads(heartbeat_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("heartbeat JSON root must be an object")
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+            details = dict(base_details)
+            details["error"] = f"{type(exc).__name__}: {exc}"
+            return {
+                "state": "LIMITED",
+                "summary": "DDS Plugin heartbeat is unreadable",
+                "last_ok_at": None,
+                "last_error_at": now.isoformat(),
+                "updated_at": None,
+                "stale": False,
+                "details": details,
+            }
+
+        updated_at = payload.get("updatedAt")
+        updated = _parse_iso(updated_at)
+        plugin_version = payload.get("pluginVersion") or manifest_version
+        state = str(payload.get("state") or "UNKNOWN").upper()
+        try:
+            interval_ms = max(1000, int(payload.get("heartbeatIntervalMs") or 30000))
+        except (TypeError, ValueError):
+            interval_ms = 30000
+        interval_seconds = interval_ms / 1000.0
+        stale_after = max(45.0, interval_seconds * 2.5)
+        offline_after = max(90.0, interval_seconds * 5.0)
+        age_seconds = None
+        if updated is not None:
+            age_seconds = max(0.0, (now - updated).total_seconds())
+
+        details = {
+            **base_details,
+            "plugin_version": plugin_version,
+            "reported_state": state,
+            "heartbeat_interval_ms": interval_ms,
+            "age_seconds": round(age_seconds, 1) if age_seconds is not None else None,
+            "stale_after_seconds": stale_after,
+            "offline_after_seconds": offline_after,
+            "schema_version": payload.get("schemaVersion"),
+        }
+
+        if state == "STOPPED":
+            return {
+                "state": "NOT RUNNING",
+                "summary": f"DDS Plugin {plugin_version or 'unknown'} reported STOPPED",
+                "last_ok_at": None,
+                "last_error_at": None,
+                "updated_at": updated_at,
+                "stale": False,
+                "details": details,
+            }
+
+        if updated is None:
+            return {
+                "state": "LIMITED",
+                "summary": "DDS Plugin heartbeat has no valid timestamp",
+                "last_ok_at": None,
+                "last_error_at": now.isoformat(),
+                "updated_at": updated_at,
+                "stale": False,
+                "details": details,
+            }
+
+        if age_seconds is not None and age_seconds > offline_after:
+            return {
+                "state": "NOT RUNNING",
+                "summary": f"DDS Plugin heartbeat stopped {int(age_seconds)} s ago",
+                "last_ok_at": updated_at,
+                "last_error_at": None,
+                "updated_at": updated_at,
+                "stale": True,
+                "details": details,
+            }
+
+        if age_seconds is not None and age_seconds > stale_after:
+            return {
+                "state": "STALE",
+                "summary": f"DDS Plugin heartbeat is stale ({int(age_seconds)} s)",
+                "last_ok_at": updated_at,
+                "last_error_at": None,
+                "updated_at": updated_at,
+                "stale": True,
+                "details": details,
+            }
+
+        return {
+            "state": "RUNNING",
+            "summary": f"DDS Plugin {plugin_version or 'unknown'} heartbeat active",
+            "last_ok_at": updated_at,
+            "last_error_at": None,
+            "updated_at": updated_at,
+            "stale": False,
+            "details": details,
         }
 
     def _discord_snapshot(self, probe_interval_seconds: float = 5.0) -> dict:

@@ -174,8 +174,10 @@ QLabel#SectionTitle {{ font-size: 11pt; font-weight: 700; color: {TEXT}; }}
 QLabel#SectionHint {{ font-size: 9pt; color: {MUTED}; }}
 QLabel[state="RUNNING"] {{ color: {SUCCESS}; }}
 QLabel[state="STARTING"] {{ color: {INFO}; }}
+QLabel[state="LIMITED"] {{ color: {WARNING}; }}
 QLabel[state="DEGRADED"] {{ color: {WARNING}; }}
 QLabel[state="STALE"] {{ color: {WARNING}; }}
+QLabel[state="WAITING"] {{ color: {MUTED}; }}
 QLabel[state="ERROR"] {{ color: {DANGER}; }}
 QLabel[state="STOPPED"] {{ color: {MUTED}; }}
 QLabel#StatusPill {{
@@ -186,8 +188,10 @@ QLabel#StatusPill {{
 }}
 QLabel#StatusPill[state="RUNNING"] {{ color: {SUCCESS}; background: #10251f; border: 1px solid #1e4f40; }}
 QLabel#StatusPill[state="STARTING"] {{ color: {INFO}; background: #102131; border: 1px solid #214a6d; }}
+QLabel#StatusPill[state="LIMITED"] {{ color: {WARNING}; background: #2a2314; border: 1px solid #5c4c25; }}
 QLabel#StatusPill[state="DEGRADED"] {{ color: {WARNING}; background: #2a2314; border: 1px solid #5c4c25; }}
 QLabel#StatusPill[state="STALE"] {{ color: {WARNING}; background: #2a2314; border: 1px solid #5c4c25; }}
+QLabel#StatusPill[state="WAITING"] {{ color: {MUTED}; background: #171a21; border: 1px solid #2a303d; }}
 QLabel#StatusPill[state="ERROR"] {{ color: {DANGER}; background: #2b151b; border: 1px solid #642d3a; }}
 QLabel#StatusPill[state="STOPPED"] {{ color: {MUTED}; background: #171a21; border: 1px solid #2a303d; }}
 QProgressBar {{

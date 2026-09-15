@@ -60,8 +60,11 @@ def state_color(state: str) -> str:
     return {
         "RUNNING": SUCCESS,
         "STARTING": INFO,
+        "LIMITED": WARNING,
         "DEGRADED": WARNING,
         "STALE": WARNING,
+        "WAITING": MUTED,
+        "UPDATE AVAILABLE": WARNING,
         "FAILED": WARNING,
         "OK": SUCCESS,
         "NEVER": MUTED,

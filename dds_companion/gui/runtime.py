@@ -57,6 +57,8 @@ class GuiRuntime:
         self._last_snapshot_at = 0.0
         self._last_library_refresh_at = 0.0
         self._library_cache: list[dict] = []
+        self._last_health_state: str | None = None
+        self._last_health_reason_signature: tuple[tuple[str, str], ...] = ()
 
     def request_refresh(self) -> None:
         self.refresh_event.set()
@@ -113,7 +115,7 @@ class GuiRuntime:
             if import_result.failed:
                 health.set_subsystem(
                     "importer",
-                    "DEGRADED",
+                    "LIMITED",
                     f"initial sync completed with {import_result.failed} failed capture(s)",
                 )
             else:
@@ -232,6 +234,9 @@ class GuiRuntime:
             self._library_cache = library.snapshot()
             self._last_library_refresh_at = now
 
+        health_snapshot = health.snapshot(watcher_expected=watcher_expected)
+        self._record_health_transition(activity, health_snapshot)
+
         payload = {
             "version": __version__,
             "paths": {
@@ -245,11 +250,63 @@ class GuiRuntime:
             },
             "watcher": {"poll_ms": self.poll_ms, "settle_ms": self.settle_ms},
             "stats": stats.snapshot().to_dict(),
-            "health": health.snapshot(watcher_expected=watcher_expected),
+            "health": health_snapshot,
             "activity": [record.to_dict() for record in activity.recent(100)],
             "library": self._library_cache,
         }
         self._safe(self.snapshot_sink, payload)
+
+    def _record_health_transition(self, activity: ActivityService, health_snapshot: dict) -> None:
+        state = str(health_snapshot.get("state") or "UNKNOWN").upper()
+        reasons = health_snapshot.get("reasons") or []
+        reason_signature = tuple(
+            (str(item.get("subsystem") or "unknown"), str(item.get("message") or ""))
+            for item in reasons
+        )
+
+        previous_state = self._last_health_state
+        previous_reasons = self._last_health_reason_signature
+        self._last_health_state = state
+        self._last_health_reason_signature = reason_signature
+
+        if previous_state is None:
+            if state != "RUNNING":
+                activity.publish(
+                    level="ERROR" if state == "ERROR" else "WARNING",
+                    subsystem="health",
+                    event_type="health_initial_state",
+                    summary=f"Health initial state: {state} — {health_snapshot.get('summary', 'attention required')}",
+                    details={"state": state, "reasons": reasons},
+                )
+            return
+
+        if previous_state == state and previous_reasons == reason_signature:
+            return
+
+        if state == "RUNNING":
+            summary = f"Health: {previous_state} → RUNNING — all monitored components recovered"
+            level = "INFO"
+            event_type = "health_recovered"
+        elif previous_state != state:
+            summary = f"Health: {previous_state} → {state} — {health_snapshot.get('summary', 'attention required')}"
+            level = "ERROR" if state == "ERROR" else "WARNING"
+            event_type = "health_state_changed"
+        else:
+            summary = f"Health {state} reason changed — {health_snapshot.get('summary', 'attention required')}"
+            level = "ERROR" if state == "ERROR" else "WARNING"
+            event_type = "health_reason_changed"
+
+        activity.publish(
+            level=level,
+            subsystem="health",
+            event_type=event_type,
+            summary=summary,
+            details={
+                "previous_state": previous_state,
+                "state": state,
+                "reasons": reasons,
+            },
+        )
 
     @staticmethod
     def _safe(callback: Callable | None, *args) -> None:

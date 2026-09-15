@@ -556,6 +556,7 @@ class HealthPage(Page):
             ("importer", "Importer"),
             ("watcher", "Watcher"),
             ("discord", "Discord"),
+            ("plugin", "DDS Plugin"),
             ("updates", "Update check"),
         ]
         for index, (key, label) in enumerate(names):
@@ -581,7 +582,10 @@ class HealthPage(Page):
             lay.addWidget(summary)
             lay.addWidget(updated)
             lay.addStretch(1)
-            grid.addWidget(card, index // 2, index % 2)
+            if key == "updates":
+                grid.addWidget(card, index // 2, 0, 1, 2)
+            else:
+                grid.addWidget(card, index // 2, index % 2)
             self.cards[key] = (card, state, summary, updated)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
@@ -604,21 +608,28 @@ class HealthPage(Page):
         state = health.get("state", "UNKNOWN")
         self.overall_pill.setText(state)
         set_state_property(self.overall_pill, state)
-        unresolved = health.get("unresolved_failed_jobs", 0)
         self.overall_hint.setText(
-            "Все ключевые подсистемы работают штатно"
-            if state == "RUNNING"
-            else f"Требуется внимание · unresolved failed jobs: {unresolved}"
+            health.get("summary")
+            or ("Все ключевые подсистемы работают штатно" if state == "RUNNING" else "Требуется внимание")
         )
+        self.overall_pill.setToolTip(health.get("tooltip") or self.overall_hint.text())
         subs = health.get("subsystems", {})
         for key, (_, state_label, summary_label, updated_label) in self.cards.items():
             info = subs.get(key, {})
             sub_state = info.get("state", "UNKNOWN")
             state_label.setText(sub_state)
             state_label.setStyleSheet(f"color:{state_color(sub_state)};font-weight:750;")
-            summary_label.setText(info.get("summary", "—"))
+            summary = info.get("summary", "—")
+            state_label.setToolTip(summary)
+            summary_label.setText(summary)
             if key == "discord":
-                updated_label.setText(f"Проверено: {local_time(info.get('updated_at'), seconds=True)}")
+                updated_label.setText(f"Checked: {local_time(info.get('updated_at'), seconds=True)}")
+            elif key == "plugin":
+                details = info.get("details", {})
+                version = details.get("plugin_version") or details.get("manifest_version") or "—"
+                updated_label.setText(
+                    f"Version: {version}  ·  Heartbeat: {local_time(info.get('updated_at'), seconds=True)}"
+                )
             elif key == "updates":
                 details = info.get("details", {})
                 interval = details.get("interval_hours", "—")
@@ -627,8 +638,12 @@ class HealthPage(Page):
                 updated_label.setText(
                     f"Interval: {interval} h  ·  Last attempt: {attempt}  ·  Next: {next_check}"
                 )
-            else:
+            elif key == "importer":
+                updated_label.setText(f"Last import: {local_time(info.get('updated_at'), seconds=True)}")
+            elif key == "watcher":
                 updated_label.setText(f"Heartbeat: {local_time(info.get('updated_at'), seconds=True)}")
+            else:
+                updated_label.setText(f"Checked: {local_time(info.get('updated_at'), seconds=True)}")
         last_error_info = health.get("last_error_info")
         if last_error_info:
             subsystem = last_error_info.get("subsystem", "unknown")

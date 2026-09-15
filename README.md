@@ -1,4 +1,4 @@
-# DDS Companion 0.4.3 — Health Telemetry Patch
+# DDS Companion 0.4.4 — Health Truthfulness & Plugin Heartbeat Candidate
 
 Project: **DDS — Discord Data Snatcher**  
 Authors: **Mr_Dexter_Morgan, Masya**
@@ -7,51 +7,69 @@ Authors: **Mr_Dexter_Morgan, Masya**
 
 Status: **BUILT / LOCAL TESTING**
 
-0.4.3 is a focused live-telemetry patch over 0.4.2. It keeps the archive/import
-core and the successful Dashboard / Library / Activity layout intact while
-making Health more truthful and useful during real Windows operation.
+0.4.4 is the follow-up to the Windows live review of 0.4.3. The accepted
+Dashboard / Library / Activity layout and archive pipeline stay intact; the
+Health layer is tightened so it reports the state of the full capture chain,
+not merely whether Companion's own worker threads are alive.
 
 ## What changed
 
-- Compact sidebar no longer truncates **DDS Companion** to `DDS Compan`.
-- Health is scroll-safe and now exposes six cards:
-  - Database
-  - DDS_Data
-  - Importer
-  - Watcher
-  - Discord
-  - Update check
-- Database and DDS_Data are live probes in every Health snapshot instead of
-  simply repeating startup state.
-- Watcher heartbeat expiry is represented explicitly as **STALE**; overall
-  Companion health still becomes DEGRADED when a critical subsystem is stale.
-- Discord process status is checked on Windows without adding a new dependency.
-  `Discord.exe`, `DiscordCanary.exe` and `DiscordPTB.exe` are recognized.
-  Discord not running is informational and does not degrade the archive.
-- Update-check telemetry is prepared without performing network requests yet.
-  Health shows the configured interval and reads last-attempt / last-success /
-  next-check values from `application_state` when a future updater writes them.
-  Until then the state is **NEVER** and the default interval is 6 hours.
-- The last unresolved failure now carries subsystem/job kind and timestamp.
-  Once the durable failure is resolved, Health returns to **Ошибок нет** instead
-  of presenting an obsolete error as active.
+- Sidebar branding is split into `DDS` / `Companion` / version lines so the
+  product name remains readable without widening the navigation rail.
+- User-facing **DEGRADED** wording is replaced by **LIMITED**. Legacy persisted
+  DEGRADED rows are still accepted and normalized on read for compatibility.
+- Health now shows a dedicated **DDS Plugin** card in addition to Database,
+  DDS_Data, Importer, Watcher, Discord and Update check.
+- DDS Plugin health consumes the `plugin_heartbeat.json` contract introduced by
+  the 0.5.3 plugin candidate:
+  - fresh RUNNING heartbeat -> RUNNING;
+  - clean STOPPED heartbeat -> NOT RUNNING;
+  - old heartbeat -> STALE / NOT RUNNING according to age;
+  - heartbeat-capable plugin with missing/invalid heartbeat -> LIMITED;
+  - pre-heartbeat plugin -> UPDATE AVAILABLE rather than a false failure.
+- When `DDS_Data` disappears, Watcher is presented as **WAITING** instead of
+  misleadingly remaining RUNNING merely because its thread is alive.
+- Discord being closed now makes the capture chain **LIMITED** while preserving
+  access to the local archive. It is still not treated as an application error.
+- Importer timing is labeled **Last import** instead of the misleading
+  `Heartbeat` wording.
+- Overall Health produces a structured list of reasons and a tooltip. Hovering
+  the overall status or an individual state word explains why the current state
+  is shown.
+- Activity records Health state transitions and reason changes only. A stable
+  repeated LIMITED state does not spam the journal; recovery is logged once.
+- The existing DDS_Data removal/recovery behavior remains automatic: source
+  loss limits capture, source restoration returns Health to RUNNING without a
+  Companion restart.
+
+## Plugin compatibility
+
+The current stable plugin remains **0.5.2** until the new heartbeat candidate
+passes live BetterDiscord testing. With 0.5.2, Companion 0.4.4 shows
+**UPDATE AVAILABLE** for the plugin health capability rather than declaring the
+plugin broken.
+
+The intended companion update flow is documented but is not enabled in this
+candidate: once a newer plugin has a verified GitHub Release, Companion may
+offer to download it, back up the current `.plugin.js`, replace it safely,
+verify the new heartbeat and roll back on failure.
 
 ## What did not change
 
 - No archive schema migration.
-- Importer, watcher capture semantics and deduplication remain unchanged.
-- Dashboard, Library, Activity and Settings information architecture remain as in
-  0.4.2.
-- No Media Backfill, media cache policy, GitHub updater, AI export or Drive sync
-  is enabled in this release.
+- Import/dedup/capture semantics are unchanged.
+- No Media Backfill or cache policy yet.
+- No live GitHub updater yet.
+- No AI export or Google Drive synchronization in this release.
 
 ## Validation
 
 - Python compileall: **PASS**
-- Full automated suite: **35/35 PASS**
-- Clean regression coverage includes importer/watcher/archive behavior.
-- New tests cover STALE watcher state, live DDS_Data probe, update telemetry,
-  unresolved-error metadata and Discord tasklist parsing.
+- Full automated suite: **38/38 PASS**
+- Plugin compatibility states covered: old plugin, fresh heartbeat, STOPPED,
+  STALE, missing source.
+- Health reason/tooling and source-loss WAITING behavior covered by regression
+  tests.
 
-Actual Qt rendering and Windows process detection still require the live Windows
-check in `LIVE_TEST_CHECKLIST_0.4.3.txt`.
+Native Windows + BetterDiscord live validation is still required. Follow
+`LIVE_TEST_CHECKLIST_0.4.4.txt` one scenario at a time.

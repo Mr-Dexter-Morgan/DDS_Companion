@@ -33,7 +33,7 @@ class RuntimeMonitor:
             if unresolved:
                 self.health.set_subsystem(
                     "importer",
-                    "DEGRADED",
+                    "LIMITED",
                     f"last capture imported; {unresolved} unresolved failure(s) remain",
                 )
             else:
@@ -43,7 +43,7 @@ class RuntimeMonitor:
         if event.kind == "failed":
             self.health.set_subsystem(
                 "importer",
-                "DEGRADED",
+                "LIMITED",
                 "one capture failed; watcher continues",
                 error=event.detail,
                 details={"capture_path": str(Path(event.path).resolve())},

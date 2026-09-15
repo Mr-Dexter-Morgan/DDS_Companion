@@ -1,88 +1,103 @@
-# DDS Companion Observability Contract — v0.3
+# DDS Companion Observability Contract — v0.4
 
-This file defines the contract that future presentation layers (PySide6 GUI, tray UI, diagnostics) should consume.
+This contract defines the state consumed by the PySide6 GUI, tray, diagnostics
+and future updater surfaces.
 
 ## Rule 1 — presentation does not own state
 
-The GUI must not calculate archive totals, infer watcher health from console text, or query raw capture files directly.
-
+The GUI must not infer health from console strings or raw widget state.
 Use:
 
 - `ActivityService` for human runtime events;
-- `HealthService` for subsystem state;
-- `StatsService` for dashboard counters/storage/session deltas.
+- `HealthService` for subsystem and capture-chain state;
+- `StatsService` for counters, storage and session deltas.
 
 ## Activity contract
 
-Each Activity record contains:
+Each Activity record contains occurrence time, level, subsystem, event type,
+human summary and structured details, with optional capture/guild/channel/thread
+context and import counters.
 
-- immutable row id when persisted;
-- UTC occurrence timestamp;
-- level;
-- subsystem;
-- event type;
-- human summary;
-- structured details JSON;
-- optional capture path / guild / channel / thread context;
-- import counters;
-- storage delta field reserved for events that can quantify storage change.
+Presentation subscribers are best-effort. A UI/subscriber failure must never
+break capture/import.
 
-Subscribers are best-effort presentation listeners. A subscriber exception is isolated.
+### Health transition journal policy
 
-Suggested GUI behavior:
+Health refresh may run frequently, but Activity records only meaningful change:
 
-- newest first in Activity page;
-- INFO/WARNING/ERROR filter;
-- subsystem filter;
-- click event -> structured details;
-- never block the watcher while rendering.
+- `health_initial_state` for an initially non-RUNNING state;
+- `health_state_changed` when overall state changes;
+- `health_reason_changed` when the reason set changes without a state change;
+- `health_recovered` on return to RUNNING.
+
+Do not emit repeated identical LIMITED/STale warnings on every refresh.
 
 ## Health contract
 
-Persisted subsystem row fields:
-
-- subsystem
-- state
-- summary
-- last_ok_at
-- last_error_at
-- updated_at
-- details_json
-
-States:
+Persisted or derived subsystem state may include:
 
 - STARTING
 - RUNNING
-- DEGRADED
+- LIMITED
+- STALE
 - ERROR
 - STOPPED
+- NOT RUNNING
+- WAITING
+- UPDATE AVAILABLE
+- NEVER
 - UNKNOWN
 
-Overall state precedence:
+Historical persisted `DEGRADED` values are accepted and normalized to LIMITED.
 
-1. database failure -> ERROR;
-2. unresolved failures, missing DDS_Data, stale watcher, or degraded/error subsystem -> DEGRADED;
-3. otherwise RUNNING.
+Overall state rules:
 
-A clean stopped watcher is not an error when watcher monitoring is not expected (for example after shutdown or `--once`).
+1. critical local database failure -> ERROR;
+2. unavailable capture-chain dependency (Discord, DDS Plugin, DDS_Data), stale
+   required heartbeat, unresolved import/runtime failure, or equivalent partial
+   availability -> LIMITED;
+3. informational updater telemetry such as NEVER does not limit the core;
+4. otherwise -> RUNNING.
+
+A closed Discord or stopped plugin is not itself a Companion application error:
+the local archive remains usable. It limits new capture only.
+
+## DDS Plugin heartbeat contract (consumer side)
+
+Companion recognizes `plugin_heartbeat.json` under DDS_Data when the plugin
+advertises `plugin-heartbeat-v1` or reports a heartbeat-capable version.
+Expected fields:
+
+- `schemaVersion`
+- `plugin`
+- `pluginVersion`
+- `state`
+- `updatedAt`
+- `heartbeatIntervalMs`
+- `captureSchemaVersion`
+
+Fresh RUNNING -> RUNNING. Explicit STOPPED -> NOT RUNNING. Age thresholds are
+computed from the advertised interval with safe minimums. A pre-heartbeat
+stable plugin is shown as UPDATE AVAILABLE instead of being falsely marked
+broken.
+
+## Watcher/source distinction
+
+A live watcher thread does not imply a live source. If DDS_Data is absent,
+Watcher presentation state is WAITING even if the observer loop itself still
+exists. This distinction prevents green-but-useless diagnostics.
 
 ## Stats contract
 
-A Stats snapshot must remain cheap enough for periodic Dashboard refresh and contain only derived counters/sizes, not message payloads.
-
-Session deltas are measured against a baseline captured once at process start, before the startup import and Activity writes.
-
-Storage accounting includes SQLite main/WAL/SHM, DDS_Data, cache, media, and logs without double-counting the whole app directory.
+Stats snapshots remain cheap and contain only derived counters/sizes, never
+message payloads. Storage accounting avoids double-counting and includes SQLite
+main/WAL/SHM, DDS_Data, cache, media and logs where applicable.
 
 ## Failure containment
 
-Observability is subordinate to archive correctness:
-
-- Activity persistence failure must not abort import;
-- presentation subscriber failure must not abort import;
-- health callback failure must not kill watcher;
-- one capture failure must not stop observation of others.
-
-## 0.4.x GUI constraint
-
-The first GUI should treat these services as its model layer. It may add presentation-specific models/adapters, but should not move domain logic back into widgets.
+- Activity persistence failure must not abort import.
+- Presentation subscriber failure must not abort import.
+- Health callback failure must not kill watcher.
+- One capture failure must not stop observation of others.
+- Loss of Discord/DDS Plugin/DDS_Data must not make the archived library
+  unavailable.

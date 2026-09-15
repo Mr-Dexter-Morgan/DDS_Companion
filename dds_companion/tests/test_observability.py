@@ -83,7 +83,7 @@ class ObservabilityTests(unittest.TestCase):
         self.assertEqual(snapshot["subsystems"]["dds_data"]["state"], "RUNNING")
         self.assertEqual(snapshot["subsystems"]["watcher"]["state"], "RUNNING")
 
-    def test_stale_watcher_is_explicit_and_degrades_overall(self):
+    def test_stale_watcher_is_explicit_and_limits_overall(self):
         self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
         stale = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
         with self.conn:
@@ -94,7 +94,7 @@ class ObservabilityTests(unittest.TestCase):
         snapshot = self.health.snapshot(watcher_expected=True, stale_after_seconds=30)
         self.assertEqual(snapshot["subsystems"]["watcher"]["state"], "STALE")
         self.assertTrue(snapshot["subsystems"]["watcher"]["stale"])
-        self.assertEqual(snapshot["state"], "DEGRADED")
+        self.assertEqual(snapshot["state"], "LIMITED")
 
 
 
@@ -103,8 +103,8 @@ class ObservabilityTests(unittest.TestCase):
         self.health.set_subsystem("importer", "RUNNING", "ok")
         (self.dds / "manifest.json").unlink()
         snapshot = self.health.snapshot(watcher_expected=True)
-        self.assertEqual(snapshot["subsystems"]["dds_data"]["state"], "DEGRADED")
-        self.assertEqual(snapshot["state"], "DEGRADED")
+        self.assertEqual(snapshot["subsystems"]["dds_data"]["state"], "LIMITED")
+        self.assertEqual(snapshot["state"], "LIMITED")
 
     def test_update_telemetry_reads_existing_scheduler_state_without_networking(self):
         with self.conn:
@@ -124,14 +124,15 @@ class ObservabilityTests(unittest.TestCase):
         self.assertEqual(updates["details"]["last_attempt_at"], "2026-09-16T00:10:00+00:00")
         self.assertIsNotNone(updates["details"]["next_check_at"])
 
-    def test_informational_discord_and_updates_do_not_degrade_archive(self):
+    def test_unavailable_discord_only_limits_when_probe_reports_not_running(self):
         self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
         self.health.set_subsystem("importer", "RUNNING", "ok")
         snapshot = self.health.snapshot(watcher_expected=True)
-        self.assertIn(snapshot["subsystems"]["discord"]["state"], {"RUNNING", "NOT RUNNING", "UNKNOWN"})
+        discord_state = snapshot["subsystems"]["discord"]["state"]
+        self.assertIn(discord_state, {"RUNNING", "NOT RUNNING", "UNKNOWN"})
         self.assertEqual(snapshot["subsystems"]["updates"]["state"], "NEVER")
         self.assertEqual(snapshot["subsystems"]["updates"]["details"]["interval_hours"], 6)
-        self.assertEqual(snapshot["state"], "RUNNING")
+        self.assertEqual(snapshot["state"], "LIMITED" if discord_state == "NOT RUNNING" else "RUNNING")
 
     def test_last_error_info_has_subsystem_and_clears_after_recovery(self):
         path = self.write_capture("bad then good")
@@ -156,7 +157,7 @@ class ObservabilityTests(unittest.TestCase):
         )
         self.assertEqual(
             self.health.snapshot(watcher_expected=False)["subsystems"]["importer"]["state"],
-            "DEGRADED",
+            "LIMITED",
         )
 
         result = self.importer.import_file(good_path)
@@ -166,6 +167,67 @@ class ObservabilityTests(unittest.TestCase):
             "RUNNING",
         )
         self.assertEqual(self.activity.recent(1)[0].event_type, "capture_imported")
+
+    def test_plugin_052_without_heartbeat_requests_update_and_limits_overall(self):
+        (self.dds / "manifest.json").write_text(
+            json.dumps({"storageSchemaVersion": 1, "ddsVersion": "0.5.2"}),
+            encoding="utf-8",
+        )
+        self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
+        self.health.set_subsystem("importer", "RUNNING", "ok")
+        snapshot = self.health.snapshot(watcher_expected=True)
+        self.assertEqual(snapshot["subsystems"]["plugin"]["state"], "UPDATE AVAILABLE")
+        self.assertEqual(snapshot["state"], "LIMITED")
+        self.assertTrue(any(r["subsystem"] == "plugin" for r in snapshot["reasons"]))
+
+    def test_plugin_053_running_stopped_and_stale_heartbeat(self):
+        (self.dds / "manifest.json").write_text(
+            json.dumps({
+                "storageSchemaVersion": 1,
+                "ddsVersion": "0.5.3",
+                "capabilities": ["plugin-heartbeat-v1"],
+            }),
+            encoding="utf-8",
+        )
+        heartbeat = self.dds / "plugin_heartbeat.json"
+        heartbeat.write_text(
+            json.dumps({
+                "schemaVersion": 1,
+                "pluginVersion": "0.5.3",
+                "state": "RUNNING",
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "heartbeatIntervalMs": 30000,
+            }),
+            encoding="utf-8",
+        )
+        self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
+        self.health.set_subsystem("importer", "RUNNING", "ok")
+        running = self.health.snapshot(watcher_expected=True)
+        self.assertEqual(running["subsystems"]["plugin"]["state"], "RUNNING")
+
+        stopped_payload = json.loads(heartbeat.read_text(encoding="utf-8"))
+        stopped_payload["state"] = "STOPPED"
+        stopped_payload["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        heartbeat.write_text(json.dumps(stopped_payload), encoding="utf-8")
+        stopped = self.health.snapshot(watcher_expected=True)
+        self.assertEqual(stopped["subsystems"]["plugin"]["state"], "NOT RUNNING")
+        self.assertEqual(stopped["state"], "LIMITED")
+
+        stale_payload = dict(stopped_payload)
+        stale_payload["state"] = "RUNNING"
+        stale_payload["updatedAt"] = (datetime.now(timezone.utc) - timedelta(seconds=100)).isoformat()
+        heartbeat.write_text(json.dumps(stale_payload), encoding="utf-8")
+        stale = self.health.snapshot(watcher_expected=True)
+        self.assertEqual(stale["subsystems"]["plugin"]["state"], "STALE")
+        self.assertEqual(stale["state"], "LIMITED")
+
+    def test_missing_dds_data_marks_watcher_waiting(self):
+        self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
+        self.health.set_subsystem("importer", "RUNNING", "ok")
+        (self.dds / "manifest.json").unlink()
+        snapshot = self.health.snapshot(watcher_expected=True)
+        self.assertEqual(snapshot["subsystems"]["watcher"]["state"], "WAITING")
+        self.assertEqual(snapshot["state"], "LIMITED")
 
     def test_stats_session_baseline_and_media_split(self):
         stats = StatsService(

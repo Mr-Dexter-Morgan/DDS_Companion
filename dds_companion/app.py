@@ -251,7 +251,7 @@ def main(argv: list[str] | None = None) -> int:
         if import_result.failed:
             health.set_subsystem(
                 "importer",
-                "DEGRADED",
+                "LIMITED",
                 f"initial sync completed with {import_result.failed} failed capture(s)",
             )
         else:

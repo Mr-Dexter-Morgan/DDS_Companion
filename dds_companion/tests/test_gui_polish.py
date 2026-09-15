@@ -68,11 +68,12 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         self.assertIn("QScrollArea", pages)
 
 
-    def test_043_health_surface_and_compact_brand_contract(self):
+    def test_044_health_surface_and_compact_brand_contract(self):
         window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         self.assertIn("self.sidebar.setFixedWidth(210)", window)
         self.assertIn('("discord", "Discord")', pages)
+        self.assertIn('("plugin", "DDS Plugin")', pages)
         self.assertIn('("updates", "Update check")', pages)
         self.assertIn('scrollable=True', pages[pages.index("class HealthPage"):pages.index("class SettingsPage")])
         self.assertIn('Last attempt:', pages)

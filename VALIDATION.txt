@@ -1,26 +1,30 @@
-DDS Companion 0.4.3 — Validation
+DDS Companion 0.4.4 — Validation
 ================================
 
 Build environment
 -----------------
-Python source build container; PySide6 is intentionally not installed.
+Python source build container; PySide6 is intentionally not required by the
+headless automated suite.
 
 Automated validation
 --------------------
 - python -m compileall -q dds_companion: PASS
-- python -m unittest discover -v dds_companion/tests: PASS (35/35)
+- python -m unittest discover -s dds_companion/tests -v: PASS (38/38)
 - Existing importer/watcher/archive regression suite: PASS
-- Discord tasklist parser tests: PASS
-- Live DDS_Data state probe test: PASS
-- Watcher STALE-state test: PASS
-- Informational Discord/Updates do-not-degrade test: PASS
-- Update telemetry application_state test: PASS
-- Last unresolved error metadata/recovery test: PASS
-- Compact brand + Health source contract test: PASS
+- Discord process probe tests: PASS
+- Plugin 0.5.2 compatibility / UPDATE AVAILABLE state: PASS
+- Plugin 0.5.3 fresh RUNNING heartbeat state: PASS
+- Plugin clean STOPPED heartbeat state: PASS
+- Plugin stale heartbeat state: PASS
+- Missing DDS_Data -> Watcher WAITING contract: PASS
+- Health transition/reason logging contract: PASS
+- LIMITED legacy DEGRADED normalization: PASS
+- UI source contract for DDS Plugin card and tooltips: PASS
 
 Not claimed here
 ----------------
-- Native PySide6 visual rendering of the six-card Health page.
-- Native Windows tasklist process detection.
-- Real GitHub update checks; 0.4.3 exposes telemetry only and performs no updater
-  network request.
+- Native PySide6 Windows rendering of the revised Health layout.
+- Live BetterDiscord production of plugin_heartbeat.json; that requires the
+  separate DDS Plugin 0.5.3 candidate.
+- Automatic GitHub plugin installation. The desired backup/replace/verify/
+  rollback flow is architecture work for the updater layer, not this build.

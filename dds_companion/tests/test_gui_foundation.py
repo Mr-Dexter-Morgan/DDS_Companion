@@ -6,6 +6,7 @@ import tempfile
 import threading
 import time
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 from dds_companion.gui.runtime import GuiRuntime
@@ -63,7 +64,22 @@ class GuiRuntimeTests(unittest.TestCase):
         self.app_data = self.root / "Companion"
         self.dds.mkdir(parents=True)
         (self.dds / "manifest.json").write_text(
-            json.dumps({"storageSchemaVersion": 1, "captureSchemaVersion": 2, "ddsVersion": "0.5.2"}),
+            json.dumps({
+                "storageSchemaVersion": 1,
+                "captureSchemaVersion": 2,
+                "ddsVersion": "0.5.3",
+                "capabilities": ["plugin-heartbeat-v1"],
+            }),
+            encoding="utf-8",
+        )
+        (self.dds / "plugin_heartbeat.json").write_text(
+            json.dumps({
+                "schemaVersion": 1,
+                "pluginVersion": "0.5.3",
+                "state": "RUNNING",
+                "updatedAt": datetime.now(timezone.utc).isoformat(),
+                "heartbeatIntervalMs": 30000,
+            }),
             encoding="utf-8",
         )
         capture_dir = self.dds / "guilds" / "111111111111111111" / "channels" / "222222222222222222"

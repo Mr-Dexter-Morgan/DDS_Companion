@@ -1,40 +1,89 @@
-# DDS Companion 0.4.3 — UI Contract
+# DDS Companion 0.4.4 — UI Contract
 
 ## Preserve accepted surfaces
 
-Dashboard, Library and Activity keep the 0.4.2 information architecture and
-must not be redesigned as part of the Health patch.
+Dashboard, Library and Activity keep their accepted information architecture.
+Health changes must not trigger a redesign of working pages.
 
-## Compact brand
+## Sidebar brand
 
-At the compact 1366x768 profile the sidebar must leave enough room for the full
-**DDS Companion** brand. Truncation to `DDS Compan` is a defect.
+The navigation header uses three lines:
+
+```text
+DDS
+Companion
+v0.4.4
+```
+
+The product name must remain readable in compact layouts without widening the
+sidebar merely to fit a single-line brand.
 
 ## Health
 
-Health is scroll-safe and shows six runtime/informational cards:
+Health is scroll-safe and shows seven cards/blocks:
 
 - Database
 - DDS_Data
 - Importer
 - Watcher
 - Discord
+- DDS Plugin
 - Update check
 
-Critical archive health comes from Database / DDS_Data / Importer / Watcher /
-runtime. Discord being closed and updater telemetry being absent are
-informational and must not degrade the archive.
+User-facing state vocabulary includes:
 
-Watcher heartbeat expiry is displayed as **STALE**. STALE is yellow/warning and
-causes overall DEGRADED while the watcher is expected to be running.
+- RUNNING
+- LIMITED
+- STALE
+- ERROR
+- NOT RUNNING
+- WAITING
+- UPDATE AVAILABLE
+- NEVER (update telemetry only)
 
-The Update check card must be truthful: until a real updater performs checks it
-shows NEVER and empty timestamps; it must not fabricate a successful check.
+`DEGRADED` is legacy compatibility input and must not be the normal user-facing
+word in 0.4.4.
 
-The Last error area shows the active unresolved failure with subsystem/job kind
-and timestamp; a resolved historical failure is not presented as current.
+### Truthfulness rules
+
+- Discord closed -> overall LIMITED, archived data remains available.
+- Plugin stopped/stale/unavailable -> overall LIMITED, archived data remains
+  available.
+- Missing DDS_Data -> overall LIMITED and Watcher displays WAITING.
+- Critical local database failure -> ERROR.
+- Update-check state NEVER is informational and must not make Health LIMITED.
+- Pre-heartbeat plugin versions may display UPDATE AVAILABLE rather than a
+  fabricated NOT RUNNING result.
+
+### Explanations
+
+Hovering the overall status pill must show the reason(s) for LIMITED/ERROR.
+Hovering each subsystem state word must show the subsystem's own summary.
+When multiple reasons exist, the overall tooltip includes all relevant reasons.
+
+### Timing labels
+
+Use truthful labels rather than generic Heartbeat:
+
+- Database — Checked
+- DDS_Data — Checked
+- Importer — Last import
+- Watcher — Heartbeat
+- Discord — Checked
+- DDS Plugin — Version / Heartbeat
+
+## Activity integration
+
+Health must not write the same warning repeatedly every refresh cycle. Journal
+entries are created for:
+
+- first observed non-running state;
+- overall state transition;
+- reason-set change while state is unchanged;
+- recovery to RUNNING.
 
 ## Settings contract retained
 
-Settings opens on **Основные**. Paths & Storage remains the secondary,
-vertically-scrollable service-path surface with Copy/Open actions.
+Settings continues to open on **Основные**. `Paths & Storage` remains the
+secondary scrollable service-path surface with Copy/Open actions. Larger
+Settings redesign is deferred.

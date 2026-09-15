@@ -107,11 +107,14 @@ class MainWindow(QMainWindow):
         mark.setAlignment(Qt.AlignCenter)
         brand_text = QVBoxLayout()
         brand_text.setSpacing(0)
-        title = QLabel("DDS Companion")
+        title = QLabel("DDS")
         title.setObjectName("BrandTitle")
+        title2 = QLabel("Companion")
+        title2.setObjectName("BrandTitle")
         subtitle = QLabel(f"v{__version__}")
         subtitle.setObjectName("BrandSub")
         brand_text.addWidget(title)
+        brand_text.addWidget(title2)
         brand_text.addWidget(subtitle)
         brand.addWidget(mark)
         brand.addLayout(brand_text, 1)
@@ -297,6 +300,7 @@ class MainWindow(QMainWindow):
         state = health.get("state", "UNKNOWN")
         self.top_status.setText(state)
         set_state_property(self.top_status, state)
+        self.top_status.setToolTip(health.get("tooltip") or health.get("summary") or state)
         stats = snapshot.get("stats", {})
         self.status_text.setText(
             f"{stats.get('messages', 0)} сообщений · "
