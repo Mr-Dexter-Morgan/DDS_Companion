@@ -1,4 +1,4 @@
-# DDS Companion 0.4.4 — UI Contract
+# DDS Companion 0.4.5 — UI Contract
 
 ## Preserve accepted surfaces
 
@@ -12,7 +12,7 @@ The navigation header uses three lines:
 ```text
 DDS
 Companion
-v0.4.4
+v0.4.5
 ```
 
 The product name must remain readable in compact layouts without widening the
@@ -42,7 +42,7 @@ User-facing state vocabulary includes:
 - NEVER (update telemetry only)
 
 `DEGRADED` is legacy compatibility input and must not be the normal user-facing
-word in 0.4.4.
+word in 0.4.5.
 
 ### Truthfulness rules
 

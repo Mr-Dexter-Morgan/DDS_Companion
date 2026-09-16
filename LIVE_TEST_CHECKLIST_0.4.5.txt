@@ -1,0 +1,35 @@
+DDS Companion 0.4.5 — Windows Live Test Checklist
+==================================================
+
+Run ONE scenario at a time. 0.4.5 stays a candidate until the startup-focus
+behavior is observed on native Windows.
+
+1. Explorer launch — PRIMARY TEST
+   [ ] Open the 0.4.5 folder in Explorer.
+   [ ] Launch run_companion.bat normally.
+   [ ] Companion becomes the visible foreground window once startup completes.
+   [ ] Explorer does not remain covering Companion.
+
+2. No later focus stealing
+   [ ] After startup, switch deliberately to another application.
+   [ ] Wait at least 10 seconds while Health/watcher refresh normally.
+   [ ] Companion does NOT jump back to the foreground.
+   [ ] Minimize and restore Companion manually; normal Windows behavior remains.
+
+3. Short Health regression
+   [ ] DDS Plugin 0.5.3 is RUNNING and overall Health can reach RUNNING.
+   [ ] Disable plugin: plugin becomes NOT RUNNING and overall Health LIMITED.
+   [ ] Re-enable plugin: state recovers automatically without Companion restart.
+   [ ] No Health/activity polling spam appears.
+
+4. Source/process regression (quick)
+   [ ] Close Discord: Discord becomes NOT RUNNING and Plugin must also become NOT RUNNING immediately (no fresh-heartbeat false green).
+   [ ] Reopen Discord: Discord and Plugin recover automatically after the fresh plugin heartbeat.
+   [ ] Temporarily make DDS_Data unavailable: Watcher shows WAITING.
+   [ ] Restore DDS_Data: state recovers automatically.
+
+Promotion rule
+--------------
+- Do not mark 0.4.5 VERIFIED / recommended until tests 1 and 2 pass live.
+- If startup focus still fails, keep 0.4.5 as candidate and revise the one-shot
+  Windows fallback; do not weaken the no-focus-stealing rule.

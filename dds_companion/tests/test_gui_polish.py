@@ -54,7 +54,9 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", normal)
         self.assertIn("run_companion.pyw", normal)
+        self.assertIn("DDS Companion 0.4.5", normal)
         self.assertIn("python -m dds_companion.gui.app", debug)
+        self.assertIn("DDS Companion 0.4.5", debug)
 
     def test_duplicate_library_buttons_are_removed_from_topbar_and_dashboard(self):
         window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
@@ -77,6 +79,15 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         self.assertIn('("updates", "Update check")', pages)
         self.assertIn('scrollable=True', pages[pages.index("class HealthPage"):pages.index("class SettingsPage")])
         self.assertIn('Last attempt:', pages)
+
+    def test_045_startup_foreground_is_one_shot_and_not_persistent_topmost(self):
+        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
+        self.assertIn("self._startup_foreground_attempted = False", window)
+        self.assertIn("QTimer.singleShot(75, self._bring_to_front_once)", window)
+        self.assertIn("if self._startup_foreground_attempted:", window)
+        self.assertIn("user32.SetWindowPos(hwnd, HWND_TOPMOST", window)
+        self.assertIn("user32.SetWindowPos(hwnd, HWND_NOTOPMOST", window)
+        self.assertNotIn("WindowStaysOnTopHint", window)
 
     def test_settings_separates_primary_controls_from_paths_and_storage(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")

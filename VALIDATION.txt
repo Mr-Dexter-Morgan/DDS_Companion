@@ -1,4 +1,4 @@
-DDS Companion 0.4.4 — Validation
+DDS Companion 0.4.5 — Validation
 ================================
 
 Build environment
@@ -9,13 +9,14 @@ headless automated suite.
 Automated validation
 --------------------
 - python -m compileall -q dds_companion: PASS
-- python -m unittest discover -s dds_companion/tests -v: PASS (38/38)
+- python -m unittest discover -s dds_companion/tests -v: PASS (40/40)
 - Existing importer/watcher/archive regression suite: PASS
 - Discord process probe tests: PASS
 - Plugin 0.5.2 compatibility / UPDATE AVAILABLE state: PASS
 - Plugin 0.5.3 fresh RUNNING heartbeat state: PASS
 - Plugin clean STOPPED heartbeat state: PASS
 - Plugin stale heartbeat state: PASS
+- Discord-off overrides fresh Plugin heartbeat state: PASS
 - Missing DDS_Data -> Watcher WAITING contract: PASS
 - Health transition/reason logging contract: PASS
 - LIMITED legacy DEGRADED normalization: PASS

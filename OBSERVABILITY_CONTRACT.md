@@ -76,7 +76,7 @@ Expected fields:
 - `heartbeatIntervalMs`
 - `captureSchemaVersion`
 
-Fresh RUNNING -> RUNNING. Explicit STOPPED -> NOT RUNNING. Age thresholds are
+Fresh RUNNING -> RUNNING. Explicit STOPPED -> NOT RUNNING. If Discord is definitively NOT RUNNING, a fresh/stale heartbeat is dependency-overridden to NOT RUNNING while heartbeat metadata remains available. Age thresholds are
 computed from the advertised interval with safe minimums. A pre-heartbeat
 stable plugin is shown as UPDATE AVAILABLE instead of being falsely marked
 broken.

@@ -1,4 +1,4 @@
-# DDS Companion — Release Status Registry (0.4.4 package snapshot)
+# DDS Companion — Release Status Registry (0.4.5 candidate snapshot)
 
 | Version | Status | Result |
 |---|---|---|
@@ -8,14 +8,24 @@
 | `0.4.0` | **LIVE-TESTED / SUPERSEDED** | First Qt GUI; superseded after 1366x768 findings. |
 | `0.4.1` | **LIVE-TESTED / SUPERSEDED** | Responsive GUI polish rendered successfully on Windows. |
 | `0.4.2` | **LIVE UI REVIEW / SUPERSEDED** | Settings IA and primary pages visually reviewed. |
-| `0.4.3` | **LIVE-TESTED / SUPERSEDED BY CANDIDATE** | Discord process detection and DDS_Data loss/recovery worked live. Testing exposed clipped brand, misleading Importer heartbeat wording, Watcher RUNNING with missing source, and inability to detect disabled DDS Plugin. |
-| `0.4.4` | **BUILT / LOCAL TESTING** | LIMITED semantics, plugin heartbeat consumer, truthful Watcher WAITING state, reason tooltips/activity transitions, two-line brand. 38/38 automated tests PASS. |
+| `0.4.3` | **LIVE-TESTED / SUPERSEDED** | Discord process detection and DDS_Data loss/recovery worked live. |
+| `0.4.4` | **LIVE-TESTED CANDIDATE / SUPERSEDED BY 0.4.5 CANDIDATE** | Health truthfulness and Plugin 0.5.3 heartbeat integration validated live. |
+| `0.4.5` | **BUILT / LOCAL TESTING** | One-shot startup foreground fix; automated and Windows live validation required. |
 
 ## Current recommended Companion release
 
-**`0.3.0`** remains the last fully promoted recommendation until the newer GUI
-candidate finishes live Windows validation.
+**`0.3.0`** remains the last fully promoted recommendation.
 
 ## Current candidate
 
-**`0.4.4`** — requires Windows + DDS Plugin 0.5.3 candidate live testing.
+**`0.4.5`** — small Windows startup UX patch on top of 0.4.4.
+
+Required before promotion decision:
+- Explorer launch brings Companion to foreground once;
+- no later focus stealing;
+- short Health/plugin/source regression remains clean.
+
+## Current plugin dependency
+
+**DDS Plugin `0.5.3` is VERIFIED / LIVE TESTED / RELEASED and is the recommended
+plugin for heartbeat-aware Health.**

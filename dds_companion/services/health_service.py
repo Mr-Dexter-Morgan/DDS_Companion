@@ -228,6 +228,25 @@ class HealthService:
 
         subsystems["discord"] = self._discord_snapshot()
         subsystems["plugin"] = self._plugin_snapshot(now, dds_ok=dds_ok)
+
+        # A fresh heartbeat may outlive the Discord process for a short time when
+        # Discord is closed abruptly. In that window the heartbeat file is still
+        # recent, but the BetterDiscord plugin cannot actually be executing.
+        # Keep the heartbeat metadata for diagnostics while making the effective
+        # process state truthful.
+        if (
+            subsystems["discord"].get("state") == "NOT RUNNING"
+            and subsystems["plugin"].get("state") in {"RUNNING", "STALE"}
+        ):
+            plugin_info = dict(subsystems["plugin"])
+            plugin_info["details"] = dict(plugin_info.get("details") or {})
+            plugin_info["details"]["underlying_heartbeat_state"] = plugin_info.get("state")
+            plugin_info["details"]["blocked_by"] = "discord-not-running"
+            plugin_info["state"] = "NOT RUNNING"
+            plugin_info["summary"] = "Discord is not running — DDS Plugin cannot be active"
+            plugin_info["stale"] = False
+            subsystems["plugin"] = plugin_info
+
         subsystems["updates"] = self._updates_snapshot(now)
 
         reasons: list[dict] = []

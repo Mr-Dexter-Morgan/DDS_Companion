@@ -221,6 +221,49 @@ class ObservabilityTests(unittest.TestCase):
         self.assertEqual(stale["subsystems"]["plugin"]["state"], "STALE")
         self.assertEqual(stale["state"], "LIMITED")
 
+
+    def test_discord_not_running_overrides_fresh_plugin_heartbeat(self):
+        (self.dds / "manifest.json").write_text(
+            json.dumps({
+                "storageSchemaVersion": 1,
+                "ddsVersion": "0.5.3",
+                "capabilities": ["plugin-heartbeat-v1"],
+            }),
+            encoding="utf-8",
+        )
+        heartbeat_at = datetime.now(timezone.utc).isoformat()
+        (self.dds / "plugin_heartbeat.json").write_text(
+            json.dumps({
+                "schemaVersion": 1,
+                "pluginVersion": "0.5.3",
+                "state": "RUNNING",
+                "updatedAt": heartbeat_at,
+                "heartbeatIntervalMs": 30000,
+            }),
+            encoding="utf-8",
+        )
+        self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
+        self.health.set_subsystem("importer", "RUNNING", "ok")
+        self.health._discord_cache = {
+            "state": "NOT RUNNING",
+            "summary": "Discord is not running — archived data remains available",
+            "last_ok_at": None,
+            "last_error_at": None,
+            "updated_at": heartbeat_at,
+            "stale": False,
+            "details": {"detected_processes": []},
+        }
+        self.health._discord_probe_monotonic = float("inf")
+
+        snapshot = self.health.snapshot(watcher_expected=True)
+        plugin = snapshot["subsystems"]["plugin"]
+        self.assertEqual(plugin["state"], "NOT RUNNING")
+        self.assertIn("Discord is not running", plugin["summary"])
+        self.assertEqual(plugin["updated_at"], heartbeat_at)
+        self.assertEqual(plugin["details"]["underlying_heartbeat_state"], "RUNNING")
+        self.assertEqual(plugin["details"]["blocked_by"], "discord-not-running")
+        self.assertEqual(snapshot["state"], "LIMITED")
+
     def test_missing_dds_data_marks_watcher_waiting(self):
         self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
         self.health.set_subsystem("importer", "RUNNING", "ok")

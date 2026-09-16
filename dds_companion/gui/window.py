@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import ctypes
+import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFrame,
@@ -46,6 +48,7 @@ class MainWindow(QMainWindow):
         self._layout_profile: str | None = None
         self._screen_signals_connected = False
         self._observed_screen = None
+        self._startup_foreground_attempted = False
 
         self.bus = SignalBus()
         self.paths = build_runtime_paths(dds_data, app_data)
@@ -277,6 +280,46 @@ class MainWindow(QMainWindow):
         super().showEvent(event)
         self._connect_screen_signals()
         self._apply_layout_profile(force=True)
+        # Explorer can keep focus when launching a .bat/.pyw chain on Windows.
+        # Request foreground exactly once, after the native window exists. The
+        # guard prevents later show/unminimize events from ever stealing focus.
+        if not self._startup_foreground_attempted:
+            QTimer.singleShot(75, self._bring_to_front_once)
+
+    def _bring_to_front_once(self) -> None:
+        """Bring the main window forward once at startup, never afterwards."""
+        if self._startup_foreground_attempted:
+            return
+        self._startup_foreground_attempted = True
+
+        # Qt path first: sufficient on most desktops and harmless elsewhere.
+        if self.isMinimized():
+            self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+        if sys.platform != "win32":
+            return
+
+        # Windows fallback for the common Explorer -> batch -> pythonw launch.
+        # TOPMOST is toggled only inside this one-shot startup call and removed
+        # immediately; Companion is never kept Always-on-Top.
+        try:
+            hwnd = int(self.winId())
+            user32 = ctypes.windll.user32
+            SWP_NOSIZE = 0x0001
+            SWP_NOMOVE = 0x0002
+            SWP_SHOWWINDOW = 0x0040
+            flags = SWP_NOSIZE | SWP_NOMOVE | SWP_SHOWWINDOW
+            HWND_TOPMOST = -1
+            HWND_NOTOPMOST = -2
+            user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags)
+            user32.SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags)
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+        except Exception:
+            # Foreground polish must never make Companion fail to start.
+            pass
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)

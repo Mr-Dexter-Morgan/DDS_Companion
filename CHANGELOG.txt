@@ -1,43 +1,35 @@
-DDS Companion 0.4.4 — Health Truthfulness & Plugin Heartbeat Candidate
-=======================================================================
+DDS Companion 0.4.5 — Startup Foreground Candidate
+=================================================
 
 Status: BUILT / LOCAL TESTING
 
 Purpose
 -------
-Make Health describe the whole DDS capture chain truthfully after 0.4.3 live
-Windows testing exposed states that could remain green while the plugin itself
-was disabled.
+Fix the Windows launch UX found at the end of the 0.4.4 live test: when
+Companion is started from Explorer, Explorer can remain in front while the
+Companion window opens behind it.
 
 Changed
 -------
-- Replaced user-facing DEGRADED with LIMITED; legacy DEGRADED database rows are
-  normalized on read for backward compatibility.
-- Split sidebar product brand into DDS / Companion / version lines.
-- Added DDS Plugin Health card and plugin-heartbeat-v1 consumer.
-- Plugin 0.5.2/no heartbeat is reported as UPDATE AVAILABLE, not as broken.
-- Fresh plugin heartbeat -> RUNNING; clean STOPPED -> NOT RUNNING; expired
-  heartbeat -> STALE/NOT RUNNING; invalid heartbeat -> LIMITED.
-- Discord NOT RUNNING contributes to overall LIMITED capture state but remains
-  non-error and archived data stays available.
-- Missing DDS_Data makes Watcher display WAITING FOR SOURCE rather than a
-  misleading RUNNING status.
-- Importer timestamp label changed from Heartbeat to Last import.
-- Overall and per-card status labels expose explanatory tooltips.
-- Activity persists Health transitions, reason changes and recovery without
-  periodic duplicate spam.
-- Update check remains truthful telemetry only; no fabricated GitHub success.
+- Added a one-shot startup foreground request after the native Qt window exists.
+- Qt raise/activate is attempted first.
+- On Windows, a best-effort Win32 fallback briefly toggles TOPMOST and
+  immediately removes it before requesting foreground.
+- The startup foreground path is guarded so later show/unminimize events cannot
+  steal focus.
+- Foreground polish failures are isolated and cannot prevent Companion startup.
+- Health now treats a fresh/stale plugin heartbeat as NOT RUNNING whenever the Discord process is definitely not running; last heartbeat metadata is retained for diagnostics.
 
 Unchanged
 ---------
+- Health semantics and plugin-heartbeat-v1 integration from 0.4.4.
 - Archive schema and accumulated data.
 - Import/dedup/watcher capture semantics.
-- Dashboard, Library and Activity information architecture.
-- No media downloading, AI export or cloud synchronization.
-- No automatic plugin updater yet.
+- Dashboard, Library, Activity, Health and Settings information architecture.
+- No media downloading, AI export, updater backend or cloud synchronization.
 
 Validation
 ----------
 - Python compileall: PASS.
-- Full automated suite: 38/38 PASS.
-- 0.4.3 archive/import regressions retained.
+- Full automated suite: 40/40 PASS.
+- Native Windows Explorer-launch validation: required.
