@@ -63,6 +63,15 @@ class StatsSnapshot:
     failed_jobs_unresolved: int
     known_media: int
     cached_media_files: int
+    physical_media_files: int
+    media_queued: int
+    media_downloading: int
+    media_retryable_failed: int
+    media_permanent_failed: int
+    media_stale_url: int
+    media_too_large: int
+    media_skipped: int
+    media_evicted: int
     sqlite_bytes: int
     dds_json_bytes: int
     cache_bytes: int
@@ -144,7 +153,7 @@ class StatsService:
         logs_bytes = directory_size(self.logs_path)
         backups_bytes = directory_size(self.backups_path)
         config_bytes = directory_size(self.config_path)
-        cached_media_files = directory_file_count(self.media_path)
+        physical_media_files = directory_file_count(self.media_path)
         other_bytes = cache_bytes + backups_bytes + config_bytes
         total = sqlite_bytes + dds_size + media_bytes + logs_bytes + other_bytes
 
@@ -157,7 +166,7 @@ class StatsService:
             "backups_bytes": backups_bytes,
             "config_bytes": config_bytes,
             "other_bytes": other_bytes,
-            "cached_media_files": cached_media_files,
+            "physical_media_files": physical_media_files,
             "total_known_storage_bytes": total,
         }
         self._last_storage_scan_at = now
@@ -173,6 +182,13 @@ class StatsService:
 
         attachments = _count(self.connection, "attachments")
         storage = self._storage_metrics(force=force_storage)
+        state_rows = self.connection.execute(
+            "SELECT state, COUNT(*) FROM media_objects GROUP BY state"
+        ).fetchall()
+        media_states = {str(row[0]): int(row[1]) for row in state_rows}
+        known_media = int(
+            self.connection.execute("SELECT COUNT(DISTINCT media_key) FROM media_refs").fetchone()[0]
+        )
 
         return {
             "messages": _count(self.connection, "messages"),
@@ -186,8 +202,16 @@ class StatsService:
             "activity_events": _count(self.connection, "activity_events"),
             "failed_jobs_total": _count(self.connection, "failed_jobs"),
             "failed_jobs_unresolved": unresolved,
-            # Until Media stage, attachment rows are the reliable known-media unit.
-            "known_media": attachments,
+            "known_media": known_media,
+            "cached_media_files": media_states.get("CACHED", 0),
+            "media_queued": media_states.get("QUEUED", 0),
+            "media_downloading": media_states.get("DOWNLOADING", 0),
+            "media_retryable_failed": media_states.get("FAILED_RETRYABLE", 0),
+            "media_permanent_failed": media_states.get("FAILED_PERMANENT", 0),
+            "media_stale_url": media_states.get("STALE_URL", 0),
+            "media_too_large": media_states.get("TOO_LARGE", 0),
+            "media_skipped": media_states.get("SKIPPED", 0),
+            "media_evicted": media_states.get("EVICTED", 0),
             "last_successful_import": last_import_row[0] if last_import_row else None,
             **storage,
         }

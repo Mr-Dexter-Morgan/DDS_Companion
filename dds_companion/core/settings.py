@@ -13,15 +13,15 @@ from typing import Any
 class CompanionSettings:
     """Persisted user-facing settings that already have real runtime behavior.
 
-    Values use ``None`` for an unlimited/forever policy. 0.4.6 intentionally
-    keeps the surface small: only media-cache controls are editable because the
-    cache policy engine exists in this release. Future settings must not be
-    exposed until the corresponding behavior is implemented.
+    Values use ``None`` for an unlimited/forever policy. 0.5.0 adds the first
+    real automatic media-backfill switch; every exposed control has persistent
+    runtime behavior and no decorative settings are stored.
     """
 
     media_cache_limit_bytes: int | None = 5 * 1024**3
     media_max_file_bytes: int | None = 250 * 1024**2
     media_retention_days: int | None = 30
+    media_autodownload_enabled: bool = False
     confirm_media_cache_clear: bool = True
 
     def to_dict(self) -> dict[str, Any]:
@@ -110,9 +110,9 @@ class SettingsStore:
             if not minimum <= value <= maximum:
                 raise ValueError(f"{key} is outside the supported range")
 
-        confirm = values["confirm_media_cache_clear"]
-        if not isinstance(confirm, bool):
-            raise ValueError("confirm_media_cache_clear must be boolean")
+        for key in ("media_autodownload_enabled", "confirm_media_cache_clear"):
+            if not isinstance(values[key], bool):
+                raise ValueError(f"{key} must be boolean")
 
         return CompanionSettings(**values)
 

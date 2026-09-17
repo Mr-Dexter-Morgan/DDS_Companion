@@ -34,6 +34,11 @@ class SettingsStoreTests(unittest.TestCase):
         self.assertEqual(reloaded.settings.media_cache_limit_bytes, 2 * 1024**3)
         self.assertEqual(reloaded.settings.media_retention_days, 7)
 
+    def test_media_autodownload_toggle_persists(self):
+        store = SettingsStore(self.path)
+        store.update(media_autodownload_enabled=True)
+        self.assertTrue(SettingsStore(self.path).settings.media_autodownload_enabled)
+
     def test_corrupt_json_falls_back_to_defaults(self):
         self.path.parent.mkdir(parents=True)
         self.path.write_text("{bad json", encoding="utf-8")

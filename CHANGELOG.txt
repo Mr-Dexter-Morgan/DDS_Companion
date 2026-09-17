@@ -1,59 +1,80 @@
-DDS Companion 0.4.6 — UI / Storage Foundation
-==============================================
-
-Status: VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
-Previous recommended: 0.4.5 (VERIFIED / LIVE TESTED)
+DDS Companion 0.5.0 — Media Backfill Core
+==========================================
 Date: 2026-09-17
+Status: CANDIDATE r2 / AUTOMATED PASS / WINDOWS LIVE PENDING
+Previous recommended: 0.4.6 — VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
 
-Dashboard
----------
-- Removed duplicated subsystem Health card.
-- Removed Open DDS_Data / Open logs maintenance shortcuts.
-- Added storage donut/ring and percentage + size breakdown.
-- Global top Health pill is now a Health-page shortcut outside Health itself.
 
-Settings / Storage
-------------------
-- Rebuilt Settings into General / Data & Storage / Archive / Diagnostics.
-- Added atomic persistent settings store under Companion config.
-- Added real media-cache policy controls: cache size limit, max file size, retention age, clear-confirmation.
-- Added media cache policy engine with oldest-first limit eviction.
-- Retention currently uses file mtime until Media Backfill adds explicit last-access tracking.
-- Manual Clear media cache deletes binary cache files only.
-- Clear button is disabled when cache size is 0 B.
+LIVE FINDING / CANDIDATE r2 FIXES
+- Windows live test confirmed first-run migration, registry bootstrap, real 6/6 attachment caching, restart dedup and database integrity.
+- Live test then exposed a recovery gap: after Automatic media download Off + Clear media cache, rows correctly became EVICTED but an explicit re-enable did not re-arm them, so cache remained 6 known / 0 cached.
+- Root cause: anti-thrash design intentionally excluded all EVICTED rows from ordinary planning but did not distinguish manual Clear from policy eviction.
+- Fix: cache removal now records eviction reason. Manual Clear uses evicted_manual_clear; policy eviction uses evicted_policy.
+- Upgrade compatibility: r1 EVICTED rows used NULL failure_class; an explicit r2 Off -> On may re-arm those legacy ambiguous rows once so an already-cleared r1 cache (like 6/0) recovers without DB surgery. Any subsequent r2 policy eviction is tagged and stays protected from requeue.
+- Explicit Automatic media download Off -> On re-arms only evicted_manual_clear rows. Policy evictions stay EVICTED, preserving anti-thrash behavior.
+- Autodownload UI actions now travel through an ordered control queue, so rapid enable/disable actions cannot be collapsed by a single wake Event.
+- Activity now records both media_backfill_enabled and media_backfill_disabled transitions, plus manual-clear requeue evidence when applicable.
+- Storage horizontal bars now match donut category colors (SQLite purple, DDS JSON blue, Media cache green, Other amber, Logs muted).
 
-Diagnostics
------------
-- Moved logs/data maintenance access out of Dashboard.
-- Added System report generation and Copy report.
-- Added SQLite PRAGMA quick_check using a separate read connection.
+ARCHIVE / SCHEMA
+- SQLite schema version bumped from 2 to 3.
+- Added media_objects: durable media identity, lifecycle, retry, URL and local-cache metadata.
+- Added media_refs: message/attachment-position -> media identity mapping.
+- Existing archive tables are not rewritten.
+- Legacy 0.4.x attachment rows are projected into the media registry once on the isolated media thread.
+- Registry bootstrap self-heals if media_refs are unexpectedly missing.
 
-First-run source bootstrap
---------------------------
-- PySide6 is treated as a required GUI component.
-- Missing PySide6 is installed automatically without a Y/N prompt.
-- Successful bootstrap verifies the import and launches the GUI.
-- Failure leaves archive data untouched and keeps a readable diagnostic console open.
+MEDIA REGISTRY / STATE MACHINE
+- Added states: KNOWN, QUEUED, DOWNLOADING, CACHED, SKIPPED, TOO_LARGE,
+  FAILED_RETRYABLE, FAILED_PERMANENT, STALE_URL and EVICTED.
+- New signed URL resets stale/failed media to KNOWN automatically.
+- EVICTED is intentionally preserved across ordinary URL rotation to prevent cache-thrash loops.
+- Cached-file loss is reconciled back to KNOWN without touching archive metadata.
 
-Validation
-----------
-- Automated suite: 52/52 PASS.
-- Native Windows live gate: PASS.
-- Settings persistence across restart: PASS.
-- Dashboard Storage UI: PASS.
-- Global Health shortcut: PASS.
-- Discord / Plugin off-on recovery: PASS.
-- Normal shutdown / no traceback: PASS.
-- System report: PASS; zero unresolved failures during final check.
-- SQLite Database quick check: PASS — ok.
-- Media-cache detection + confirmation + selective deletion: PASS.
-- Archive/message data preserved after cache cleanup: PASS.
+DOWNLOAD ENGINE
+- Media I/O runs on a dedicated background runtime with its own SQLite connection.
+- Default bounded concurrency: 2 downloads; hard-clamped to a small worker count.
+- Per-request timeout and streamed 256 KiB chunks.
+- Temporary .part files live under media/.staging and are atomically renamed only after success.
+- SHA-256 and actual size are persisted after a complete download.
+- Expected-size mismatch is retryable instead of silently accepting a truncated file.
+- Free-disk preflight prevents knowingly unsafe downloads.
 
-Note
-----
-- The no-prompt PySide6 bootstrap revision is regression-tested, but a second clean-environment Windows bootstrap was not repeated after PySide6 had already been installed during the first live session.
-- Final 1.0 packaging is still expected to bundle runtime dependencies rather than use pip on end-user first launch.
+NETWORK / SECURITY
+- Automatic download accepts HTTPS Discord media hosts only.
+- Redirect targets and final URLs are revalidated.
+- Raw attachment filenames never become filesystem paths; only a sanitized suffix is retained.
+- HTTP 401/403/404 -> STALE_URL (wait for a refreshed capture URL).
+- HTTP 429 / 5xx / transient network-I/O errors -> bounded retry with exponential backoff.
+- Retry-After on HTTP 429 is respected up to a safe cap.
+- Other permanent HTTP failures stop retrying until metadata changes.
 
-Next
-----
-Media Backfill / media backend.
+CACHE POLICY
+- Existing size / max-file / retention settings now govern the real backfill cache.
+- Registered media uses explicit cached-at / last-access timestamps; orphan files fall back to mtime.
+- Clear/eviction resets cached registry entries to EVICTED; archive metadata remains intact.
+- Policy EVICTED items are not automatically requeued. Manual-clear EVICTED items can be deliberately re-armed only by an explicit autodownload Off -> On transition.
+- Active .staging files are excluded from cache cleanup.
+
+UI / OBSERVABILITY
+- Added persistent Automatic media download switch (default Off).
+- Added Media Backfill card to Health.
+- Dashboard known/cached counter is registry-backed.
+- Diagnostics now include media Health and queue/failure counters.
+- Activity records media cached / retry / stale / permanent failure / maintenance events.
+- Media subsystem is non-critical: a media problem never makes the local archive unusable.
+
+REGRESSIONS PRESERVED
+- 0.4.6 Dashboard/Settings/Storage design remains intact.
+- Health shortcut, focus behavior and 1366x768 scroll safety remain covered.
+- Discord/Plugin/DDS_Data loss/recovery behavior remains covered.
+- PySide6 first-run source bootstrap remains automatic.
+
+AUTOMATED VALIDATION
+- 70/70 tests PASS on the r2 source tree, repeated three consecutive runs.
+- Python compileall PASS.
+- CLI version PASS: DDS Companion 0.5.0.
+
+PROMOTION RULE
+0.5.0 remains a candidate until the Windows live checklist passes. Any live failure keeps
+0.4.6 as CURRENT RECOMMENDED and is fixed in a new candidate rather than silently ignored.

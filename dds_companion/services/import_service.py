@@ -8,6 +8,7 @@ from typing import Iterable
 
 from dds_companion.parser.capture_parser import ParsedCapture, parse_capture
 from dds_companion.parser.normalizer import json_text, normalize_context
+from dds_companion.services.media_registry_service import MediaRegistryService
 
 
 def utc_now() -> str:
@@ -33,6 +34,7 @@ class ImportResult:
 class ImportService:
     def __init__(self, connection: sqlite3.Connection):
         self.connection = connection
+        self.media_registry = MediaRegistryService(connection)
 
     def discover_capture_files(self, dds_data_root: str | Path) -> Iterable[Path]:
         root = Path(dds_data_root)
@@ -203,6 +205,7 @@ class ImportService:
                     else:
                         inserted += 1
 
+                    self.media_registry.remove_refs_for_message(message_id)
                     self.connection.execute("DELETE FROM attachments WHERE message_id=?", (message_id,))
                     for position, attachment in enumerate(message.get("attachments") or []):
                         if attachment is None:
@@ -229,6 +232,12 @@ class ImportService:
                                 attachment.get("height"),
                                 int(bool(attachment.get("ephemeral"))),
                             ),
+                        )
+                        self.media_registry.register_attachment(
+                            message_id=message_id,
+                            position=position,
+                            attachment=attachment,
+                            observed_at=captured_at,
                         )
                         attachments += 1
 

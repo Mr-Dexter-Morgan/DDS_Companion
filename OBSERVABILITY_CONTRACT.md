@@ -1,97 +1,62 @@
-# DDS Companion Observability Contract — v0.4
+# DDS Companion Observability Contract — v0.5
 
-This contract defines the state consumed by the PySide6 GUI, tray, diagnostics
-and future updater surfaces.
+This contract defines the state consumed by the PySide6 GUI, diagnostics and future product surfaces.
 
 ## Rule 1 — presentation does not own state
 
-The GUI must not infer health from console strings or raw widget state.
+The GUI must not infer operational truth from console strings or widget state.
 Use:
-
 - `ActivityService` for human runtime events;
-- `HealthService` for subsystem and capture-chain state;
-- `StatsService` for counters, storage and session deltas.
+- `HealthService` for subsystem/capture/media state;
+- `StatsService` for counters, storage and session deltas;
+- Media registry state for known/queued/downloading/cached/failure lifecycle.
+
+Presentation subscribers are best-effort. A UI/subscriber failure must never break capture/import/media work.
 
 ## Activity contract
 
-Each Activity record contains occurrence time, level, subsystem, event type,
-human summary and structured details, with optional capture/guild/channel/thread
-context and import counters.
+Activity records occurrence time, level, subsystem, event type, human summary and structured details, with optional capture context and counters.
 
-Presentation subscribers are best-effort. A UI/subscriber failure must never
-break capture/import.
-
-### Health transition journal policy
-
-Health refresh may run frequently, but Activity records only meaningful change:
-
-- `health_initial_state` for an initially non-RUNNING state;
-- `health_state_changed` when overall state changes;
-- `health_reason_changed` when the reason set changes without a state change;
-- `health_recovered` on return to RUNNING.
-
-Do not emit repeated identical LIMITED/STale warnings on every refresh.
+0.5 media event families include:
+- `media_registry_bootstrap`;
+- `media_backfill_enabled`;
+- `media_backfill_disabled`;
+- `media_manual_clear_requeued`;
+- `media_cached`;
+- `media_retry_scheduled`;
+- `media_url_stale`;
+- `media_failed_permanent`;
+- `media_skipped` / `media_skipped_too_large`;
+- `media_cache_maintenance`;
+- `media_worker_iteration_failed`.
 
 ## Health contract
 
-Persisted or derived subsystem state may include:
+Persisted/derived subsystem state may include STARTING, RUNNING, LIMITED, STALE, ERROR, STOPPED, NOT RUNNING, WAITING, UPDATE AVAILABLE, NEVER and UNKNOWN.
 
-- STARTING
-- RUNNING
-- LIMITED
-- STALE
-- ERROR
-- STOPPED
-- NOT RUNNING
-- WAITING
-- UPDATE AVAILABLE
-- NEVER
-- UNKNOWN
+Critical local archive/capture subsystems remain database, DDS_Data, importer, watcher and runtime. `media` is intentionally non-critical: media failure is surfaced in its own card/details but does not make archived messages unusable.
 
-Historical persisted `DEGRADED` values are accepted and normalized to LIMITED.
-
-Overall state rules:
-
+Overall rules remain:
 1. critical local database failure -> ERROR;
-2. unavailable capture-chain dependency (Discord, DDS Plugin, DDS_Data), stale
-   required heartbeat, unresolved import/runtime failure, or equivalent partial
-   availability -> LIMITED;
-3. informational updater telemetry such as NEVER does not limit the core;
+2. unavailable capture-chain dependency / unresolved critical import/runtime condition -> LIMITED;
+3. optional/non-critical subsystem degradation is visible without falsely declaring the archive dead;
 4. otherwise -> RUNNING.
 
-A closed Discord or stopped plugin is not itself a Companion application error:
-the local archive remains usable. It limits new capture only.
+## DDS Plugin heartbeat contract
 
-## DDS Plugin heartbeat contract (consumer side)
+Companion consumes `plugin_heartbeat.json` under DDS_Data for Plugin 0.5.3+ (`plugin-heartbeat-v1`). Discord process state can override a still-fresh heartbeat so Plugin cannot remain falsely green after Discord closes.
 
-Companion recognizes `plugin_heartbeat.json` under DDS_Data when the plugin
-advertises `plugin-heartbeat-v1` or reports a heartbeat-capable version.
-Expected fields:
+## Media observability
 
-- `schemaVersion`
-- `plugin`
-- `pluginVersion`
-- `state`
-- `updatedAt`
-- `heartbeatIntervalMs`
-- `captureSchemaVersion`
+Media Health details include known/cached/queued/downloading/retry/stale/permanent-failure/too-large/skipped/evicted counts plus the last cycle summary.
 
-Fresh RUNNING -> RUNNING. Explicit STOPPED -> NOT RUNNING. If Discord is definitively NOT RUNNING, a fresh/stale heartbeat is dependency-overridden to NOT RUNNING while heartbeat metadata remains available. Age thresholds are
-computed from the advertised interval with safe minimums. A pre-heartbeat
-stable plugin is shown as UPDATE AVAILABLE instead of being falsely marked
-broken.
-
-## Watcher/source distinction
-
-A live watcher thread does not imply a live source. If DDS_Data is absent,
-Watcher presentation state is WAITING even if the observer loop itself still
-exists. This distinction prevents green-but-useless diagnostics.
+Signed URL expiration is a media condition, not an archive failure. Retryable errors have a scheduled next attempt; stale URLs wait for refreshed capture metadata; permanent failures stop retrying automatically. Explicit UI autodownload toggles are queued so rapid Off/On sequences produce ordered Activity evidence instead of being collapsed into the final state.
 
 ## Stats contract
 
-Stats snapshots remain cheap and contain only derived counters/sizes, never
-message payloads. Storage accounting avoids double-counting and includes SQLite
-main/WAL/SHM, DDS_Data, cache, media and logs where applicable.
+Stats snapshots contain derived counters/sizes, never message payloads. Storage accounting includes SQLite main/WAL/SHM, DDS_Data, media, logs and other Companion data without treating archive metadata as cache.
+
+Known/cached media counters come from the durable media registry. Physical media bytes come from the filesystem.
 
 ## Failure containment
 
@@ -99,5 +64,6 @@ main/WAL/SHM, DDS_Data, cache, media and logs where applicable.
 - Presentation subscriber failure must not abort import.
 - Health callback failure must not kill watcher.
 - One capture failure must not stop observation of others.
-- Loss of Discord/DDS Plugin/DDS_Data must not make the archived library
-  unavailable.
+- One media failure must not block other media jobs.
+- Media network/disk work runs outside the archive watcher/UI runtime thread.
+- Loss of Discord/DDS Plugin/DDS_Data must not make the archived library unavailable.

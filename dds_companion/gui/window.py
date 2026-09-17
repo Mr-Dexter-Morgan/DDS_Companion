@@ -57,7 +57,7 @@ class MainWindow(QMainWindow):
         self.bus = SignalBus()
         self.paths = build_runtime_paths(dds_data, app_data)
         self.settings_store = SettingsStore(self.paths.settings)
-        self.media_cache = MediaCacheService(self.paths.media)
+        self.media_cache = MediaCacheService(self.paths.media, self.paths.database)
         self._last_diagnostics_report = ""
         self.runtime = GuiRuntime(
             dds_data=dds_data,
@@ -431,6 +431,8 @@ class MainWindow(QMainWindow):
             return
         self.statusBar().showMessage("Настройка сохранена", 2500)
         self._refresh_settings_surface()
+        if key == "media_autodownload_enabled":
+            self.runtime.request_media_autodownload_change(bool(value))
         if key in {"media_cache_limit_bytes", "media_max_file_bytes", "media_retention_days"}:
             self._run_cache_policy_async("settings")
 
@@ -515,6 +517,7 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage(
                     f"Media cache очищен: {removed} файлов, {bytes_removed} bytes", 5000
                 )
+                self.runtime.request_media_wake()
             else:
                 QMessageBox.warning(self, "DDS Companion", f"Очистка cache завершилась с ошибкой:\n{error or result}")
         elif kind == "cache_policy" and payload.get("reason") != "startup":
@@ -547,7 +550,11 @@ class MainWindow(QMainWindow):
             f"Database: {subs.get('database', {}).get('state', 'UNKNOWN')}",
             f"DDS_Data: {subs.get('dds_data', {}).get('state', 'UNKNOWN')}",
             f"Watcher: {subs.get('watcher', {}).get('state', 'UNKNOWN')}",
+            f"Media Backfill: {subs.get('media', {}).get('state', 'UNKNOWN')}",
             f"Messages: {stats.get('messages', 0)}",
+            f"Media known/cached: {stats.get('known_media', 0)} / {stats.get('cached_media_files', 0)}",
+            f"Media queued/downloading: {stats.get('media_queued', 0)} / {stats.get('media_downloading', 0)}",
+            f"Media retry/stale/failed: {stats.get('media_retryable_failed', 0)} / {stats.get('media_stale_url', 0)} / {stats.get('media_permanent_failed', 0)}",
             f"Storage bytes: {stats.get('total_known_storage_bytes', 0)}",
             f"SQLite bytes: {stats.get('sqlite_bytes', 0)}",
             f"DDS JSON bytes: {stats.get('dds_json_bytes', 0)}",

@@ -1,0 +1,82 @@
+DDS Companion 0.5.0 — Windows Live Test Checklist
+=================================================
+Status: CANDIDATE r2 / 69 AUTOMATED TESTS PASS. r1 live test already passed migration, real 6/6 caching and restart dedup; r2 fixes manual-clear recovery + observability/colors.
+Required baseline: DDS Plugin 0.5.3 + verified 0.4.6 archive data.
+
+0. SAFETY / UPGRADE
+[ ] Keep a copy of the 0.4.6 package; do not delete the existing archive.
+[ ] Launch 0.5.0 against the existing %LOCALAPPDATA%\DDS_Companion data root.
+[ ] Existing message/server/channel/thread counts remain present.
+[ ] Database quick check = PASS — ok.
+[ ] No migration traceback; schema upgrades in place.
+
+1. STARTUP / REGRESSION
+[ ] Window comes foreground once and never steals focus later.
+[ ] Overall Health remains truthful.
+[ ] Discord off/on and Plugin off/on still recover automatically.
+[ ] Temporary DDS_Data loss still gives LIMITED/WAITING and recovers.
+[ ] Normal close produces no traceback.
+
+2. MEDIA REGISTRY WITH NETWORK OFF BY DEFAULT
+[ ] Settings -> Data & Storage shows Automatic media download Off on first 0.5.0 upgrade unless explicitly enabled before.
+[ ] Dashboard Media known count reflects archived attachments after registry bootstrap.
+[ ] Health has a Media Backfill card showing STOPPED while automatic download is Off.
+[ ] Restart; Off state persists and no media binaries are downloaded.
+
+3. ENABLE BACKFILL
+Use a channel/capture containing at least one small, currently accessible Discord attachment.
+[ ] Enable Automatic media download.
+[ ] Setting persists after restart.
+[ ] Health Media Backfill becomes RUNNING or temporarily active/limited with a concrete reason.
+[ ] Attachment progresses to cached without freezing Dashboard/Library/Activity.
+[ ] Dashboard known/cached count increases appropriately.
+[ ] Storage diagram Media cache bytes increase.
+[ ] Activity contains a media_cached event.
+[ ] Cached file exists under %LOCALAPPDATA%\DDS_Companion\media\objects\...
+
+4. DEDUP / RESTART
+[x] Restart Companion with the same captured attachments.
+[x] Already-cached media is not downloaded again / into duplicate paths.
+[x] Known/cached remained 6 / 6.
+[x] Existing archive/message count remained 67.
+
+5. POLICY — MAX FILE
+[ ] Set Max single media file to a value below a known larger attachment (or use an appropriate test attachment).
+[ ] Item becomes TOO_LARGE / is not downloaded.
+[ ] Other smaller media can continue.
+[ ] Raising the limit makes the item eligible again without DB reset.
+
+6. FAILURE ISOLATION / NETWORK
+[ ] Temporarily make network unavailable (or test with an expired/unavailable signed attachment URL).
+[ ] Companion UI, watcher and archive remain responsive.
+[ ] Media card reports LIMITED / retry or STALE reason instead of crashing.
+[ ] Restore network / provide fresh capture URL; media worker recovers without Companion reinstall.
+[ ] No rapid retry storm is visible in Activity.
+
+7. CLEAR / EVICTION SAFETY + r2 MANUAL RECOVERY
+[x] With cached media, Clear media cache enabled and cleared the physical cache.
+[x] Storage diagram updated and Dashboard became 6 known / 0 cached.
+[x] SQLite/archive remained healthy; Database quick check PASS.
+[x] r1 correctly avoided immediate refill but failed to recover after explicit re-enable (live finding; fixed in r2).
+[ ] On r2: keep Automatic media download Off, Clear media cache, verify 6 / 0.
+[ ] Activity records "Automatic media backfill disabled" when toggled Off.
+[ ] Starting from the current r1-created 6/0 EVICTED state is valid; no DB cleanup/reset is required.
+[ ] Toggle Automatic media download Off once if it is currently On, then On once.
+[ ] Activity records enabled + manual-clear requeue evidence.
+[ ] Manually cleared attachments download again and return to 6 / 6.
+[ ] No repeated download/eviction loop occurs.
+[ ] Policy-evicted items (when policy forces eviction) do not get resurrected by manual-clear recovery.
+
+8. STORAGE VISUAL CORRELATION (r2)
+[ ] Dashboard and Settings storage bars use the same per-category colors as the donut: SQLite purple, DDS JSON blue, Media cache green, Other amber, Logs muted.
+[ ] Percentages/bytes remain unchanged; this is presentation only.
+
+9. DIAGNOSTICS
+[ ] System report shows Companion 0.5.0.
+[ ] Report includes Media Backfill state and known/cached/queued/failure counters.
+[ ] Database quick check remains PASS — ok after media activity/cleanup.
+[ ] unresolved critical failures remain 0 unless a deliberately induced critical import failure exists.
+
+PROMOTION GATE
+0.5.0 becomes VERIFIED / LIVE TESTED / CURRENT RECOMMENDED only after all applicable checks above pass.
+Any failure keeps 0.4.6 current and is fixed in a new candidate; do not overwrite evidence.

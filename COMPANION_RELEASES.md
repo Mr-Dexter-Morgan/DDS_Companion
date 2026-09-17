@@ -12,17 +12,18 @@
 | `0.4.2` | **LIVE UI REVIEW / SUPERSEDED** | Settings IA and primary pages visually reviewed. |
 | `0.4.3` | **LIVE-TESTED / SUPERSEDED** | Discord process detection and DDS_Data loss/recovery worked live. |
 | `0.4.4` | **LIVE-TESTED / SUPERSEDED** | Health truthfulness and Plugin 0.5.3 heartbeat integration validated live. |
-| `0.4.5` | **VERIFIED / LIVE TESTED / SUPERSEDED** | Startup foreground/no-focus-steal and truthful runtime dependency states passed live. Automated suite: 40/40 PASS. |
-| `0.4.6` | **VERIFIED / LIVE TESTED / CURRENT RECOMMENDED** | UI/Storage foundation, persisted cache policy, diagnostics and safe media-cache cleanup passed Windows live validation. Automated suite: 52/52 PASS. |
+| `0.4.5` | **VERIFIED / LIVE TESTED / SUPERSEDED** | Startup/no-focus-steal and final Health regression passed. |
+| `0.4.6` | **VERIFIED / LIVE TESTED / CURRENT RECOMMENDED** | Dashboard/Storage/Settings foundation, persistence, cache safety and diagnostics passed live on Windows. |
+| `0.5.0` | **CANDIDATE r2 / AUTOMATED PASS / LIVE PENDING** | Media Backfill Core. r1 passed real 6/6 caching + restart dedup; r2 fixes manual-clear recovery, toggle observability and storage color correlation. |
 
 ## Current recommended Companion release
 
 **`0.4.6` — VERIFIED / LIVE TESTED / CURRENT RECOMMENDED.**
 
-## Current plugin dependency
+0.4.6 live validation confirmed Dashboard/Storage rendering, settings persistence, Health shortcut, Discord/Plugin recovery, clean shutdown, selective media-cache clear, System report and SQLite `PASS — ok`. Final automated baseline: 52/52 PASS.
 
-**DDS Plugin `0.5.3` — VERIFIED / LIVE TESTED / RELEASED / CURRENT RECOMMENDED.**
+## Current candidate
 
-## Next work
+**`0.5.0` — CANDIDATE r2 / AUTOMATED PASS / WINDOWS LIVE PENDING.**
 
-**Media Backfill / media backend**, building on the validated cache/settings foundation.
+Automated gate: **70/70 PASS repeated three consecutive runs**, plus compileall and CLI version PASS. Windows r1 live results already confirmed migration, 67-message preservation, real 6/6 caching and restart dedup. r1 then exposed a manual-clear requeue gap; r2 fixes it and must pass the remaining live checks before promotion. Until then 0.4.6 remains rollback/current baseline.

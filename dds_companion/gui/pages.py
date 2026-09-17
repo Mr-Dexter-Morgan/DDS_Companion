@@ -167,11 +167,11 @@ class DashboardPage(Page):
         self.storage_donut = StorageDonut()
         storage_layout.addWidget(self.storage_donut, 0, Qt.AlignHCenter)
         self.storage_rows = {
-            "sqlite_bytes": StorageRow("SQLite + WAL/SHM"),
-            "dds_json_bytes": StorageRow("DDS JSON"),
-            "media_bytes": StorageRow("Media cache"),
-            "other_bytes": StorageRow("Other"),
-            "logs_bytes": StorageRow("Logs"),
+            "sqlite_bytes": StorageRow("SQLite + WAL/SHM", ACCENT),
+            "dds_json_bytes": StorageRow("DDS JSON", INFO),
+            "media_bytes": StorageRow("Media cache", SUCCESS),
+            "other_bytes": StorageRow("Other", WARNING),
+            "logs_bytes": StorageRow("Logs", MUTED),
         }
         for row in self.storage_rows.values():
             storage_layout.addWidget(row)
@@ -521,6 +521,7 @@ class HealthPage(Page):
             ("watcher", "Watcher"),
             ("discord", "Discord"),
             ("plugin", "DDS Plugin"),
+            ("media", "Media Backfill"),
             ("updates", "Update check"),
         ]
         for index, (key, label) in enumerate(names):
@@ -546,10 +547,7 @@ class HealthPage(Page):
             lay.addWidget(summary)
             lay.addWidget(updated)
             lay.addStretch(1)
-            if key == "updates":
-                grid.addWidget(card, index // 2, 0, 1, 2)
-            else:
-                grid.addWidget(card, index // 2, index % 2)
+            grid.addWidget(card, index // 2, index % 2)
             self.cards[key] = (card, state, summary, updated)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
@@ -678,7 +676,7 @@ class SettingsPage(Page):
         ))
         info = QLabel(
             "Start with Windows, Start minimized, tray и Close behavior появятся только вместе "
-            "с реальной persistent-реализацией. 0.4.6 не показывает декоративные переключатели."
+            "с реальной persistent-реализацией. 0.5.0 по-прежнему не показывает декоративные переключатели."
         )
         info.setObjectName("SectionHint")
         info.setWordWrap(True)
@@ -705,17 +703,28 @@ class SettingsPage(Page):
         self.storage_total.setStyleSheet(f"color:{TEXT};font-size:17pt;font-weight:750;")
         usage_layout.addWidget(self.storage_total)
         self.storage_rows = {
-            "sqlite_bytes": StorageRow("SQLite + WAL/SHM"),
-            "dds_json_bytes": StorageRow("DDS JSON"),
-            "media_bytes": StorageRow("Media cache"),
-            "other_bytes": StorageRow("Other"),
-            "logs_bytes": StorageRow("Logs"),
+            "sqlite_bytes": StorageRow("SQLite + WAL/SHM", ACCENT),
+            "dds_json_bytes": StorageRow("DDS JSON", INFO),
+            "media_bytes": StorageRow("Media cache", SUCCESS),
+            "other_bytes": StorageRow("Other", WARNING),
+            "logs_bytes": StorageRow("Logs", MUTED),
         }
         for row in self.storage_rows.values():
             usage_layout.addWidget(row)
         storage_layout.addWidget(usage)
 
-        storage_layout.addWidget(SectionHeader("Media cache policy", "Политика уже применяется к бинарному media cache"))
+        storage_layout.addWidget(SectionHeader("Media Backfill", "Сеть включается только явным persistent-переключателем"))
+        self.media_autodownload = QCheckBox("Автоматически")
+        self.media_autodownload.toggled.connect(
+            lambda value: self._on_setting_changed("media_autodownload_enabled", bool(value))
+        )
+        storage_layout.addWidget(SettingRow(
+            "Automatic media download",
+            "Если включено, Companion фоново кэширует известные Discord attachments; ошибки media не блокируют архив.",
+            control=self.media_autodownload,
+        ))
+
+        storage_layout.addWidget(SectionHeader("Media cache policy", "Политика применяется к реальному Media Backfill cache"))
         self.cache_limit_combo = self._combo(self.CACHE_LIMITS)
         self.max_file_combo = self._combo(self.MAX_FILE_LIMITS)
         self.retention_combo = self._combo(self.RETENTION_LIMITS)
@@ -740,7 +749,7 @@ class SettingsPage(Page):
         ))
         storage_layout.addWidget(SettingRow(
             "Keep unused media",
-            "До Media Backfill возраст определяется по mtime файла; позже заменим на явный last-access.",
+            "Для зарегистрированного media используется last-access/cached-at; для orphan-файлов безопасный fallback — mtime.",
             control=self.retention_combo,
         ))
 
@@ -911,6 +920,11 @@ class SettingsPage(Page):
         self._set_combo_value(self.cache_limit_combo, settings.get("media_cache_limit_bytes"))
         self._set_combo_value(self.max_file_combo, settings.get("media_max_file_bytes"))
         self._set_combo_value(self.retention_combo, settings.get("media_retention_days"))
+        self.media_autodownload.blockSignals(True)
+        try:
+            self.media_autodownload.setChecked(bool(settings.get("media_autodownload_enabled", False)))
+        finally:
+            self.media_autodownload.blockSignals(False)
         self.confirm_clear.blockSignals(True)
         try:
             self.confirm_clear.setChecked(bool(settings.get("confirm_media_cache_clear", True)))

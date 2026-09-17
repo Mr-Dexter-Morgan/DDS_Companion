@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 BASE_SCHEMA_SQL = r"""
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -207,15 +207,64 @@ CREATE INDEX IF NOT EXISTS idx_subsystem_health_state ON subsystem_health(state)
 """
 
 
+V3_SCHEMA_SQL = r"""
+CREATE TABLE IF NOT EXISTS media_objects (
+    media_key TEXT PRIMARY KEY,
+    attachment_id TEXT,
+    filename TEXT,
+    content_type TEXT,
+    expected_size INTEGER,
+    current_url TEXT,
+    proxy_url TEXT,
+    url_observed_at TEXT,
+    state TEXT NOT NULL DEFAULT 'KNOWN',
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    next_retry_at TEXT,
+    last_attempt_at TEXT,
+    local_relpath TEXT,
+    local_size INTEGER,
+    sha256 TEXT,
+    cached_at TEXT,
+    last_access_at TEXT,
+    last_http_status INTEGER,
+    last_error TEXT,
+    failure_class TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_media_objects_attachment_id
+    ON media_objects(attachment_id) WHERE attachment_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_media_objects_state_retry
+    ON media_objects(state, next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_media_objects_updated_at
+    ON media_objects(updated_at);
+
+CREATE TABLE IF NOT EXISTS media_refs (
+    message_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    media_key TEXT NOT NULL,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    PRIMARY KEY(message_id, position),
+    FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE,
+    FOREIGN KEY(media_key) REFERENCES media_objects(media_key) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_refs_media_key ON media_refs(media_key);
+"""
+
+
 def apply_migrations(connection: sqlite3.Connection) -> None:
     """Apply additive migrations in place.
 
-    0.3.0 deliberately keeps the existing archive schema intact and only adds
-    observability tables. Old 0.1.x/0.2.x databases therefore upgrade without
-    copying, resetting, or rewriting archived Discord data.
+    Migrations are additive. 0.5.0 adds the media registry/state contract without
+    rewriting existing archive tables, so older verified databases upgrade in place.
     """
     connection.executescript(BASE_SCHEMA_SQL)
     connection.executescript(V2_SCHEMA_SQL)
+    connection.executescript(V3_SCHEMA_SQL)
     connection.execute(
         "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",

@@ -186,8 +186,9 @@ class HealthRow(QWidget):
 
 
 class StorageRow(QWidget):
-    def __init__(self, label: str, parent: QWidget | None = None):
+    def __init__(self, label: str, color: str = ACCENT, parent: QWidget | None = None):
         super().__init__(parent)
+        self.color = color
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 3, 0, 3)
         layout.setSpacing(5)
@@ -204,6 +205,10 @@ class StorageRow(QWidget):
         self.bar.setRange(0, 1000)
         self.bar.setValue(0)
         self.bar.setTextVisible(False)
+        self.bar.setStyleSheet(
+            "QProgressBar{background:#202635;border:none;border-radius:4px;min-height:8px;}"
+            f"QProgressBar::chunk{{background:{self.color};border-radius:4px;}}"
+        )
         layout.addLayout(line)
         layout.addWidget(self.bar)
 

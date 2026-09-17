@@ -1,32 +1,39 @@
-DDS Companion 0.4.6 — Validation
-================================
+DDS Companion 0.5.0 — Validation
+=================================
+Status: CANDIDATE r2 / AUTOMATED PASS / WINDOWS LIVE PENDING
+Date: 2026-09-17
+Baseline: DDS Companion 0.4.6 — VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
 
-Candidate date: 2026-09-17
-
-AUTOMATED
-- unittest discover: 51/51 PASS
+AUTOMATED GATE
 - Python compileall: PASS
-- theme import: PASS
-- CLI --version: DDS Companion 0.4.6 PASS
+- Full unittest discovery: 70/70 PASS
+- Full suite repeated three consecutive times on the r2 source tree: PASS / PASS / PASS
+- CLI --version: DDS Companion 0.5.0 PASS
+- Existing watcher/import/Health/UI/settings/cache regressions remain PASS
 
-NEW 0.4.6 COVERAGE
-- atomic settings persistence
-- corrupt settings fallback
-- invalid settings rejection
-- media cache clear isolation
-- oversized/expired media eviction
-- oldest-first cache-size eviction
-- unlimited cache policy
-- Dashboard source contract: no duplicate Health/maintenance buttons
-- Health shortcut source contract
-- Settings/Data & Storage/Diagnostics source contract
-- no fake autostart/media-download/update controls
+NEW 0.5.0 COVERAGE
+- schema v1 archive upgrades additively to schema v3 without losing rows;
+- import registers stable media identity + message reference;
+- legacy pre-0.5 attachment projection is idempotent;
+- stale signed URL recovers when capture supplies a new URL;
+- intentional EVICTED state is not resurrected by ordinary signed-URL rotation;
+- successful download uses staging -> atomic cache path and records SHA-256/size;
+- one failed media item does not block another media item or archive rows;
+- media failure is visible as a Media subsystem problem without making the healthy local archive overall LIMITED;
+- max-file/cache policy can block network before transfer;
+- non-Discord URL is skipped before network (SSRF guard);
+- HTTP 403 becomes STALE_URL;
+- transient network error becomes bounded FAILED_RETRYABLE with backoff;
+- cache clear/eviction preserves archive metadata and marks registry EVICTED with reason;
+- manual-clear EVICTED rows stay inert until explicit user Off -> On, then requeue and can cache again;
+- legacy candidate-r1 EVICTED rows with NULL failure_class are recoverable by explicit r2 Off -> On without database reset;
+- policy-evicted rows are not resurrected by that explicit manual-clear recovery path;
+- rapid explicit autodownload True/False/True commands are recorded in Activity in order;
+- storage-row colors are tied to the same category palette as the donut chart;
+- abandoned DOWNLOADING claim is recovered;
+- Automatic media download setting persists;
+- GUI source contract exposes only the new real media toggle, not fake future controls.
 
-ENVIRONMENT NOTE
-`pip check` in the analysis container reports an unrelated global environment conflict:
-moviepy requires pillow <12 while the container has pillow 12.3.0. DDS Companion does not depend on moviepy or pillow, so this is not a project dependency failure.
-
-LIVE WINDOWS GATE
-Pending. Use LIVE_TEST_CHECKLIST_0.4.6.txt.
-
-Candidate r2 automated validation: 52/52 PASS
+LIVE GATE
+Partially passed on Windows: migration, 67-message archive preservation, database quick check, 6 known -> 6 cached real backfill and restart dedup all passed. Candidate r1 manual-clear recovery failed and was fixed in r2. Continue with LIVE_TEST_CHECKLIST_0.5.0.txt using r2.
+0.4.6 remains CURRENT RECOMMENDED until the 0.5.0 Windows live gate is complete.

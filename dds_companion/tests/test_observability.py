@@ -83,6 +83,22 @@ class ObservabilityTests(unittest.TestCase):
         self.assertEqual(snapshot["subsystems"]["dds_data"]["state"], "RUNNING")
         self.assertEqual(snapshot["subsystems"]["watcher"]["state"], "RUNNING")
 
+    def test_media_failure_is_visible_but_does_not_limit_archive_overall(self):
+        self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
+        self.health.set_subsystem("importer", "RUNNING", "ok")
+        baseline = self.health.snapshot(watcher_expected=True)
+        self.assertEqual(baseline["state"], "RUNNING")
+
+        self.health.set_subsystem(
+            "media",
+            "LIMITED",
+            "one attachment failed; archive remains operational",
+            details={"retryable_failed": 1},
+        )
+        snapshot = self.health.snapshot(watcher_expected=True)
+        self.assertEqual(snapshot["subsystems"]["media"]["state"], "LIMITED")
+        self.assertEqual(snapshot["state"], "RUNNING")
+
     def test_stale_watcher_is_explicit_and_limits_overall(self):
         self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
         stale = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
@@ -292,7 +308,7 @@ class ObservabilityTests(unittest.TestCase):
         self.assertEqual(snapshot.cached_media_files, 0)
         self.assertGreaterEqual(snapshot.session_activity_events_added, 1)
 
-    def test_schema_v1_archive_upgrades_additively_to_v2(self):
+    def test_schema_v1_archive_upgrades_additively_to_v3(self):
         legacy_db = self.root / "legacy.sqlite3"
         legacy = sqlite3.connect(legacy_db)
         legacy.row_factory = sqlite3.Row
@@ -304,11 +320,13 @@ class ObservabilityTests(unittest.TestCase):
         )
         legacy.commit()
         apply_migrations(legacy)
-        self.assertEqual(legacy.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0], "2")
+        self.assertEqual(legacy.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0], "3")
         self.assertEqual(legacy.execute("SELECT name FROM guilds WHERE id='1'").fetchone()[0], "keep-me")
         tables = {row[0] for row in legacy.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         self.assertIn("activity_events", tables)
         self.assertIn("subsystem_health", tables)
+        self.assertIn("media_objects", tables)
+        self.assertIn("media_refs", tables)
         legacy.close()
 
 

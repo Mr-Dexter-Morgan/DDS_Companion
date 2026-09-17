@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import queue
 import time
 from pathlib import Path
 from threading import Event
@@ -11,6 +12,7 @@ from dds_companion.services.activity_service import ActivityRecord, ActivityServ
 from dds_companion.services.health_service import HealthService
 from dds_companion.services.import_service import ImportService
 from dds_companion.services.library_service import LibraryService
+from dds_companion.services.media_runtime import MediaBackfillRuntime
 from dds_companion.services.runtime_monitor import RuntimeMonitor
 from dds_companion.services.stats_service import StatsService
 from dds_companion.storage.database import connect_database
@@ -54,6 +56,8 @@ class GuiRuntime:
         self.stopped_sink = stopped_sink
         self.stop_event = Event()
         self.refresh_event = Event()
+        self.media_wake_event = Event()
+        self.media_control_queue: queue.Queue[bool] = queue.Queue()
         self._last_snapshot_at = 0.0
         self._last_library_refresh_at = 0.0
         self._library_cache: list[dict] = []
@@ -63,6 +67,13 @@ class GuiRuntime:
     def request_refresh(self) -> None:
         self.refresh_event.set()
 
+    def request_media_wake(self) -> None:
+        self.media_wake_event.set()
+
+    def request_media_autodownload_change(self, enabled: bool) -> None:
+        self.media_control_queue.put(bool(enabled))
+        self.media_wake_event.set()
+
     def stop(self) -> None:
         self.stop_event.set()
 
@@ -71,6 +82,7 @@ class GuiRuntime:
         connection = None
         activity: ActivityService | None = None
         health: HealthService | None = None
+        media_thread = None
         try:
             connection = connect_database(self.paths.database)
             importer = ImportService(connection)
@@ -144,6 +156,24 @@ class GuiRuntime:
             )
             health.set_subsystem("watcher", "RUNNING", "watcher armed and ready")
 
+            # Media backfill owns a separate SQLite connection/thread. Slow CDN or
+            # disk work can therefore never stall capture watcher/import/UI snapshots.
+            media_runtime = MediaBackfillRuntime(
+                database_path=self.paths.database,
+                media_root=self.paths.media,
+                settings_path=self.paths.settings,
+                dds_data_path=self.paths.dds_data,
+                stop_event=self.stop_event,
+                wake_event=self.media_wake_event,
+                control_queue=self.media_control_queue,
+            )
+            import threading
+            media_thread = threading.Thread(
+                target=media_runtime.run, name="dds-media-backfill", daemon=True
+            )
+            media_thread.start()
+            self.media_wake_event.set()
+
             self._library_cache = library.snapshot()
             self._last_library_refresh_at = time.monotonic()
             self._emit_snapshot(stats, health, activity, library, force=True)
@@ -160,6 +190,8 @@ class GuiRuntime:
                             "result": event.result.__dict__ if event.result else None,
                         },
                     )
+                if event.kind == "imported":
+                    self.media_wake_event.set()
                 if event.kind in {"imported", "failed", "deleted"}:
                     # Structural changes are uncommon; refresh the Library only on
                     # meaningful archive events, not on every filesystem scan.
@@ -208,6 +240,11 @@ class GuiRuntime:
                 )
             self._safe(self.error_sink, f"{type(exc).__name__}: {exc}")
         finally:
+            # A media subsystem failure must never outlive the archive runtime.
+            self.stop_event.set()
+            self.media_wake_event.set()
+            if media_thread is not None and media_thread.is_alive():
+                media_thread.join(timeout=5.0)
             if connection is not None:
                 try:
                     connection.close()
