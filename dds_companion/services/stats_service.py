@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -67,6 +68,9 @@ class StatsSnapshot:
     cache_bytes: int
     media_bytes: int
     logs_bytes: int
+    backups_bytes: int
+    config_bytes: int
+    other_bytes: int
     total_known_storage_bytes: int
     last_successful_import: str | None
     session_messages_added: int
@@ -79,7 +83,15 @@ class StatsSnapshot:
 
 
 class StatsService:
-    """Fast snapshot API with a process-session baseline for future Dashboard use."""
+    """Fast snapshot API with a cached storage scan.
+
+    Database counters are cheap and stay live. Recursive filesystem size walks are
+    cached for a short interval so a large archive cannot monopolize the watcher
+    thread every time the GUI refreshes. A manual/meaningful forced snapshot asks
+    for a fresh storage scan.
+    """
+
+    STORAGE_SCAN_INTERVAL_SECONDS = 10.0
 
     def __init__(
         self,
@@ -90,17 +102,24 @@ class StatsService:
         cache_path: str | Path | None = None,
         media_path: str | Path | None = None,
         logs_path: str | Path | None = None,
+        backups_path: str | Path | None = None,
+        config_path: str | Path | None = None,
     ):
         self.connection = connection
         self.database_path = Path(database_path)
         self.dds_data_path = Path(dds_data_path)
-        self.cache_path = Path(cache_path) if cache_path else self.database_path.parent.parent / "cache"
-        self.media_path = Path(media_path) if media_path else self.database_path.parent.parent / "media"
-        self.logs_path = Path(logs_path) if logs_path else self.database_path.parent.parent / "logs"
-        self._baseline = self._raw()
+        root = self.database_path.parent.parent
+        self.cache_path = Path(cache_path) if cache_path else root / "cache"
+        self.media_path = Path(media_path) if media_path else root / "media"
+        self.logs_path = Path(logs_path) if logs_path else root / "logs"
+        self.backups_path = Path(backups_path) if backups_path else root / "backups"
+        self.config_path = Path(config_path) if config_path else root / "config"
+        self._storage_cache: dict[str, int] = {}
+        self._last_storage_scan_at = 0.0
+        self._baseline = self._raw(force_storage=True)
 
-    def snapshot(self) -> StatsSnapshot:
-        current = self._raw()
+    def snapshot(self, *, force_storage: bool = False) -> StatsSnapshot:
+        current = self._raw(force_storage=force_storage)
         return StatsSnapshot(
             **current,
             session_messages_added=current["messages"] - self._baseline["messages"],
@@ -109,7 +128,42 @@ class StatsService:
             session_storage_delta_bytes=current["total_known_storage_bytes"] - self._baseline["total_known_storage_bytes"],
         )
 
-    def _raw(self) -> dict:
+    def _storage_metrics(self, *, force: bool = False) -> dict[str, int]:
+        now = time.monotonic()
+        if (
+            not force
+            and self._storage_cache
+            and now - self._last_storage_scan_at < self.STORAGE_SCAN_INTERVAL_SECONDS
+        ):
+            return dict(self._storage_cache)
+
+        sqlite_bytes = sqlite_family_size(self.database_path)
+        dds_size = directory_size(self.dds_data_path)
+        cache_bytes = directory_size(self.cache_path)
+        media_bytes = directory_size(self.media_path)
+        logs_bytes = directory_size(self.logs_path)
+        backups_bytes = directory_size(self.backups_path)
+        config_bytes = directory_size(self.config_path)
+        cached_media_files = directory_file_count(self.media_path)
+        other_bytes = cache_bytes + backups_bytes + config_bytes
+        total = sqlite_bytes + dds_size + media_bytes + logs_bytes + other_bytes
+
+        self._storage_cache = {
+            "sqlite_bytes": sqlite_bytes,
+            "dds_json_bytes": dds_size,
+            "cache_bytes": cache_bytes,
+            "media_bytes": media_bytes,
+            "logs_bytes": logs_bytes,
+            "backups_bytes": backups_bytes,
+            "config_bytes": config_bytes,
+            "other_bytes": other_bytes,
+            "cached_media_files": cached_media_files,
+            "total_known_storage_bytes": total,
+        }
+        self._last_storage_scan_at = now
+        return dict(self._storage_cache)
+
+    def _raw(self, *, force_storage: bool = False) -> dict:
         last_import_row = self.connection.execute(
             "SELECT value FROM application_state WHERE key='last_successful_import'"
         ).fetchone()
@@ -117,12 +171,8 @@ class StatsService:
             self.connection.execute("SELECT COUNT(*) FROM failed_jobs WHERE resolved_at IS NULL").fetchone()[0]
         )
 
-        sqlite_bytes = sqlite_family_size(self.database_path)
-        dds_size = directory_size(self.dds_data_path)
-        cache_bytes = directory_size(self.cache_path)
-        media_bytes = directory_size(self.media_path)
-        logs_bytes = directory_size(self.logs_path)
         attachments = _count(self.connection, "attachments")
+        storage = self._storage_metrics(force=force_storage)
 
         return {
             "messages": _count(self.connection, "messages"),
@@ -138,21 +188,15 @@ class StatsService:
             "failed_jobs_unresolved": unresolved,
             # Until Media stage, attachment rows are the reliable known-media unit.
             "known_media": attachments,
-            "cached_media_files": directory_file_count(self.media_path),
-            "sqlite_bytes": sqlite_bytes,
-            "dds_json_bytes": dds_size,
-            "cache_bytes": cache_bytes,
-            "media_bytes": media_bytes,
-            "logs_bytes": logs_bytes,
-            "total_known_storage_bytes": sqlite_bytes + dds_size + cache_bytes + media_bytes + logs_bytes,
             "last_successful_import": last_import_row[0] if last_import_row else None,
+            **storage,
         }
 
 
 def collect_stats(connection: sqlite3.Connection, database_path: Path, dds_data_path: Path) -> dict:
     """Compatibility wrapper for 0.1/0.2 callers.
 
-    The wrapper has a zero-length session by design. 0.3.0 runtime code keeps one
+    The wrapper has a zero-length session by design. GUI runtime keeps one
     StatsService instance for the full process to obtain meaningful session deltas.
     """
     return StatsService(connection, database_path, dds_data_path).snapshot().to_dict()

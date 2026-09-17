@@ -81,6 +81,8 @@ class GuiRuntime:
                 cache_path=self.paths.cache,
                 media_path=self.paths.media,
                 logs_path=self.paths.logs,
+                backups_path=self.paths.backups,
+                config_path=self.paths.config,
             )
             activity = ActivityService(connection)
             health = HealthService(connection, self.paths.dds_data)
@@ -176,7 +178,7 @@ class GuiRuntime:
 
             watcher.run(self.stop_event, on_tick=tick)
 
-            final_stats = stats.snapshot().to_dict()
+            final_stats = stats.snapshot(force_storage=True).to_dict()
             final_health = health.snapshot(watcher_expected=False)
             activity.publish(
                 subsystem="runtime",
@@ -247,9 +249,11 @@ class GuiRuntime:
                 "cache": str(self.paths.cache),
                 "media": str(self.paths.media),
                 "backups": str(self.paths.backups),
+                "config": str(self.paths.config),
+                "settings": str(self.paths.settings),
             },
             "watcher": {"poll_ms": self.poll_ms, "settle_ms": self.settle_ms},
-            "stats": stats.snapshot().to_dict(),
+            "stats": stats.snapshot(force_storage=force).to_dict(),
             "health": health_snapshot,
             "activity": [record.to_dict() for record in activity.recent(100)],
             "library": self._library_cache,

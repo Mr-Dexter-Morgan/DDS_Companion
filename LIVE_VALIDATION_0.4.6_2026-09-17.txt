@@ -1,0 +1,47 @@
+DDS Companion 0.4.6 — Final Windows Live Validation
+=====================================================
+
+Date: 2026-09-17
+Status: PASS / VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
+Plugin baseline: DDS Plugin 0.5.3
+Automated suite: 52/52 PASS
+
+PASS — startup / UI
+- Companion 0.4.6 launched successfully on Windows.
+- Dashboard rendered correctly and remained usable.
+- Storage ring and category breakdown rendered correctly.
+- Normal close produced no traceback.
+
+PASS — Settings / persistence
+- Data & Storage values were changed, Companion restarted, and values persisted.
+- Final observed policy values during validation included 1 GB cache limit, 25 MB max single media file, and 3 days retention.
+
+PASS — Health / runtime truthfulness
+- Global RUNNING status shortcut opens Health.
+- Discord off/on behavior remained truthful and recovered.
+- Plugin off/on behavior remained truthful and recovered.
+
+PASS — Diagnostics
+- System report generated successfully.
+- Final report showed Overall Health RUNNING.
+- Plugin, Discord, Database, DDS_Data and Watcher were RUNNING.
+- Unresolved failures: 0.
+- SQLite Database quick check: PASS — ok.
+- Companion version displayed: 0.4.6.
+- Plugin version displayed: 0.5.3.
+
+PASS — media-cache safety
+- A disposable file placed in Companion media cache was detected.
+- Media-cache size changed from 0 B to non-zero and Clear media cache became enabled.
+- Confirmation dialog explicitly stated archive/metadata would remain untouched.
+- After confirmation the disposable media file was removed.
+- Archive/message data remained present; observed message count stayed at 67 after the cache cleanup test.
+
+Bootstrap note
+--------------
+The first live session confirmed missing PySide6 detection and installation flow. Candidate r2 then removed the Y/N prompt and is covered by automated regression. Because PySide6 was already installed, the exact no-prompt clean-environment bootstrap was not independently repeated on Windows after r2.
+
+Promotion decision
+------------------
+0.4.6 is promoted to VERIFIED / LIVE TESTED / CURRENT RECOMMENDED.
+Next implementation stage: Media Backfill / media backend.

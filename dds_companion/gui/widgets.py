@@ -208,8 +208,9 @@ class StorageRow(QWidget):
         layout.addWidget(self.bar)
 
     def set_value(self, value: int, total: int) -> None:
-        self.value.setText(human_size(value))
         ratio = 0 if total <= 0 else min(1.0, value / total)
+        percent = ratio * 100
+        self.value.setText(f"{human_size(value)}  ·  {percent:.1f}%")
         self.bar.setValue(int(ratio * 1000))
 
 
@@ -251,3 +252,100 @@ class PathRow(Card):
         ok, detail = open_folder(self.path)
         if not ok:
             QMessageBox.warning(self, "DDS Companion", detail)
+
+
+class StorageDonut(QWidget):
+    """Compact storage ring used on Dashboard.
+
+    It is intentionally presentation-only: expensive directory scanning stays in
+    the background runtime and this widget only paints numbers from the snapshot.
+    """
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setMinimumSize(170, 170)
+        self.setMaximumHeight(210)
+        self._segments: list[tuple[str, int, str]] = []
+        self._total = 0
+
+    def set_segments(self, segments: list[tuple[str, int, str]]) -> None:
+        self._segments = [(label, max(0, int(value)), color) for label, value, color in segments]
+        self._total = sum(value for _label, value, _color in self._segments)
+        self.update()
+
+    def paintEvent(self, event) -> None:  # pragma: no cover - visual Qt surface
+        from PySide6.QtGui import QColor, QPainter, QPen
+        from PySide6.QtCore import QRectF
+
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        side = min(self.width(), self.height()) - 22
+        rect = QRectF(
+            (self.width() - side) / 2,
+            (self.height() - side) / 2,
+            side,
+            side,
+        )
+        pen_width = max(12, int(side * 0.09))
+        base_pen = QPen(QColor("#202635"), pen_width)
+        base_pen.setCapStyle(Qt.FlatCap)
+        painter.setPen(base_pen)
+        painter.drawArc(rect, 0, 360 * 16)
+
+        total = self._total
+        if total > 0:
+            start = 90 * 16
+            for _label, value, color in self._segments:
+                if value <= 0:
+                    continue
+                span = -int((value / total) * 360 * 16)
+                pen = QPen(QColor(color), pen_width)
+                pen.setCapStyle(Qt.FlatCap)
+                painter.setPen(pen)
+                painter.drawArc(rect, start, span)
+                start += span
+
+        painter.setPen(QColor(TEXT))
+        font = painter.font()
+        font.setPointSize(15)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(rect, Qt.AlignCenter, human_size(total))
+
+
+class SettingRow(QFrame):
+    """Telegram-style compact settings row with a caller-provided right control."""
+
+    def __init__(
+        self,
+        title: str,
+        hint: str = "",
+        *,
+        control: QWidget | None = None,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self.setProperty("settingRow", True)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(14, 10, 12, 10)
+        layout.setSpacing(14)
+        text = QVBoxLayout()
+        text.setSpacing(2)
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("SettingTitle")
+        self.hint_label = QLabel(hint)
+        self.hint_label.setObjectName("SettingHint")
+        self.hint_label.setWordWrap(True)
+        text.addWidget(self.title_label)
+        if hint:
+            text.addWidget(self.hint_label)
+        layout.addLayout(text, 1)
+        self.control = control
+        if control is not None:
+            layout.addWidget(control, 0, Qt.AlignVCenter)
+
+    def set_hint(self, hint: str) -> None:
+        self.hint_label.setText(hint)
+        self.hint_label.setVisible(bool(hint))

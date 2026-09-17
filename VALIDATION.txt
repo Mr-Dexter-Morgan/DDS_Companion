@@ -1,31 +1,32 @@
-DDS Companion 0.4.5 — Validation
+DDS Companion 0.4.6 — Validation
 ================================
 
-Build environment
------------------
-Python source build container; PySide6 is intentionally not required by the
-headless automated suite.
+Candidate date: 2026-09-17
 
-Automated validation
---------------------
-- python -m compileall -q dds_companion: PASS
-- python -m unittest discover -s dds_companion/tests -v: PASS (40/40)
-- Existing importer/watcher/archive regression suite: PASS
-- Discord process probe tests: PASS
-- Plugin 0.5.2 compatibility / UPDATE AVAILABLE state: PASS
-- Plugin 0.5.3 fresh RUNNING heartbeat state: PASS
-- Plugin clean STOPPED heartbeat state: PASS
-- Plugin stale heartbeat state: PASS
-- Discord-off overrides fresh Plugin heartbeat state: PASS
-- Missing DDS_Data -> Watcher WAITING contract: PASS
-- Health transition/reason logging contract: PASS
-- LIMITED legacy DEGRADED normalization: PASS
-- UI source contract for DDS Plugin card and tooltips: PASS
+AUTOMATED
+- unittest discover: 51/51 PASS
+- Python compileall: PASS
+- theme import: PASS
+- CLI --version: DDS Companion 0.4.6 PASS
 
-Not claimed here
-----------------
-- Native PySide6 Windows rendering of the revised Health layout.
-- Live BetterDiscord production of plugin_heartbeat.json; that requires the
-  separate DDS Plugin 0.5.3 candidate.
-- Automatic GitHub plugin installation. The desired backup/replace/verify/
-  rollback flow is architecture work for the updater layer, not this build.
+NEW 0.4.6 COVERAGE
+- atomic settings persistence
+- corrupt settings fallback
+- invalid settings rejection
+- media cache clear isolation
+- oversized/expired media eviction
+- oldest-first cache-size eviction
+- unlimited cache policy
+- Dashboard source contract: no duplicate Health/maintenance buttons
+- Health shortcut source contract
+- Settings/Data & Storage/Diagnostics source contract
+- no fake autostart/media-download/update controls
+
+ENVIRONMENT NOTE
+`pip check` in the analysis container reports an unrelated global environment conflict:
+moviepy requires pillow <12 while the container has pillow 12.3.0. DDS Companion does not depend on moviepy or pillow, so this is not a project dependency failure.
+
+LIVE WINDOWS GATE
+Pending. Use LIVE_TEST_CHECKLIST_0.4.6.txt.
+
+Candidate r2 automated validation: 52/52 PASS

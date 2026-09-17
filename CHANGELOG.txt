@@ -1,35 +1,59 @@
-DDS Companion 0.4.5 — Startup Foreground Candidate
-=================================================
+DDS Companion 0.4.6 — UI / Storage Foundation
+==============================================
 
-Status: BUILT / LOCAL TESTING
+Status: VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
+Previous recommended: 0.4.5 (VERIFIED / LIVE TESTED)
+Date: 2026-09-17
 
-Purpose
--------
-Fix the Windows launch UX found at the end of the 0.4.4 live test: when
-Companion is started from Explorer, Explorer can remain in front while the
-Companion window opens behind it.
-
-Changed
--------
-- Added a one-shot startup foreground request after the native Qt window exists.
-- Qt raise/activate is attempted first.
-- On Windows, a best-effort Win32 fallback briefly toggles TOPMOST and
-  immediately removes it before requesting foreground.
-- The startup foreground path is guarded so later show/unminimize events cannot
-  steal focus.
-- Foreground polish failures are isolated and cannot prevent Companion startup.
-- Health now treats a fresh/stale plugin heartbeat as NOT RUNNING whenever the Discord process is definitely not running; last heartbeat metadata is retained for diagnostics.
-
-Unchanged
+Dashboard
 ---------
-- Health semantics and plugin-heartbeat-v1 integration from 0.4.4.
-- Archive schema and accumulated data.
-- Import/dedup/watcher capture semantics.
-- Dashboard, Library, Activity, Health and Settings information architecture.
-- No media downloading, AI export, updater backend or cloud synchronization.
+- Removed duplicated subsystem Health card.
+- Removed Open DDS_Data / Open logs maintenance shortcuts.
+- Added storage donut/ring and percentage + size breakdown.
+- Global top Health pill is now a Health-page shortcut outside Health itself.
+
+Settings / Storage
+------------------
+- Rebuilt Settings into General / Data & Storage / Archive / Diagnostics.
+- Added atomic persistent settings store under Companion config.
+- Added real media-cache policy controls: cache size limit, max file size, retention age, clear-confirmation.
+- Added media cache policy engine with oldest-first limit eviction.
+- Retention currently uses file mtime until Media Backfill adds explicit last-access tracking.
+- Manual Clear media cache deletes binary cache files only.
+- Clear button is disabled when cache size is 0 B.
+
+Diagnostics
+-----------
+- Moved logs/data maintenance access out of Dashboard.
+- Added System report generation and Copy report.
+- Added SQLite PRAGMA quick_check using a separate read connection.
+
+First-run source bootstrap
+--------------------------
+- PySide6 is treated as a required GUI component.
+- Missing PySide6 is installed automatically without a Y/N prompt.
+- Successful bootstrap verifies the import and launches the GUI.
+- Failure leaves archive data untouched and keeps a readable diagnostic console open.
 
 Validation
 ----------
-- Python compileall: PASS.
-- Full automated suite: 40/40 PASS.
-- Native Windows Explorer-launch validation: required.
+- Automated suite: 52/52 PASS.
+- Native Windows live gate: PASS.
+- Settings persistence across restart: PASS.
+- Dashboard Storage UI: PASS.
+- Global Health shortcut: PASS.
+- Discord / Plugin off-on recovery: PASS.
+- Normal shutdown / no traceback: PASS.
+- System report: PASS; zero unresolved failures during final check.
+- SQLite Database quick check: PASS — ok.
+- Media-cache detection + confirmation + selective deletion: PASS.
+- Archive/message data preserved after cache cleanup: PASS.
+
+Note
+----
+- The no-prompt PySide6 bootstrap revision is regression-tested, but a second clean-environment Windows bootstrap was not repeated after PySide6 had already been installed during the first live session.
+- Final 1.0 packaging is still expected to bundle runtime dependencies rather than use pip on end-user first launch.
+
+Next
+----
+Media Backfill / media backend.

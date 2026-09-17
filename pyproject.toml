@@ -1,6 +1,6 @@
 [project]
 name = "dds-companion"
-version = "0.4.5"
+version = "0.4.6"
 description = "Local archive processor and desktop dashboard for DDS — Discord Data Snatcher"
 requires-python = ">=3.11"
 authors = [

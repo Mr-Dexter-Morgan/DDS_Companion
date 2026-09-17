@@ -54,9 +54,20 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", normal)
         self.assertIn("run_companion.pyw", normal)
-        self.assertIn("DDS Companion 0.4.5", normal)
+        self.assertIn("DDS Companion 0.4.6", normal)
         self.assertIn("python -m dds_companion.gui.app", debug)
-        self.assertIn("DDS Companion 0.4.5", debug)
+        self.assertIn("DDS Companion 0.4.6", debug)
+
+    def test_046_first_run_gui_dependency_bootstrap_is_automatic(self):
+        normal = (self.root / "run_companion.bat").read_text(encoding="utf-8")
+        installer = (self.root / "install_gui_dependencies.bat").read_text(encoding="utf-8")
+        self.assertIn("goto bootstrap_gui", normal)
+        self.assertIn("install_gui_dependencies.bat --no-pause", normal)
+        self.assertIn("No user action is required", normal)
+        self.assertNotIn("choice /C", normal)
+        self.assertNotIn("Install it now?", normal)
+        self.assertIn("pip install --disable-pip-version-check -r requirements-gui.txt", installer)
+        self.assertNotIn("pip install --upgrade", installer)
 
     def test_duplicate_library_buttons_are_removed_from_topbar_and_dashboard(self):
         window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
@@ -89,15 +100,40 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         self.assertIn("user32.SetWindowPos(hwnd, HWND_NOTOPMOST", window)
         self.assertNotIn("WindowStaysOnTopHint", window)
 
-    def test_settings_separates_primary_controls_from_paths_and_storage(self):
+    def test_046_dashboard_removes_duplicate_health_and_maintenance_shortcuts(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        dashboard = pages[pages.index("class DashboardPage"):pages.index("class LibraryPage")]
+        self.assertNotIn("self.health_card", dashboard)
+        self.assertNotIn('QPushButton("Open DDS_Data")', dashboard)
+        self.assertNotIn('QPushButton("Open logs")', dashboard)
+        self.assertIn("StorageDonut", dashboard)
+        self.assertIn('StorageRow("Media cache")', dashboard)
+
+    def test_046_global_health_status_is_a_shortcut(self):
+        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
+        self.assertIn('self.top_status = QPushButton("STARTING")', window)
+        self.assertIn("self.top_status.clicked.connect(self._open_health_from_status)", window)
+        self.assertIn('self.PAGE_NAMES.index("Health")', window)
+
+    def test_046_settings_has_real_storage_and_diagnostics_sections(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         theme = (self.root / "dds_companion/gui/theme.py").read_text(encoding="utf-8")
         self.assertIn("QTabWidget", pages)
-        self.assertIn('self.tabs.addTab(general, "Основные")', pages)
-        self.assertIn('self.tabs.addTab(paths_page, "Paths & Storage")', pages)
-        self.assertIn('SectionHeader("Watcher policy"', pages)
-        self.assertIn('SectionHeader("Paths & Storage"', pages)
+        self.assertIn('self.tabs.addTab(general, "General")', pages)
+        self.assertIn('self.tabs.addTab(storage, "Data & Storage")', pages)
+        self.assertIn('self.tabs.addTab(archive, "Archive")', pages)
+        self.assertIn('self.tabs.addTab(diagnostics, "Diagnostics")', pages)
+        self.assertIn('SectionHeader("Media cache policy"', pages)
+        self.assertIn('QPushButton("Clear media cache")', pages)
+        self.assertIn('QPushButton("Run diagnostics")', pages)
         self.assertIn("QTabWidget#SettingsTabs", theme)
+        self.assertIn('QFrame[settingRow="true"]', theme)
+
+    def test_046_no_fake_autostart_or_update_toggles_are_exposed(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        self.assertNotIn('QCheckBox("Start with Windows")', pages)
+        self.assertNotIn('QCheckBox("Automatic media download")', pages)
+        self.assertNotIn('QPushButton("Check for updates")', pages)
 
 
 if __name__ == "__main__":

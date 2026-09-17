@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import sqlite3
 import sys
 import threading
 from pathlib import Path
@@ -22,6 +23,8 @@ from PySide6.QtWidgets import (
 
 from dds_companion import __version__
 from dds_companion.core.paths import build_runtime_paths
+from dds_companion.core.settings import SettingsStore
+from dds_companion.services.media_cache_service import MediaCacheService
 
 from .layout_profile import choose_layout_profile
 from .pages import ActivityPage, DashboardPage, HealthPage, LibraryPage, SettingsPage
@@ -36,6 +39,7 @@ class SignalBus(QObject):
     watch_event = Signal(object)
     runtime_error = Signal(str)
     stopped = Signal()
+    maintenance_done = Signal(object)
 
 
 class MainWindow(QMainWindow):
@@ -52,6 +56,9 @@ class MainWindow(QMainWindow):
 
         self.bus = SignalBus()
         self.paths = build_runtime_paths(dds_data, app_data)
+        self.settings_store = SettingsStore(self.paths.settings)
+        self.media_cache = MediaCacheService(self.paths.media)
+        self._last_diagnostics_report = ""
         self.runtime = GuiRuntime(
             dds_data=dds_data,
             app_data=app_data,
@@ -77,7 +84,10 @@ class MainWindow(QMainWindow):
                 "cache": str(self.paths.cache),
                 "media": str(self.paths.media),
                 "backups": str(self.paths.backups),
-            }
+                "config": str(self.paths.config),
+                "settings": str(self.paths.settings),
+            },
+            "settings": self.settings_store.snapshot(),
         }
         self._closing = False
 
@@ -86,6 +96,7 @@ class MainWindow(QMainWindow):
         self._size_for_primary_screen()
         self._apply_layout_profile(force=True)
         self.runtime_thread.start()
+        self._run_cache_policy_async("startup")
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -167,22 +178,26 @@ class MainWindow(QMainWindow):
         self.live_label.setToolTip("Последнее живое событие watcher/Activity")
         top.addWidget(self.live_label, 1)
 
-        self.top_status = QLabel("STARTING")
+        self.top_status = QPushButton("STARTING")
         self.top_status.setObjectName("StatusPill")
+        self.top_status.setCursor(Qt.PointingHandCursor)
+        self.top_status.clicked.connect(self._open_health_from_status)
         set_state_property(self.top_status, "STARTING")
         top.addWidget(self.top_status)
         content.addWidget(topbar)
 
         self.stack = QStackedWidget()
-        self.dashboard = DashboardPage(
-            self.runtime.request_refresh,
-            self.open_dds,
-            self.open_logs,
-        )
+        self.dashboard = DashboardPage(self.runtime.request_refresh)
         self.library = LibraryPage(self.open_library)
         self.activity = ActivityPage()
         self.health = HealthPage()
-        self.settings = SettingsPage()
+        self.settings = SettingsPage(
+            on_setting_changed=self._on_setting_changed,
+            on_clear_media_cache=self._clear_media_cache,
+            on_run_diagnostics=self._run_diagnostics,
+            on_database_check=self._database_quick_check,
+            on_copy_report=self._copy_diagnostics_report,
+        )
         self.pages = [self.dashboard, self.library, self.activity, self.health, self.settings]
         for page in self.pages:
             self.stack.addWidget(page)
@@ -331,19 +346,34 @@ class MainWindow(QMainWindow):
         self.bus.watch_event.connect(self._on_watch_event)
         self.bus.runtime_error.connect(self._on_runtime_error)
         self.bus.stopped.connect(self._on_runtime_stopped)
+        self.bus.maintenance_done.connect(self._on_maintenance_done)
 
     def _select_page(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
         for i, button in enumerate(self.nav_buttons):
             button.setChecked(i == index)
+        on_health = index == self.PAGE_NAMES.index("Health")
+        self.top_status.setEnabled(not on_health)
+        self.top_status.setToolTip(
+            "Текущая страница Health" if on_health else "Открыть Health"
+        )
+
+    def _open_health_from_status(self) -> None:
+        health_index = self.PAGE_NAMES.index("Health")
+        if self.stack.currentIndex() != health_index:
+            self._select_page(health_index)
 
     def _on_snapshot(self, snapshot: dict) -> None:
+        snapshot = dict(snapshot)
+        snapshot["settings"] = self.settings_store.snapshot()
         self.latest_snapshot = snapshot
         health = snapshot.get("health", {})
         state = health.get("state", "UNKNOWN")
         self.top_status.setText(state)
         set_state_property(self.top_status, state)
-        self.top_status.setToolTip(health.get("tooltip") or health.get("summary") or state)
+        if self.stack.currentIndex() != self.PAGE_NAMES.index("Health"):
+            detail = health.get("tooltip") or health.get("summary") or state
+            self.top_status.setToolTip(f"{detail}\nНажмите, чтобы открыть Health")
         stats = snapshot.get("stats", {})
         self.status_text.setText(
             f"{stats.get('messages', 0)} сообщений · "
@@ -392,6 +422,186 @@ class MainWindow(QMainWindow):
         if self._closing:
             return
         self.status_text.setText("Runtime остановлен")
+
+    def _on_setting_changed(self, key: str, value) -> None:
+        try:
+            self.settings_store.update(**{key: value})
+        except Exception as exc:
+            QMessageBox.warning(self, "DDS Companion", f"Не удалось сохранить настройку:\n{exc}")
+            return
+        self.statusBar().showMessage("Настройка сохранена", 2500)
+        self._refresh_settings_surface()
+        if key in {"media_cache_limit_bytes", "media_max_file_bytes", "media_retention_days"}:
+            self._run_cache_policy_async("settings")
+
+    def _refresh_settings_surface(self) -> None:
+        if not self.latest_snapshot:
+            return
+        snapshot = dict(self.latest_snapshot)
+        snapshot["settings"] = self.settings_store.snapshot()
+        self.latest_snapshot = snapshot
+        self.settings.update_snapshot(snapshot)
+
+    def _run_cache_policy_async(self, reason: str) -> None:
+        settings = self.settings_store.settings
+
+        def worker() -> None:
+            try:
+                result = self.media_cache.enforce(settings)
+                self.bus.maintenance_done.emit({
+                    "kind": "cache_policy",
+                    "reason": reason,
+                    "ok": result.errors == 0,
+                    "result": result.to_dict(),
+                })
+            except Exception as exc:
+                self.bus.maintenance_done.emit({
+                    "kind": "cache_policy",
+                    "reason": reason,
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+
+        threading.Thread(target=worker, name="dds-cache-policy", daemon=True).start()
+
+    def _clear_media_cache(self) -> None:
+        if int(self.latest_snapshot.get("stats", {}).get("media_bytes", 0)) <= 0:
+            self.statusBar().showMessage("Media cache уже пуст", 2500)
+            return
+        if self.settings_store.settings.confirm_media_cache_clear:
+            answer = QMessageBox.question(
+                self,
+                "DDS Companion — Clear media cache",
+                "Удалить только локальные media-файлы из cache?\n\n"
+                "SQLite, DDS JSON, сообщения и attachment metadata останутся нетронутыми.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+
+        self.clear_cache_worker_active = True
+        self.settings.clear_media_button.setEnabled(False)
+        self.settings.set_diagnostic_status("Очистка media cache…", report_available=bool(self._last_diagnostics_report))
+
+        def worker() -> None:
+            try:
+                result = self.media_cache.clear()
+                self.bus.maintenance_done.emit({
+                    "kind": "cache_clear",
+                    "ok": result.errors == 0,
+                    "result": result.to_dict(),
+                })
+            except Exception as exc:
+                self.bus.maintenance_done.emit({
+                    "kind": "cache_clear",
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+
+        threading.Thread(target=worker, name="dds-cache-clear", daemon=True).start()
+
+    def _on_maintenance_done(self, payload: dict) -> None:
+        kind = payload.get("kind")
+        ok = bool(payload.get("ok"))
+        result = payload.get("result") or {}
+        error = payload.get("error")
+
+        if kind == "cache_clear":
+            self.clear_cache_worker_active = False
+            if ok:
+                removed = result.get("files_removed", 0)
+                bytes_removed = result.get("bytes_removed", 0)
+                self.statusBar().showMessage(
+                    f"Media cache очищен: {removed} файлов, {bytes_removed} bytes", 5000
+                )
+            else:
+                QMessageBox.warning(self, "DDS Companion", f"Очистка cache завершилась с ошибкой:\n{error or result}")
+        elif kind == "cache_policy" and payload.get("reason") != "startup":
+            removed = result.get("files_removed", 0)
+            if removed:
+                self.statusBar().showMessage(
+                    f"Media cache policy применена: удалено {removed} файлов", 4000
+                )
+            elif not ok:
+                self.statusBar().showMessage(f"Cache policy warning: {error or result}", 5000)
+        elif kind == "db_check":
+            text = payload.get("message") or ("PASS" if ok else "FAILED")
+            self.settings.set_database_check_status(text)
+            self.statusBar().showMessage(f"Database quick check: {text}", 4000)
+
+        self.runtime.request_refresh()
+
+    def _run_diagnostics(self) -> None:
+        snapshot = self.latest_snapshot or {}
+        health = snapshot.get("health", {})
+        stats = snapshot.get("stats", {})
+        paths = snapshot.get("paths", {})
+        subs = health.get("subsystems", {})
+        lines = [
+            "DDS Companion — System report",
+            f"Companion: {snapshot.get('version', __version__)}",
+            f"Overall Health: {health.get('state', 'UNKNOWN')}",
+            f"Plugin: {subs.get('plugin', {}).get('state', 'UNKNOWN')}",
+            f"Discord: {subs.get('discord', {}).get('state', 'UNKNOWN')}",
+            f"Database: {subs.get('database', {}).get('state', 'UNKNOWN')}",
+            f"DDS_Data: {subs.get('dds_data', {}).get('state', 'UNKNOWN')}",
+            f"Watcher: {subs.get('watcher', {}).get('state', 'UNKNOWN')}",
+            f"Messages: {stats.get('messages', 0)}",
+            f"Storage bytes: {stats.get('total_known_storage_bytes', 0)}",
+            f"SQLite bytes: {stats.get('sqlite_bytes', 0)}",
+            f"DDS JSON bytes: {stats.get('dds_json_bytes', 0)}",
+            f"Media cache bytes: {stats.get('media_bytes', 0)}",
+            f"Unresolved failures: {stats.get('failed_jobs_unresolved', 0)}",
+            f"DDS_Data path: {paths.get('dds_data', '—')}",
+            f"App data path: {paths.get('app_data', '—')}",
+            f"Settings path: {self.paths.settings}",
+        ]
+        settings_error = self.settings_store.last_load_error
+        if settings_error:
+            lines.append(f"Settings load fallback: {settings_error}")
+        last_error = health.get("last_error")
+        if last_error:
+            lines.append(f"Last error: {last_error}")
+        self._last_diagnostics_report = "\n".join(lines)
+        self.settings.set_diagnostic_status(
+            "System report готов — можно Copy report",
+            report_available=True,
+        )
+        self.statusBar().showMessage("Diagnostics report готов", 3000)
+
+    def _copy_diagnostics_report(self) -> None:
+        if not self._last_diagnostics_report:
+            self._run_diagnostics()
+        QGuiApplication.clipboard().setText(self._last_diagnostics_report)
+        self.statusBar().showMessage("Diagnostics report скопирован", 3000)
+
+    def _database_quick_check(self) -> None:
+        self.settings.set_database_check_status("Проверяю…")
+        db_path = self.paths.database
+
+        def worker() -> None:
+            try:
+                if not db_path.exists():
+                    raise FileNotFoundError(str(db_path))
+                uri = f"file:{db_path.as_posix()}?mode=ro"
+                connection = sqlite3.connect(uri, uri=True, timeout=3.0)
+                try:
+                    rows = connection.execute("PRAGMA quick_check").fetchall()
+                finally:
+                    connection.close()
+                values = [str(row[0]) for row in rows]
+                ok = values == ["ok"]
+                message = "PASS — ok" if ok else "FAILED — " + "; ".join(values[:5])
+                self.bus.maintenance_done.emit({"kind": "db_check", "ok": ok, "message": message})
+            except Exception as exc:
+                self.bus.maintenance_done.emit({
+                    "kind": "db_check",
+                    "ok": False,
+                    "message": f"FAILED — {type(exc).__name__}: {exc}",
+                })
+
+        threading.Thread(target=worker, name="dds-db-quick-check", daemon=True).start()
 
     def _path(self, key: str) -> str:
         return self.latest_snapshot.get("paths", {}).get(key) or str(getattr(self.paths, key))

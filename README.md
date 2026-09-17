@@ -1,56 +1,47 @@
-# DDS Companion 0.4.5 — Startup Foreground Candidate
+# DDS Companion 0.4.6 — UI / Storage Foundation
 
 Project: **DDS — Discord Data Snatcher**  
 Authors: **Mr_Dexter_Morgan, Masya**
 
-> Are you sure your data is secure?
+Status: **VERIFIED / LIVE TESTED / CURRENT RECOMMENDED**
 
-Status: **BUILT / LOCAL TESTING**
-
-0.4.5 is a deliberately small UX patch on top of the live-tested 0.4.4 Health
-candidate. It fixes the Windows launch case where Explorer can remain above the
-Companion window after `run_companion.bat` starts the GUI.
+0.4.6 turns the already-working 0.4.5 desktop Companion into a cleaner product surface and establishes real persistent storage/cache controls before Media Backfill.
 
 ## What changed
 
-- On the first real window show, Companion schedules a **single** foreground
-  request after the native Qt handle exists.
-- Qt `raise_()` / `activateWindow()` is used first.
-- On Windows only, a best-effort Win32 fallback briefly places the window at the
-  top of Z-order and immediately removes TOPMOST before requesting foreground.
-- The path is guarded by `_startup_foreground_attempted`, so restoring,
-  unminimizing, Health refreshes, watcher events and background polling cannot
-  steal focus later.
-- Any foreground API failure is swallowed; presentation polish must never stop
-  the archive/runtime pipeline.
-- If Discord is definitely `NOT RUNNING`, a still-fresh/stale plugin heartbeat can no
-  longer leave the Plugin card falsely green. The effective Plugin state becomes
-  `NOT RUNNING` while the last heartbeat/version metadata stays visible.
-
-## Retained from 0.4.4
-
-- User-facing **LIMITED** Health semantics.
-- DDS Plugin health card and `plugin-heartbeat-v1` consumer.
-- Plugin 0.5.3 RUNNING / STOPPED / recovery handling.
-- Discord process state in overall Health.
-- Watcher **WAITING** while `DDS_Data` is unavailable.
-- Importer **Last import** wording.
-- Health reason tooltips and deduplicated Activity transitions.
-- Existing archive/import/dedup behavior and local-first storage.
-
-## What did not change
-
-- No archive schema migration.
-- No Media Backfill or cache policy yet.
-- No updater backend yet.
-- No AI export or Google Drive synchronization.
+- Dashboard no longer duplicates subsystem Health.
+- `Open DDS_Data` and `Open logs` are removed from Dashboard.
+- Top global Health pill is now a shortcut to the Health page from every other page.
+- Dashboard gets a storage ring + percentage/size breakdown.
+- Storage accounting tracks SQLite/WAL/SHM, DDS JSON, media cache, logs and real Other storage.
+- Settings is split into **General / Data & Storage / Archive / Diagnostics**.
+- Media-cache policy is persistent and active: total cache limit, maximum single media file size, retention age and optional confirmation before manual clear.
+- Settings are written atomically to `%LOCALAPPDATA%\DDS_Companion\config\settings.json` and corrupt JSON falls back safely to defaults.
+- Manual media-cache cleanup deletes only binary cache files; SQLite, DDS JSON, messages and attachment metadata are preserved.
+- Diagnostics includes System report, Copy report and SQLite `PRAGMA quick_check`.
+- Existing one-shot startup foreground behavior and truthful Health semantics remain intact.
+- Source/dev first-run bootstrap automatically installs PySide6 when absent, without a Y/N prompt.
 
 ## Validation
 
-Automated validation: **40/40 PASS**. The fresh-heartbeat/Discord-off contradiction now has a regression test.
+Automated validation: **52/52 PASS**.
 
-Automated validation is run before packaging. Native Windows validation must
-confirm two things: Explorer no longer covers the app at launch, and Companion
-does not steal focus again after the startup moment.
+Native Windows live validation: **PASS**.
 
-Follow `LIVE_TEST_CHECKLIST_0.4.5.txt` one scenario at a time.
+Confirmed live:
+- 0.4.6 launches and renders correctly on Windows;
+- Dashboard storage ring and breakdown render correctly;
+- Data & Storage settings persist across restart;
+- global RUNNING Health shortcut opens Health;
+- Discord and Plugin off/on state changes remain truthful and recover automatically;
+- normal shutdown produces no traceback;
+- System report shows all core subsystems RUNNING with zero unresolved failures;
+- SQLite Database quick check returns `PASS — ok`;
+- media-cache test file is detected, enables `Clear media cache`, prompts for confirmation, and is removed without touching archive data;
+- archive/message count remains intact after media-cache cleanup.
+
+Bootstrap note: the no-prompt PySide6 bootstrap revision is covered by automated regression. A clean-environment Windows rerun after the r2 change was not separately repeated because PySide6 was already installed during the first live session. This does not affect the validated Companion runtime/UI gate; final 1.0 packaging is still expected to bundle runtime dependencies.
+
+## Next stage
+
+**Media Backfill / media backend** after the now-validated cache/settings foundation.

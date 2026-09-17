@@ -6,6 +6,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
+    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -30,6 +32,8 @@ from .widgets import (
     MetricCard,
     PathRow,
     SectionHeader,
+    SettingRow,
+    StorageDonut,
     StorageRow,
     human_size,
     local_time,
@@ -100,10 +104,10 @@ class Page(QWidget):
 
 
 class DashboardPage(Page):
-    def __init__(self, on_refresh, on_open_dds, on_open_logs, parent=None):
+    def __init__(self, on_refresh, parent=None):
         super().__init__(
             "Dashboard",
-            "Состояние архива, watcher и рост хранилища — всё важное в одном экране.",
+            "Состояние архива, активность и использование хранилища — без технического шума.",
             parent,
             scrollable=True,
         )
@@ -111,19 +115,11 @@ class DashboardPage(Page):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        open_dds = QPushButton("Open DDS_Data")
-        open_dds.setProperty("secondary", True)
-        open_dds.clicked.connect(on_open_dds)
-        open_logs = QPushButton("Open logs")
-        open_logs.setProperty("secondary", True)
-        open_logs.clicked.connect(on_open_logs)
+        actions.addStretch(1)
         refresh = QPushButton("↻  Обновить")
         refresh.setProperty("secondary", True)
         refresh.setProperty("compact", True)
         refresh.clicked.connect(on_refresh)
-        actions.addWidget(open_dds)
-        actions.addWidget(open_logs)
-        actions.addStretch(1)
         actions.addWidget(refresh)
         self.body.addLayout(actions)
 
@@ -131,7 +127,7 @@ class DashboardPage(Page):
         metrics = self.metrics_grid
         metrics.setHorizontalSpacing(12)
         metrics.setVerticalSpacing(12)
-        self.storage_card = MetricCard("Общее хранилище", "—", "SQLite + DDS JSON + cache/media/logs")
+        self.storage_card = MetricCard("Общее хранилище", "—", "архив + локальные служебные данные")
         self.messages_card = MetricCard("Сообщения", "—", "накопительный архив")
         self.context_card = MetricCard("Структура", "—", "серверы · каналы · треды")
         self.media_card = MetricCard("Медиа", "—", "known / cached")
@@ -163,45 +159,18 @@ class DashboardPage(Page):
         activity_layout.addWidget(self.activity_meta)
         activity_layout.addStretch(1)
 
-        self.health_card = Card()
-        health_layout = QVBoxLayout(self.health_card)
-        health_layout.setContentsMargins(16, 14, 16, 14)
-        health_layout.setSpacing(4)
-        health_header = QHBoxLayout()
-        title_box = QVBoxLayout()
-        title_box.setSpacing(2)
-        title = QLabel("Health")
-        title.setObjectName("SectionTitle")
-        hint = QLabel("Ключевые подсистемы")
-        hint.setObjectName("SectionHint")
-        title_box.addWidget(title)
-        title_box.addWidget(hint)
-        self.health_pill = QLabel("STARTING")
-        self.health_pill.setObjectName("StatusPill")
-        set_state_property(self.health_pill, "STARTING")
-        health_header.addLayout(title_box, 1)
-        health_header.addWidget(self.health_pill, 0, Qt.AlignTop)
-        health_layout.addLayout(health_header)
-        self.health_rows = {
-            "database": HealthRow("Database"),
-            "dds_data": HealthRow("DDS_Data"),
-            "importer": HealthRow("Importer"),
-            "watcher": HealthRow("Watcher"),
-        }
-        for row in self.health_rows.values():
-            health_layout.addWidget(row)
-        health_layout.addStretch(1)
-
         self.storage_detail = Card()
         storage_layout = QVBoxLayout(self.storage_detail)
         storage_layout.setContentsMargins(16, 14, 16, 14)
         storage_layout.setSpacing(6)
-        storage_layout.addWidget(SectionHeader("Хранилище", "Распределение текущего объёма"))
+        storage_layout.addWidget(SectionHeader("Storage usage", "Архив отдельно, media cache отдельно"))
+        self.storage_donut = StorageDonut()
+        storage_layout.addWidget(self.storage_donut, 0, Qt.AlignHCenter)
         self.storage_rows = {
             "sqlite_bytes": StorageRow("SQLite + WAL/SHM"),
             "dds_json_bytes": StorageRow("DDS JSON"),
             "media_bytes": StorageRow("Media cache"),
-            "cache_bytes": StorageRow("Cache"),
+            "other_bytes": StorageRow("Other"),
             "logs_bytes": StorageRow("Logs"),
         }
         for row in self.storage_rows.values():
@@ -226,15 +195,11 @@ class DashboardPage(Page):
         session_layout.addWidget(self.session_events)
         session_layout.addStretch(1)
 
-        lower.addWidget(self.activity_card, 0, 0, 1, 2)
-        lower.addWidget(self.health_card, 0, 2)
-        lower.addWidget(self.storage_detail, 1, 0, 1, 2)
-        lower.addWidget(self.session_card, 1, 2)
+        lower.addWidget(self.activity_card, 0, 0)
+        lower.addWidget(self.storage_detail, 0, 1)
+        lower.addWidget(self.session_card, 1, 0, 1, 2)
         lower.setColumnStretch(0, 1)
         lower.setColumnStretch(1, 1)
-        lower.setColumnStretch(2, 1)
-        lower.setRowStretch(0, 1)
-        lower.setRowStretch(1, 1)
         self.body.addLayout(lower, 1)
 
     def apply_layout_profile(self, profile: str) -> None:
@@ -244,7 +209,7 @@ class DashboardPage(Page):
         lower = self.lower_grid
         for widget in (self.storage_card, self.messages_card, self.context_card, self.media_card):
             metrics.removeWidget(widget)
-        for widget in (self.activity_card, self.health_card, self.storage_detail, self.session_card):
+        for widget in (self.activity_card, self.storage_detail, self.session_card):
             lower.removeWidget(widget)
 
         if profile == "compact":
@@ -260,12 +225,10 @@ class DashboardPage(Page):
                 metrics.setColumnStretch(col, 1 if col < 2 else 0)
 
             lower.addWidget(self.activity_card, 0, 0)
-            lower.addWidget(self.health_card, 1, 0)
-            lower.addWidget(self.storage_detail, 2, 0)
-            lower.addWidget(self.session_card, 3, 0)
+            lower.addWidget(self.storage_detail, 1, 0)
+            lower.addWidget(self.session_card, 2, 0)
             lower.setColumnStretch(0, 1)
             lower.setColumnStretch(1, 0)
-            lower.setColumnStretch(2, 0)
             lower.setHorizontalSpacing(0)
             lower.setVerticalSpacing(10)
         else:
@@ -276,13 +239,11 @@ class DashboardPage(Page):
             for col in range(4):
                 metrics.setColumnStretch(col, 1)
 
-            lower.addWidget(self.activity_card, 0, 0, 1, 2)
-            lower.addWidget(self.health_card, 0, 2)
-            lower.addWidget(self.storage_detail, 1, 0, 1, 2)
-            lower.addWidget(self.session_card, 1, 2)
+            lower.addWidget(self.activity_card, 0, 0)
+            lower.addWidget(self.storage_detail, 0, 1)
+            lower.addWidget(self.session_card, 1, 0, 1, 2)
             lower.setColumnStretch(0, 1)
             lower.setColumnStretch(1, 1)
-            lower.setColumnStretch(2, 1)
             spacing = 16 if profile == "large" else 12
             lower.setHorizontalSpacing(spacing)
             lower.setVerticalSpacing(spacing)
@@ -310,17 +271,20 @@ class DashboardPage(Page):
             f"known / cached · embeds {stats.get('embeds', 0)}",
         )
 
-        overall = health.get("state", "UNKNOWN")
-        self.health_pill.setText(overall)
-        set_state_property(self.health_pill, overall)
-        subsystems = health.get("subsystems", {})
-        for name, row in self.health_rows.items():
-            info = subsystems.get(name, {})
-            row.update_state(info.get("state", "UNKNOWN"), info.get("summary", "Нет данных"))
-
         total = max(1, int(stats.get("total_known_storage_bytes", 0)))
         for key, row in self.storage_rows.items():
-            row.set_value(int(stats.get(key, 0)), total)
+            value = int(stats.get(key, 0))
+            row.set_value(value, total)
+            if key in {"other_bytes", "logs_bytes"}:
+                row.setVisible(value > 0)
+
+        self.storage_donut.set_segments([
+            ("SQLite", int(stats.get("sqlite_bytes", 0)), ACCENT),
+            ("DDS JSON", int(stats.get("dds_json_bytes", 0)), INFO),
+            ("Media cache", int(stats.get("media_bytes", 0)), SUCCESS),
+            ("Other", int(stats.get("other_bytes", 0)), WARNING),
+            ("Logs", int(stats.get("logs_bytes", 0)), MUTED),
+        ])
         self.session_storage.setText(f"За сессию: {signed_size(stats.get('session_storage_delta_bytes', 0))}")
         self.session_messages.setText(f"+{stats.get('session_messages_added', 0)} сообщений")
         self.session_imports.setText(f"+{stats.get('session_imports_added', 0)} imports")
@@ -657,92 +621,324 @@ class HealthPage(Page):
 
 
 class SettingsPage(Page):
-    def __init__(self, parent=None):
+    CACHE_LIMITS = [
+        ("1 GB", 1 * 1024**3),
+        ("2 GB", 2 * 1024**3),
+        ("5 GB", 5 * 1024**3),
+        ("10 GB", 10 * 1024**3),
+        ("20 GB", 20 * 1024**3),
+        ("Unlimited", None),
+    ]
+    MAX_FILE_LIMITS = [
+        ("25 MB", 25 * 1024**2),
+        ("50 MB", 50 * 1024**2),
+        ("100 MB", 100 * 1024**2),
+        ("250 MB", 250 * 1024**2),
+        ("500 MB", 500 * 1024**2),
+        ("Unlimited", None),
+    ]
+    RETENTION_LIMITS = [
+        ("3 days", 3),
+        ("1 week", 7),
+        ("1 month", 30),
+        ("3 months", 90),
+        ("Forever", None),
+    ]
+
+    def __init__(
+        self,
+        *,
+        on_setting_changed,
+        on_clear_media_cache,
+        on_run_diagnostics,
+        on_database_check,
+        on_copy_report,
+        parent=None,
+    ):
         super().__init__(
             "Settings",
-            "Основные настройки — на первом плане. Пути и служебное хранилище вынесены отдельно.",
+            "Настройки и обслуживание разделены: только реальные, сохраняемые и проверяемые действия.",
             parent,
         )
+        self._on_setting_changed = on_setting_changed
+        self._last_report_available = False
 
         self.tabs = QTabWidget()
         self.tabs.setObjectName("SettingsTabs")
         self.body.addWidget(self.tabs, 1)
 
-        # Main settings stay lightweight and visible first.  We deliberately do
-        # not expose fake/editable controls until the runtime has persistence
-        # and validation for them.
-        general = QWidget()
-        general_layout = QVBoxLayout(general)
-        general_layout.setContentsMargins(0, 14, 0, 0)
-        general_layout.setSpacing(12)
-
-        runtime = Card()
-        rt = QVBoxLayout(runtime)
-        rt.setContentsMargins(16, 14, 16, 14)
-        rt.setSpacing(8)
-        rt.addWidget(SectionHeader("Watcher policy", "Текущая политика наблюдения; пока read-only"))
+        general, general_layout = self._make_scroll_page()
+        general_layout.addWidget(SectionHeader("General", "Только уже работающие параметры"))
         self.watcher_policy = QLabel("poll — · settle —")
         self.watcher_policy.setStyleSheet(f"color:{TEXT};font-weight:650;")
-        rt.addWidget(self.watcher_policy)
-        general_layout.addWidget(runtime)
-
-        priority = Card()
-        priority_layout = QVBoxLayout(priority)
-        priority_layout.setContentsMargins(16, 14, 16, 14)
-        priority_layout.setSpacing(6)
-        priority_layout.addWidget(SectionHeader("Основные настройки", "Здесь будут пользовательские параметры Companion"))
-        priority_hint = QLabel(
-            "Пути больше не занимают главный экран Settings. Новые важные параметры "
-            "будут добавляться сюда по мере появления их безопасного сохранения и проверки."
+        general_layout.addWidget(SettingRow(
+            "Watcher policy",
+            "Read-only до отдельного безопасного редактора runtime-параметров.",
+            control=self.watcher_policy,
+        ))
+        info = QLabel(
+            "Start with Windows, Start minimized, tray и Close behavior появятся только вместе "
+            "с реальной persistent-реализацией. 0.4.6 не показывает декоративные переключатели."
         )
-        priority_hint.setObjectName("SectionHint")
-        priority_hint.setWordWrap(True)
-        priority_layout.addWidget(priority_hint)
-        general_layout.addWidget(priority)
+        info.setObjectName("SectionHint")
+        info.setWordWrap(True)
+        general_layout.addWidget(info)
         general_layout.addStretch(1)
 
-        paths_page = QWidget()
-        paths_outer = QVBoxLayout(paths_page)
-        paths_outer.setContentsMargins(0, 10, 0, 0)
-        paths_outer.setSpacing(0)
-        paths_scroll = QScrollArea()
-        paths_scroll.setWidgetResizable(True)
-        paths_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        paths_scroll.setFrameShape(QFrame.NoFrame)
-        paths_content = QWidget()
-        paths_content.setObjectName("SettingsPathsContent")
-        paths_layout = QVBoxLayout(paths_content)
-        paths_layout.setContentsMargins(0, 4, 4, 4)
-        paths_layout.setSpacing(10)
-        paths_layout.addWidget(SectionHeader("Paths & Storage", "Служебные пути и быстрый доступ к данным"))
-
-        self.rows: dict[str, PathRow] = {}
-        labels = [
-            ("app_data", "Library / Companion data"),
+        storage, storage_layout = self._make_scroll_page()
+        storage_layout.addWidget(SectionHeader("Data & Storage", "Архив защищён; очищается только media cache"))
+        self.path_rows: dict[str, PathRow] = {}
+        for key, label in [
             ("dds_data", "DDS_Data (plugin export)"),
-            ("database", "SQLite database"),
-            ("logs", "Logs"),
-            ("media", "Media cache"),
-            ("cache", "Cache"),
-            ("backups", "Backups"),
-        ]
-        for key, label in labels:
+            ("app_data", "Companion archive / data root"),
+        ]:
             row = PathRow(label, "—")
-            self.rows[key] = row
-            paths_layout.addWidget(row)
-        paths_layout.addStretch(1)
-        paths_scroll.setWidget(paths_content)
-        paths_outer.addWidget(paths_scroll, 1)
+            self.path_rows[key] = row
+            storage_layout.addWidget(row)
 
-        self.tabs.addTab(general, "Основные")
-        self.tabs.addTab(paths_page, "Paths & Storage")
+        usage = Card()
+        usage_layout = QVBoxLayout(usage)
+        usage_layout.setContentsMargins(16, 14, 16, 14)
+        usage_layout.setSpacing(6)
+        usage_layout.addWidget(SectionHeader("Storage usage", "Источник данных и cache считаются отдельно"))
+        self.storage_total = QLabel("—")
+        self.storage_total.setStyleSheet(f"color:{TEXT};font-size:17pt;font-weight:750;")
+        usage_layout.addWidget(self.storage_total)
+        self.storage_rows = {
+            "sqlite_bytes": StorageRow("SQLite + WAL/SHM"),
+            "dds_json_bytes": StorageRow("DDS JSON"),
+            "media_bytes": StorageRow("Media cache"),
+            "other_bytes": StorageRow("Other"),
+            "logs_bytes": StorageRow("Logs"),
+        }
+        for row in self.storage_rows.values():
+            usage_layout.addWidget(row)
+        storage_layout.addWidget(usage)
+
+        storage_layout.addWidget(SectionHeader("Media cache policy", "Политика уже применяется к бинарному media cache"))
+        self.cache_limit_combo = self._combo(self.CACHE_LIMITS)
+        self.max_file_combo = self._combo(self.MAX_FILE_LIMITS)
+        self.retention_combo = self._combo(self.RETENTION_LIMITS)
+        self.cache_limit_combo.currentIndexChanged.connect(
+            lambda _i: self._emit_combo("media_cache_limit_bytes", self.cache_limit_combo)
+        )
+        self.max_file_combo.currentIndexChanged.connect(
+            lambda _i: self._emit_combo("media_max_file_bytes", self.max_file_combo)
+        )
+        self.retention_combo.currentIndexChanged.connect(
+            lambda _i: self._emit_combo("media_retention_days", self.retention_combo)
+        )
+        storage_layout.addWidget(SettingRow(
+            "Cache size limit",
+            "При превышении удаляются самые старые media-файлы; архивные metadata остаются.",
+            control=self.cache_limit_combo,
+        ))
+        storage_layout.addWidget(SettingRow(
+            "Max single media file",
+            "Файл крупнее лимита не остаётся в локальном media cache.",
+            control=self.max_file_combo,
+        ))
+        storage_layout.addWidget(SettingRow(
+            "Keep unused media",
+            "До Media Backfill возраст определяется по mtime файла; позже заменим на явный last-access.",
+            control=self.retention_combo,
+        ))
+
+        self.confirm_clear = QCheckBox("Подтверждать")
+        self.confirm_clear.toggled.connect(
+            lambda value: self._on_setting_changed("confirm_media_cache_clear", bool(value))
+        )
+        storage_layout.addWidget(SettingRow(
+            "Confirm cache cleanup",
+            "Защищает от случайной очистки media cache.",
+            control=self.confirm_clear,
+        ))
+        self.clear_media_button = QPushButton("Clear media cache")
+        self.clear_media_button.setProperty("secondary", True)
+        self.clear_media_button.clicked.connect(on_clear_media_cache)
+        storage_layout.addWidget(SettingRow(
+            "Media cache cleanup",
+            "Удаляет только бинарники из media; SQLite, DDS JSON и attachment metadata не трогаются.",
+            control=self.clear_media_button,
+        ))
+        storage_layout.addStretch(1)
+
+        archive, archive_layout = self._make_scroll_page()
+        archive_layout.addWidget(SectionHeader("Archive", "Информационный экран без destructive controls"))
+        self.archive_messages = QLabel("—")
+        self.archive_context = QLabel("—")
+        self.archive_db = QLabel("—")
+        self.archive_json = QLabel("—")
+        for title, hint, label in [
+            ("Messages stored", "Накопительный архив сообщений", self.archive_messages),
+            ("Archived structure", "Servers · channels · threads", self.archive_context),
+            ("Database size", "SQLite + WAL/SHM", self.archive_db),
+            ("DDS JSON size", "Исходные capture-файлы Plugin", self.archive_json),
+        ]:
+            label.setStyleSheet(f"color:{TEXT};font-weight:650;")
+            archive_layout.addWidget(SettingRow(title, hint, control=label))
+        archive_note = QLabel("Удаление/retention архива не реализованы намеренно: archive data не является cache.")
+        archive_note.setObjectName("SectionHint")
+        archive_note.setWordWrap(True)
+        archive_layout.addWidget(archive_note)
+        archive_layout.addStretch(1)
+
+        diagnostics, diag_layout = self._make_scroll_page()
+        diag_layout.addWidget(SectionHeader("Diagnostics", "Логи, отчёт и безопасные проверки"))
+        self.diag_rows: dict[str, PathRow] = {}
+        for key, label in [
+            ("logs", "Logs"),
+            ("app_data", "Companion data folder"),
+        ]:
+            row = PathRow(label, "—")
+            self.diag_rows[key] = row
+            diag_layout.addWidget(row)
+
+        run_diag = QPushButton("Run diagnostics")
+        run_diag.setProperty("secondary", True)
+        run_diag.clicked.connect(on_run_diagnostics)
+        self.diag_status = QLabel("Не запускалась")
+        self.diag_status.setObjectName("SettingHint")
+        diag_layout.addWidget(SettingRow(
+            "System report",
+            "Снимок версий, Health, путей, storage и unresolved failures.",
+            control=run_diag,
+        ))
+        diag_layout.addWidget(self.diag_status)
+
+        db_check = QPushButton("Database quick check")
+        db_check.setProperty("secondary", True)
+        db_check.clicked.connect(on_database_check)
+        self.db_check_status = QLabel("Не запускалась")
+        self.db_check_status.setObjectName("SettingHint")
+        diag_layout.addWidget(SettingRow(
+            "SQLite integrity",
+            "PRAGMA quick_check через отдельное read connection.",
+            control=db_check,
+        ))
+        diag_layout.addWidget(self.db_check_status)
+
+        self.copy_report = QPushButton("Copy report")
+        self.copy_report.setProperty("secondary", True)
+        self.copy_report.setEnabled(False)
+        self.copy_report.clicked.connect(on_copy_report)
+        diag_layout.addWidget(SettingRow(
+            "Copy last report",
+            "Копирует последний diagnostics report в буфер обмена.",
+            control=self.copy_report,
+        ))
+        self.version_value = QLabel("—")
+        self.plugin_value = QLabel("—")
+        self.contract_value = QLabel("—")
+        for title, hint, label in [
+            ("Companion version", "Текущая версия приложения", self.version_value),
+            ("Plugin version", "Версия из heartbeat/manifest", self.plugin_value),
+            ("Capture contract", "Версия capture schema / heartbeat contract", self.contract_value),
+        ]:
+            label.setStyleSheet(f"color:{TEXT};font-weight:650;")
+            diag_layout.addWidget(SettingRow(title, hint, control=label))
+        diag_layout.addStretch(1)
+
+        self.tabs.addTab(general, "General")
+        self.tabs.addTab(storage, "Data & Storage")
+        self.tabs.addTab(archive, "Archive")
+        self.tabs.addTab(diagnostics, "Diagnostics")
+
+    @staticmethod
+    def _make_scroll_page() -> tuple[QWidget, QVBoxLayout]:
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(0, 8, 0, 0)
+        outer.setSpacing(0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        content.setObjectName("SettingsPathsContent")
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(0, 4, 5, 4)
+        layout.setSpacing(9)
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
+        return page, layout
+
+    @staticmethod
+    def _combo(options: list[tuple[str, object]]) -> QComboBox:
+        combo = QComboBox()
+        for label, value in options:
+            combo.addItem(label, value)
+        return combo
+
+    def _emit_combo(self, key: str, combo: QComboBox) -> None:
+        if combo.signalsBlocked():
+            return
+        self._on_setting_changed(key, combo.currentData())
+
+    @staticmethod
+    def _set_combo_value(combo: QComboBox, value) -> None:
+        combo.blockSignals(True)
+        try:
+            index = next((i for i in range(combo.count()) if combo.itemData(i) == value), -1)
+            if index >= 0:
+                combo.setCurrentIndex(index)
+        finally:
+            combo.blockSignals(False)
 
     def update_snapshot(self, snapshot: dict) -> None:
         paths = snapshot.get("paths", {})
-        for key, row in self.rows.items():
+        for key, row in self.path_rows.items():
             row.set_path(paths.get(key, "—"))
+        for key, row in self.diag_rows.items():
+            row.set_path(paths.get(key, "—"))
+
         watcher = snapshot.get("watcher", {})
         self.watcher_policy.setText(
-            f"poll={watcher.get('poll_ms', '—')} ms   ·   settle={watcher.get('settle_ms', '—')} ms"
+            f"poll={watcher.get('poll_ms', '—')} ms · settle={watcher.get('settle_ms', '—')} ms"
         )
+
+        stats = snapshot.get("stats", {})
+        total = max(1, int(stats.get("total_known_storage_bytes", 0)))
+        self.storage_total.setText(human_size(stats.get("total_known_storage_bytes", 0)))
+        for key, row in self.storage_rows.items():
+            value = int(stats.get(key, 0))
+            row.set_value(value, total)
+            if key in {"other_bytes", "logs_bytes"}:
+                row.setVisible(value > 0)
+        self.clear_media_button.setEnabled(int(stats.get("media_bytes", 0)) > 0)
+
+        settings = snapshot.get("settings", {})
+        self._set_combo_value(self.cache_limit_combo, settings.get("media_cache_limit_bytes"))
+        self._set_combo_value(self.max_file_combo, settings.get("media_max_file_bytes"))
+        self._set_combo_value(self.retention_combo, settings.get("media_retention_days"))
+        self.confirm_clear.blockSignals(True)
+        try:
+            self.confirm_clear.setChecked(bool(settings.get("confirm_media_cache_clear", True)))
+        finally:
+            self.confirm_clear.blockSignals(False)
+
+        self.archive_messages.setText(f"{int(stats.get('messages', 0)):,}".replace(",", " "))
+        self.archive_context.setText(
+            f"{stats.get('guilds', 0)} · {stats.get('channels', 0)} · {stats.get('threads', 0)}"
+        )
+        self.archive_db.setText(human_size(stats.get("sqlite_bytes", 0)))
+        self.archive_json.setText(human_size(stats.get("dds_json_bytes", 0)))
+
+        self.version_value.setText(str(snapshot.get("version", "—")))
+        health = snapshot.get("health", {})
+        plugin = health.get("subsystems", {}).get("plugin", {})
+        details = plugin.get("details", {})
+        plugin_version = details.get("plugin_version") or details.get("manifest_version") or "—"
+        self.plugin_value.setText(str(plugin_version))
+        capture_schema = details.get("capture_schema_version") or "—"
+        heartbeat_schema = details.get("heartbeat_schema_version") or "plugin-heartbeat-v1"
+        self.contract_value.setText(f"capture {capture_schema} · {heartbeat_schema}")
+
+    def set_diagnostic_status(self, text: str, *, report_available: bool = False) -> None:
+        self.diag_status.setText(text)
+        self.copy_report.setEnabled(report_available)
+        self._last_report_available = report_available
+
+    def set_database_check_status(self, text: str) -> None:
+        self.db_check_status.setText(text)
 

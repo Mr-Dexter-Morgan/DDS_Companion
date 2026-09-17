@@ -165,6 +165,46 @@ QTabWidget#SettingsTabs QTabBar::tab:selected {{
     border-color: #6668f1;
 }}
 QWidget#SettingsPathsContent {{ background: transparent; }}
+
+QFrame[settingRow="true"] {{
+    background: #10151f;
+    border: 1px solid #1d2432;
+    border-radius: 10px;
+}}
+QFrame[settingRow="true"]:hover {{ border-color: #30394d; background: #131925; }}
+QLabel#SettingTitle {{ color: {TEXT}; font-size: 10pt; font-weight: 650; }}
+QLabel#SettingHint {{ color: {MUTED}; font-size: 8.5pt; }}
+QComboBox {{
+    color: {TEXT};
+    background: #151a26;
+    border: 1px solid {BORDER};
+    border-radius: 8px;
+    padding: 6px 28px 6px 10px;
+    min-width: 125px;
+}}
+QComboBox:hover, QComboBox:focus {{ border-color: #4c5675; }}
+QComboBox QAbstractItemView {{
+    color: {TEXT};
+    background: #151a26;
+    selection-background-color: #272f45;
+    border: 1px solid {BORDER};
+}}
+QCheckBox {{ color: {TEXT}; spacing: 8px; }}
+QCheckBox::indicator {{ width: 18px; height: 18px; }}
+QCheckBox::indicator:unchecked {{ background:#111720; border:1px solid #394157; border-radius:5px; }}
+QCheckBox::indicator:checked {{ background:{ACCENT}; border:1px solid {ACCENT}; border-radius:5px; }}
+QPushButton#StatusPill {{
+    padding: 6px 11px;
+    border-radius: 10px;
+    font-size: 9pt;
+    font-weight: 800;
+}}
+QPushButton#StatusPill:hover {{ border-color: #6871a8; }}
+QPushButton#StatusPill[state="RUNNING"] {{ color: {SUCCESS}; background: #10251f; border: 1px solid #1e4f40; }}
+QPushButton#StatusPill[state="STARTING"] {{ color: {INFO}; background: #102131; border: 1px solid #214a6d; }}
+QPushButton#StatusPill[state="LIMITED"], QPushButton#StatusPill[state="STALE"] {{ color: {WARNING}; background: #2a2314; border: 1px solid #5c4c25; }}
+QPushButton#StatusPill[state="WAITING"], QPushButton#StatusPill[state="NOT RUNNING"], QPushButton#StatusPill[state="STOPPED"] {{ color: {MUTED}; background: #171a21; border: 1px solid #2a303d; }}
+QPushButton#StatusPill[state="ERROR"] {{ color: {DANGER}; background: #2b151b; border: 1px solid #642d3a; }}
 QLabel#PageTitle {{ font-size: 19pt; font-weight: 750; color: {TEXT}; }}
 QLabel#PageSubtitle {{ font-size: 9.5pt; color: {MUTED}; }}
 QLabel#CardEyebrow {{ font-size: 8.5pt; font-weight: 650; color: {MUTED}; }}

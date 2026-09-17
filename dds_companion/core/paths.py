@@ -15,6 +15,8 @@ class RuntimePaths:
     cache: Path
     media: Path
     backups: Path
+    config: Path
+    settings: Path
 
 
 def default_dds_data_path() -> Path:
@@ -59,6 +61,8 @@ def build_runtime_paths(dds_data: str | Path | None = None, app_data: str | Path
         cache=app_root / "cache",
         media=app_root / "media",
         backups=app_root / "backups",
+        config=app_root / "config",
+        settings=app_root / "config" / "settings.json",
     )
 
 
@@ -70,5 +74,6 @@ def ensure_runtime_dirs(paths: RuntimePaths) -> None:
         paths.cache,
         paths.media,
         paths.backups,
+        paths.config,
     ):
         directory.mkdir(parents=True, exist_ok=True)
