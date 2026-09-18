@@ -57,7 +57,7 @@ class GuiRuntime:
         self.stop_event = Event()
         self.refresh_event = Event()
         self.media_wake_event = Event()
-        self.media_control_queue: queue.Queue[bool] = queue.Queue()
+        self.media_control_queue: queue.Queue[object] = queue.Queue()
         self._last_snapshot_at = 0.0
         self._last_library_refresh_at = 0.0
         self._library_cache: list[dict] = []
@@ -72,6 +72,14 @@ class GuiRuntime:
 
     def request_media_autodownload_change(self, enabled: bool) -> None:
         self.media_control_queue.put(bool(enabled))
+        self.media_wake_event.set()
+
+    def request_media_retry(self, media_key: str) -> None:
+        self.media_control_queue.put({"action": "retry", "media_key": str(media_key)})
+        self.media_wake_event.set()
+
+    def request_media_ignore(self, media_key: str) -> None:
+        self.media_control_queue.put({"action": "ignore", "media_key": str(media_key)})
         self.media_wake_event.set()
 
     def stop(self) -> None:

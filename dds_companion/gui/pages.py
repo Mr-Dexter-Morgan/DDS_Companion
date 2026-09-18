@@ -10,9 +10,11 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
     QGridLayout,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -308,11 +310,10 @@ class LibraryPage(Page):
         self.filter = QLineEdit()
         self.filter.setPlaceholderText("Фильтр по серверам, каналам и тредам…")
         self.filter.textChanged.connect(self.apply_filter)
-        open_btn = QPushButton("Открыть папку библиотеки")
-        open_btn.setProperty("secondary", True)
-        open_btn.clicked.connect(on_open_library)
+        # The old “Открыть папку библиотеки” action opened the application data
+        # root (config/database/logs/media internals), not a human library. Keep
+        # technical path access in Settings -> Storage instead of misleading users.
         tools.addWidget(self.filter, 1)
-        tools.addWidget(open_btn)
         self.body.addLayout(tools)
 
         card = Card()
@@ -477,13 +478,17 @@ class ActivityPage(Page):
 
 
 class HealthPage(Page):
-    def __init__(self, parent=None):
+    def __init__(self, on_media_retry=None, on_media_ignore=None, parent=None):
         super().__init__(
             "Статус",
             "Проверка жизненно важных подсистем, heartbeat и ошибок, которые не должны останавливать архив.",
             parent,
             scrollable=True,
         )
+        self.on_media_retry = on_media_retry
+        self.on_media_ignore = on_media_ignore
+        self._media_issue_by_key: dict[str, dict] = {}
+
         self.overall = Card()
         o = QHBoxLayout(self.overall)
         o.setContentsMargins(18, 16, 18, 16)
@@ -543,17 +548,146 @@ class HealthPage(Page):
         grid.setColumnStretch(1, 1)
         self.body.addLayout(grid)
 
+        self.media_attention = Card()
+        media_attention_layout = QVBoxLayout(self.media_attention)
+        media_attention_layout.setContentsMargins(16, 14, 16, 14)
+        media_attention_layout.setSpacing(10)
+        self.media_attention_header = SectionHeader(
+            "Медиафайлы, требующие внимания",
+            "Здесь можно повторить загрузку, посмотреть причину или осознанно игнорировать проблему.",
+        )
+        media_attention_layout.addWidget(self.media_attention_header)
+        self.media_attention_summary = QLabel("—")
+        self.media_attention_summary.setObjectName("SectionHint")
+        media_attention_layout.addWidget(self.media_attention_summary)
+        self.media_issue_table = QTableWidget(0, 3)
+        self.media_issue_table.setHorizontalHeaderLabels(["Файл", "Причина", "Состояние"])
+        self.media_issue_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.media_issue_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.media_issue_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.media_issue_table.setAlternatingRowColors(True)
+        self.media_issue_table.verticalHeader().setVisible(False)
+        self.media_issue_table.setColumnWidth(0, 280)
+        self.media_issue_table.setColumnWidth(2, 150)
+        self.media_issue_table.setMinimumHeight(150)
+        self.media_issue_table.setMaximumHeight(260)
+        self.media_issue_table.horizontalHeader().setStretchLastSection(False)
+        self.media_issue_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.media_issue_table.itemSelectionChanged.connect(self._update_media_action_state)
+        media_attention_layout.addWidget(self.media_issue_table)
+        media_actions = QHBoxLayout()
+        self.media_retry_button = QPushButton("Повторить")
+        self.media_ignore_button = QPushButton("Игнорировать")
+        self.media_details_button = QPushButton("Подробнее")
+        self.media_retry_button.clicked.connect(self._retry_selected_media)
+        self.media_ignore_button.clicked.connect(self._ignore_selected_media)
+        self.media_details_button.clicked.connect(self._show_selected_media_details)
+        media_actions.addWidget(self.media_retry_button)
+        media_actions.addWidget(self.media_ignore_button)
+        media_actions.addWidget(self.media_details_button)
+        media_actions.addStretch(1)
+        media_attention_layout.addLayout(media_actions)
+        self.media_attention.setVisible(False)
+        self.body.addWidget(self.media_attention)
+
         err = Card()
         err_layout = QVBoxLayout(err)
         err_layout.setContentsMargins(16, 14, 16, 14)
-        err_layout.addWidget(SectionHeader("Последняя ошибка", "Если всё чисто — здесь так и будет написано"))
-        self.last_error = QLabel("Ошибок нет")
+        err_layout.addWidget(SectionHeader(
+            "Последняя критическая ошибка",
+            "Проблемы отдельных медиафайлов отображаются отдельным блоком выше.",
+        ))
+        self.last_error = QLabel("Критических ошибок нет")
         self.last_error.setWordWrap(True)
         self.last_error.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.last_error.setStyleSheet(f"color:{MUTED};")
         err_layout.addWidget(self.last_error)
         self.body.addWidget(err)
         self.body.addStretch(1)
+
+    @staticmethod
+    def _attention_count_text(count: int) -> str:
+        count = max(0, int(count))
+        mod10 = count % 10
+        mod100 = count % 100
+        if mod10 == 1 and mod100 != 11:
+            return f"{count} медиафайл требует внимания"
+        if mod10 in {2, 3, 4} and mod100 not in {12, 13, 14}:
+            return f"{count} медиафайла требуют внимания"
+        return f"{count} медиафайлов требуют внимания"
+
+    @staticmethod
+    def _human_media_reason(item: dict) -> str:
+        failure = str(item.get("failure_class") or "")
+        error = str(item.get("error") or "").strip()
+        if "size mismatch" in error.lower() or failure in {"size_mismatch", "metadata_size_mismatch"}:
+            return "Размер файла не совпадает с данными Discord"
+        if failure == "stale_url" or item.get("state") == "STALE_URL":
+            return "Ссылка Discord устарела или недоступна"
+        if failure == "user_ignored" or item.get("state") == "IGNORED":
+            return "Игнорируется пользователем"
+        if failure == "http_permanent":
+            return "Discord вернул постоянную HTTP-ошибку"
+        if error:
+            return error
+        return "Не удалось загрузить медиафайл"
+
+    def _selected_media_issue(self) -> dict | None:
+        row = self.media_issue_table.currentRow()
+        if row < 0:
+            return None
+        item = self.media_issue_table.item(row, 0)
+        if item is None:
+            return None
+        return self._media_issue_by_key.get(str(item.data(Qt.UserRole) or ""))
+
+    def _update_media_action_state(self) -> None:
+        issue = self._selected_media_issue()
+        enabled = issue is not None
+        ignored = bool(issue and issue.get("state") == "IGNORED")
+        self.media_retry_button.setEnabled(enabled)
+        self.media_ignore_button.setEnabled(enabled and not ignored)
+        self.media_details_button.setEnabled(enabled)
+
+    def _retry_selected_media(self) -> None:
+        issue = self._selected_media_issue()
+        if issue and self.on_media_retry:
+            self.on_media_retry(str(issue.get("media_key")))
+
+    def _ignore_selected_media(self) -> None:
+        issue = self._selected_media_issue()
+        if not issue or not self.on_media_ignore:
+            return
+        answer = QMessageBox.question(
+            self,
+            "DDS Companion — Игнорировать медиафайл",
+            "Игнорировать эту проблему?\n\n"
+            "Файл останется в архиве как метаданные, но не будет удерживать Media Backfill в LIMITED. "
+            "Позже его можно снова выбрать и нажать «Повторить».",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            self.on_media_ignore(str(issue.get("media_key")))
+
+    def _show_selected_media_details(self) -> None:
+        issue = self._selected_media_issue()
+        if not issue:
+            return
+        expected = issue.get("expected_size")
+        expected_text = human_size(int(expected)) if expected is not None else "неизвестно"
+        text = "\n".join([
+            f"Файл: {issue.get('filename') or 'без имени'}",
+            f"Состояние: {issue.get('state') or 'UNKNOWN'}",
+            f"Причина: {self._human_media_reason(issue)}",
+            f"Ожидаемый размер: {expected_text}",
+            f"Попыток: {issue.get('attempt_count', 0)}",
+            f"HTTP: {issue.get('http_status') if issue.get('http_status') is not None else '—'}",
+            f"Техническая причина: {issue.get('failure_class') or '—'}",
+            f"Последняя ошибка: {issue.get('error') or '—'}",
+            f"Media key: {issue.get('media_key') or '—'}",
+        ])
+        QMessageBox.information(self, "DDS Companion — Медиафайл", text)
 
     def update_snapshot(self, snapshot: dict) -> None:
         health = snapshot.get("health", {})
@@ -566,6 +700,43 @@ class HealthPage(Page):
         )
         self.overall_pill.setToolTip(health.get("tooltip") or self.overall_hint.text())
         subs = health.get("subsystems", {})
+        media_details = (subs.get("media", {}) or {}).get("details", {}) or {}
+        issues = list(media_details.get("attention_items") or [])
+        selected_before = self._selected_media_issue()
+        selected_key = str(selected_before.get("media_key")) if selected_before else None
+        self._media_issue_by_key = {str(item.get("media_key")): item for item in issues if item.get("media_key")}
+        self.media_issue_table.setRowCount(0)
+        selected_row = -1
+        for issue in issues:
+            row = self.media_issue_table.rowCount()
+            self.media_issue_table.insertRow(row)
+            filename = str(issue.get("filename") or "Без имени")
+            name_item = QTableWidgetItem(filename)
+            name_item.setData(Qt.UserRole, str(issue.get("media_key") or ""))
+            self.media_issue_table.setItem(row, 0, name_item)
+            self.media_issue_table.setItem(row, 1, QTableWidgetItem(self._human_media_reason(issue)))
+            state_text = "Игнорируется" if issue.get("state") == "IGNORED" else "Требует внимания"
+            self.media_issue_table.setItem(row, 2, QTableWidgetItem(state_text))
+            if selected_key and str(issue.get("media_key") or "") == selected_key:
+                selected_row = row
+        attention_count = int(media_details.get("attention_count") or 0)
+        ignored_count = int(media_details.get("ignored") or 0)
+        if issues:
+            parts = []
+            if attention_count:
+                parts.append(self._attention_count_text(attention_count))
+            if ignored_count:
+                parts.append(f"Игнорируется: {ignored_count}")
+            self.media_attention_summary.setText(" · ".join(parts) or "Медиа-проблем нет")
+            self.media_attention.setVisible(True)
+            if selected_row >= 0:
+                self.media_issue_table.selectRow(selected_row)
+            elif self.media_issue_table.rowCount() and self.media_issue_table.currentRow() < 0:
+                self.media_issue_table.selectRow(0)
+        else:
+            self.media_attention.setVisible(False)
+        self._update_media_action_state()
+
         for key, (_, state_label, summary_label, updated_label) in self.cards.items():
             info = subs.get(key, {})
             sub_state = info.get("state", "UNKNOWN")
@@ -604,7 +775,7 @@ class HealthPage(Page):
             self.last_error.setText(f"{subsystem}  ·  {occurred}\n{message}")
             self.last_error.setStyleSheet(f"color:{DANGER};")
         else:
-            self.last_error.setText("Ошибок нет")
+            self.last_error.setText("Критических ошибок нет")
             self.last_error.setStyleSheet(f"color:{MUTED};")
 
 

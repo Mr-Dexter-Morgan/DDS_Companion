@@ -1,0 +1,12 @@
+DDS Companion 0.5.2 — Automated Validation
+Date: 2026-09-18
+Result: PASS
+
+- full unittest discovery: 81/81 PASS
+- repeated consecutive runs: 81/81 PASS x3
+- compileall: PASS
+- CLI --version: DDS Companion 0.5.2 PASS
+
+New regression coverage includes stable complete metadata/CDN size mismatch, durable Ignore, URL-rotation persistence, explicit Retry while automatic media download is Off, Status action/source contracts, and Library-folder-action removal.
+
+Windows live gate remains pending before promotion.

@@ -21,7 +21,7 @@ from dds_companion.services.media_backfill_service import (
     TransportResult,
 )
 from dds_companion.services.media_cache_service import MediaCacheService
-from dds_companion.services.media_registry_service import MediaRegistryService
+from dds_companion.services.media_registry_service import MediaRegistryService, utc_now
 from dds_companion.services.media_runtime import MediaBackfillRuntime
 from dds_companion.storage.database import connect_database
 from dds_companion.tests.test_imports import sample_capture
@@ -387,6 +387,95 @@ class MediaBackfillTests(unittest.TestCase):
         self.assertEqual(plan.recovered_abandoned, 1)
         self.assertEqual(self.conn.execute("SELECT state FROM media_objects").fetchone()[0], "QUEUED")
 
+
+
+class MediaAttention052Tests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.db = self.root / "dds.sqlite3"
+        self.media = self.root / "media"
+        self.connection = connect_database(self.db)
+        self.registry = MediaRegistryService(self.connection)
+        self.settings = CompanionSettings(media_autodownload_enabled=True)
+
+    def tearDown(self):
+        self.connection.close()
+        self.temp.cleanup()
+
+    def _register(self, *, size=100, url="https://cdn.discordapp.com/attachments/a/b/file.png"):
+        with self.connection:
+            self.connection.execute("INSERT OR REPLACE INTO guilds(id,name,last_seen_at) VALUES('g','g',?)", (utc_now(),))
+            self.connection.execute("INSERT OR REPLACE INTO channels(id,guild_id,name,type,last_seen_at) VALUES('c','g','c',0,?)", (utc_now(),))
+            self.connection.execute("INSERT OR REPLACE INTO users(id,username,last_seen_at) VALUES('u','u',?)", (utc_now(),))
+            self.connection.execute("""INSERT OR REPLACE INTO messages(id,guild_id,source_channel_id,parent_channel_id,author_id,content,first_seen_at,last_seen_at) VALUES('m','g','c','c','u','',?,?)""", (utc_now(), utc_now()))
+            key = self.registry.register_attachment(message_id='m', position=0, attachment={
+                'id':'a1','filename':'file.png','contentType':'image/png','size':size,'url':url,'proxyUrl':None
+            })
+        return key
+
+    def test_stable_http_size_mismatch_is_terminal_after_one_complete_response(self):
+        key = self._register(size=100)
+        def transport(spec, temp_path, max_bytes, timeout):
+            temp_path.write_bytes(b'x' * 25)
+            return TransportResult(bytes_written=25, sha256='a'*64, http_status=200, announced_size=25)
+        service = MediaBackfillService(self.connection, self.media, transport=transport, max_workers=1)
+        result = service.process_once(self.settings)
+        row = self.registry.get(key)
+        self.assertEqual(result.permanent_failed, 1)
+        self.assertEqual(row.state, 'FAILED_PERMANENT')
+        self.assertEqual(row.attempt_count, 1)
+        self.assertEqual(row.failure_class, 'metadata_size_mismatch')
+
+    def test_ignore_removes_attention_but_remains_visible_and_retryable(self):
+        key = self._register(size=100)
+        with self.connection:
+            self.connection.execute("UPDATE media_objects SET state='FAILED_PERMANENT', last_error='size mismatch: expected 100, got 25', failure_class='size_mismatch' WHERE media_key=?", (key,))
+        service = MediaBackfillService(self.connection, self.media, max_workers=1)
+        self.assertTrue(service.ignore_issue(key))
+        counts = service.counts()
+        self.assertEqual(counts['permanent_failed'], 0)
+        self.assertEqual(counts['ignored'], 1)
+        items = service.issue_items()
+        self.assertEqual(items[0]['state'], 'IGNORED')
+        self.assertTrue(self.registry.prepare_manual_retry(key))
+        self.assertEqual(self.registry.get(key).state, 'QUEUED')
+
+    def test_ignored_issue_survives_signed_url_rotation_until_user_retries(self):
+        key = self._register(size=100)
+        with self.connection:
+            self.connection.execute(
+                "UPDATE media_objects SET state='FAILED_PERMANENT', last_error='broken', failure_class='http_permanent' WHERE media_key=?",
+                (key,),
+            )
+        service = MediaBackfillService(self.connection, self.media, max_workers=1)
+        self.assertTrue(service.ignore_issue(key))
+        with self.connection:
+            self.registry.register_attachment(
+                message_id='m',
+                position=0,
+                attachment={
+                    'id':'a1','filename':'file.png','contentType':'image/png','size':100,
+                    'url':'https://cdn.discordapp.com/attachments/a/b/file.png?rotated=1','proxyUrl':None
+                },
+            )
+        self.assertEqual(self.registry.get(key).state, 'IGNORED')
+
+    def test_manual_retry_runs_one_download_even_when_auto_mode_is_off(self):
+        key = self._register(size=4)
+        with self.connection:
+            self.connection.execute(
+                "UPDATE media_objects SET state='FAILED_PERMANENT', last_error='broken', failure_class='http_permanent' WHERE media_key=?",
+                (key,),
+            )
+        def transport(spec, temp_path, max_bytes, timeout):
+            temp_path.write_bytes(b'data')
+            return TransportResult(bytes_written=4, sha256=hashlib.sha256(b'data').hexdigest(), http_status=200, announced_size=4)
+        service = MediaBackfillService(self.connection, self.media, transport=transport, max_workers=1)
+        outcome = service.retry_media_once(key, CompanionSettings(media_autodownload_enabled=False))
+        self.assertIsNotNone(outcome)
+        self.assertEqual(outcome.state, 'CACHED')
+        self.assertEqual(self.registry.get(key).state, 'CACHED')
 
 if __name__ == "__main__":
     unittest.main()

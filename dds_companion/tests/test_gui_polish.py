@@ -54,9 +54,9 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", normal)
         self.assertIn("run_companion.pyw", normal)
-        self.assertIn("DDS Companion 0.5.1", normal)
+        self.assertIn("DDS Companion 0.5.2", normal)
         self.assertIn("python -m dds_companion.gui.app", debug)
-        self.assertIn("DDS Companion 0.5.1", debug)
+        self.assertIn("DDS Companion 0.5.2", debug)
 
     def test_050_first_run_gui_dependency_bootstrap_is_automatic(self):
         normal = (self.root / "run_companion.bat").read_text(encoding="utf-8")
@@ -73,7 +73,7 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         self.assertNotIn('QPushButton("Open library")', window)
-        self.assertEqual(pages.count('QPushButton("Открыть папку библиотеки")'), 1)
+        self.assertEqual(pages.count('QPushButton("Открыть папку библиотеки")'), 0)
 
     def test_dashboard_is_scroll_safe(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
@@ -208,3 +208,32 @@ class GuiPolishSourceContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MediaAttention052SourceContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.root = Path(__file__).resolve().parents[2]
+
+    def test_052_status_exposes_retry_ignore_details_actions(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
+        runtime = (self.root / "dds_companion/gui/runtime.py").read_text(encoding="utf-8")
+        self.assertIn('"Медиафайлы, требующие внимания"', pages)
+        self.assertIn('QPushButton("Повторить")', pages)
+        self.assertIn('QPushButton("Игнорировать")', pages)
+        self.assertIn('QPushButton("Подробнее")', pages)
+        self.assertIn("request_media_retry", runtime)
+        self.assertIn("request_media_ignore", runtime)
+        self.assertIn("_retry_media_issue", window)
+        self.assertIn("_ignore_media_issue", window)
+
+    def test_052_misleading_library_folder_button_is_removed(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        self.assertNotIn('QPushButton("Открыть папку библиотеки")', pages)
+        self.assertIn("technical path access in Settings -> Storage", pages)
+
+    def test_052_statusbar_names_import_failures_precisely(self):
+        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
+        self.assertIn("ошибок импорта:", window)
+        self.assertNotIn('f"unresolved failures:', window)

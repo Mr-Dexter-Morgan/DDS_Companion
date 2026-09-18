@@ -25,7 +25,7 @@ class MediaBackfillRuntime:
         dds_data_path: str | Path,
         stop_event: threading.Event,
         wake_event: threading.Event | None = None,
-        control_queue: queue.Queue[bool] | None = None,
+        control_queue: queue.Queue[object] | None = None,
     ):
         self.database_path = Path(database_path)
         self.media_root = Path(media_root)
@@ -65,30 +65,63 @@ class MediaBackfillRuntime:
                 # Activity records every user-visible transition in order.
                 while True:
                     try:
-                        requested_enabled = bool(self.control_queue.get_nowait())
+                        command = self.control_queue.get_nowait()
                     except queue.Empty:
                         break
-                    if requested_enabled:
-                        requeued = service.registry.requeue_manual_clear_evictions()
-                        activity.publish(
-                            subsystem="media",
-                            event_type="media_backfill_enabled",
-                            summary="Automatic media backfill enabled",
-                        )
-                        if requeued:
+                    if isinstance(command, bool):
+                        requested_enabled = command
+                        if requested_enabled:
+                            requeued = service.registry.requeue_manual_clear_evictions()
                             activity.publish(
                                 subsystem="media",
-                                event_type="media_manual_clear_requeued",
-                                summary=f"Manual media cache clear re-queued {requeued} attachment(s)",
-                                details={"requeued": requeued},
+                                event_type="media_backfill_enabled",
+                                summary="Automatic media backfill enabled",
                             )
-                    else:
-                        activity.publish(
-                            subsystem="media",
-                            event_type="media_backfill_disabled",
-                            summary="Automatic media backfill disabled",
-                        )
-                    last_enabled = requested_enabled
+                            if requeued:
+                                activity.publish(
+                                    subsystem="media",
+                                    event_type="media_manual_clear_requeued",
+                                    summary=f"Manual media cache clear re-queued {requeued} attachment(s)",
+                                    details={"requeued": requeued},
+                                )
+                        else:
+                            activity.publish(
+                                subsystem="media",
+                                event_type="media_backfill_disabled",
+                                summary="Automatic media backfill disabled",
+                            )
+                        last_enabled = requested_enabled
+                        continue
+
+                    if isinstance(command, dict):
+                        action = str(command.get("action") or "")
+                        media_key = str(command.get("media_key") or "")
+                        if action == "retry" and media_key:
+                            outcome = service.retry_media_once(media_key, settings_store.load())
+                            activity.publish(
+                                level="INFO" if outcome is not None else "WARNING",
+                                subsystem="media",
+                                event_type="media_user_retry",
+                                summary=(
+                                    f"User retried media: {media_key}"
+                                    if outcome is not None
+                                    else f"Media retry ignored; item is no longer actionable: {media_key}"
+                                ),
+                                details={"media_key": media_key, "outcome": outcome.to_dict() if outcome else None},
+                            )
+                        elif action == "ignore" and media_key:
+                            changed = service.ignore_issue(media_key)
+                            activity.publish(
+                                level="INFO" if changed else "WARNING",
+                                subsystem="media",
+                                event_type="media_user_ignored",
+                                summary=(
+                                    f"User ignored media issue: {media_key}"
+                                    if changed
+                                    else f"Media ignore ignored; item is no longer actionable: {media_key}"
+                                ),
+                                details={"media_key": media_key, "changed": bool(changed)},
+                            )
 
                 settings = settings_store.load()
                 enabled = bool(settings.media_autodownload_enabled)
@@ -106,7 +139,13 @@ class MediaBackfillRuntime:
                             "media",
                             "STOPPED",
                             "automatic media backfill is disabled",
-                            details=service.counts(),
+                            details={
+                                **service.counts(),
+                                "attention_items": service.issue_items(limit=50),
+                                "attention_count": sum(
+                                    1 for item in service.issue_items(limit=50) if item.get("state") != "IGNORED"
+                                ),
+                            },
                         )
                     last_enabled = False
                     self._wait(2.0)
@@ -139,18 +178,29 @@ class MediaBackfillRuntime:
                                 storage_delta_bytes=-int(maintenance.bytes_removed),
                             )
                     counts = service.counts()
+                    attention_items = service.issue_items(limit=50)
+                    attention_count = sum(1 for item in attention_items if item.get("state") != "IGNORED")
                     limited = counts["retryable_failed"] + counts["permanent_failed"] + counts["stale_url"]
                     state = "LIMITED" if limited else "RUNNING"
                     summary = (
-                        f"media cache {counts['cached']}/{counts['known']} · "
-                        f"queued {counts['queued']} · downloading {counts['downloading']}"
+                        f"Кэш медиа: {counts['cached']}/{counts['known']}"
+                        f" · в очереди {counts['queued']} · загружается {counts['downloading']}"
                     )
-                    if limited:
-                        summary += (
-                            f" · retry {counts['retryable_failed']} · stale {counts['stale_url']}"
-                            f" · failed {counts['permanent_failed']}"
-                        )
-                    health.set_subsystem("media", state, summary, details={**counts, "last_cycle": cycle.to_dict()})
+                    if attention_count:
+                        summary += f" · требует внимания: {attention_count}"
+                    if counts.get("ignored"):
+                        summary += f" · игнорируется: {counts['ignored']}"
+                    health.set_subsystem(
+                        "media",
+                        state,
+                        summary,
+                        details={
+                            **counts,
+                            "attention_count": attention_count,
+                            "attention_items": attention_items,
+                            "last_cycle": cycle.to_dict(),
+                        },
+                    )
                     # Keep draining a non-empty queue briskly; idle workers back off.
                     busy = cycle.claimed > 0 or cycle.planned.queued > 0
                     self._wait(0.25 if busy else 2.0)

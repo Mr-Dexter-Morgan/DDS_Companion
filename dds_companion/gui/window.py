@@ -191,7 +191,10 @@ class MainWindow(QMainWindow):
         self.dashboard = DashboardPage()
         self.library = LibraryPage(self.open_library)
         self.activity = ActivityPage()
-        self.health = HealthPage()
+        self.health = HealthPage(
+            on_media_retry=self._retry_media_issue,
+            on_media_ignore=self._ignore_media_issue,
+        )
         self.settings = SettingsPage(
             on_setting_changed=self._on_setting_changed,
             on_clear_media_cache=self._clear_media_cache,
@@ -381,7 +384,7 @@ class MainWindow(QMainWindow):
         self.status_text.setText(
             f"{stats.get('messages', 0)} сообщений · "
             f"{stats.get('guilds', 0)} серверов · "
-            f"unresolved failures: {stats.get('failed_jobs_unresolved', 0)}"
+            f"ошибок импорта: {stats.get('failed_jobs_unresolved', 0)}"
         )
         self.status_path.setText(snapshot.get("paths", {}).get("app_data", ""))
         for page in self.pages:
@@ -425,6 +428,20 @@ class MainWindow(QMainWindow):
         if self._closing:
             return
         self.status_text.setText("Runtime остановлен")
+
+    def _retry_media_issue(self, media_key: str) -> None:
+        if not media_key:
+            return
+        self.runtime.request_media_retry(media_key)
+        self.statusBar().showMessage("Повторная загрузка медиа запущена…", 3500)
+        self.runtime.request_refresh()
+
+    def _ignore_media_issue(self, media_key: str) -> None:
+        if not media_key:
+            return
+        self.runtime.request_media_ignore(media_key)
+        self.statusBar().showMessage("Проблема медиа помечена как игнорируемая", 3500)
+        self.runtime.request_refresh()
 
     def _on_setting_changed(self, key: str, value) -> None:
         try:

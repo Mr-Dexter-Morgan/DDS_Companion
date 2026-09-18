@@ -18,6 +18,7 @@ MEDIA_STATES = {
     "FAILED_PERMANENT",
     "STALE_URL",
     "EVICTED",
+    "IGNORED",
 }
 
 
@@ -175,6 +176,11 @@ class MediaRegistryService:
                 # not cause an endless download -> eviction -> redownload loop.
                 state = "EVICTED"
                 reset_attempts = False
+            elif previous_state == "IGNORED":
+                # User acknowledgement is durable. A refreshed signed URL must not
+                # silently undo an explicit Ignore action; Retry is the opt-in path.
+                state = "IGNORED"
+                reset_attempts = False
             elif previous_state == "CACHED" and previous["local_relpath"]:
                 # A refreshed CDN URL does not invalidate an already cached file.
                 state = "CACHED"
@@ -290,6 +296,73 @@ class MediaRegistryService:
                 "SELECT COUNT(*) FROM media_objects WHERE state='CACHED'"
             ).fetchone()[0]
         )
+
+    def issue_items(self, *, limit: int = 50, include_ignored: bool = True) -> list[dict[str, Any]]:
+        """Return bounded user-actionable media issues for the Status surface."""
+        states = ["FAILED_PERMANENT", "STALE_URL"]
+        if include_ignored:
+            states.append("IGNORED")
+        placeholders = ",".join("?" for _ in states)
+        rows = self.connection.execute(
+            f"""
+            SELECT media_key, filename, content_type, expected_size, state, attempt_count,
+                   last_http_status, last_error, failure_class, updated_at
+            FROM media_objects
+            WHERE state IN ({placeholders})
+              AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
+            ORDER BY CASE state WHEN 'IGNORED' THEN 1 ELSE 0 END, updated_at DESC, media_key
+            LIMIT ?
+            """,
+            (*states, max(1, min(int(limit), 200))),
+        ).fetchall()
+        return [
+            {
+                "media_key": str(row["media_key"]),
+                "filename": row["filename"],
+                "content_type": row["content_type"],
+                "expected_size": row["expected_size"],
+                "state": str(row["state"]),
+                "attempt_count": int(row["attempt_count"] or 0),
+                "http_status": row["last_http_status"],
+                "error": row["last_error"],
+                "failure_class": row["failure_class"],
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        ]
+
+    def prepare_manual_retry(self, media_key: str) -> bool:
+        """Re-arm one acknowledged/terminal media row for an explicit retry."""
+        stamp = utc_now()
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE media_objects
+                SET state='QUEUED', updated_at=?, attempt_count=0, next_retry_at=NULL,
+                    last_attempt_at=NULL, last_http_status=NULL, last_error=NULL, failure_class=NULL
+                WHERE media_key=?
+                  AND state IN ('FAILED_PERMANENT', 'STALE_URL', 'FAILED_RETRYABLE', 'IGNORED')
+                  AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
+                """,
+                (stamp, str(media_key)),
+            )
+        return bool(cursor.rowcount)
+
+    def ignore_issue(self, media_key: str) -> bool:
+        """Acknowledge one media problem without deleting archive metadata."""
+        stamp = utc_now()
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE media_objects
+                SET state='IGNORED', updated_at=?, next_retry_at=NULL, failure_class='user_ignored'
+                WHERE media_key=?
+                  AND state IN ('FAILED_PERMANENT', 'STALE_URL', 'FAILED_RETRYABLE')
+                  AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
+                """,
+                (stamp, str(media_key)),
+            )
+        return bool(cursor.rowcount)
 
     def reset_removed_cache_paths(
         self,

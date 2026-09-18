@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title DDS Companion 0.5.1 - CLI
+title DDS Companion 0.5.2 - CLI
 python -m dds_companion.app %*
 set EXITCODE=%ERRORLEVEL%
 echo.

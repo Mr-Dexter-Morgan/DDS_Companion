@@ -131,6 +131,7 @@ class TransportResult:
     bytes_written: int
     sha256: str
     http_status: int | None = None
+    announced_size: int | None = None
 
 
 Transport = Callable[[DownloadSpec, Path, int | None, float], TransportResult]
@@ -207,7 +208,7 @@ class MediaBackfillService:
                             "FAILED_PERMANENT",
                             stamp=stamp,
                             error="retry limit exhausted",
-                            failure_class="retry_exhausted",
+                            failure_class=outcome.failure_class or "retry_exhausted",
                         )
                         continue
                     retry_promoted += 1
@@ -339,7 +340,25 @@ class MediaBackfillService:
             "too_large": counts.get("TOO_LARGE", 0),
             "skipped": counts.get("SKIPPED", 0),
             "evicted": counts.get("EVICTED", 0),
+            "ignored": counts.get("IGNORED", 0),
         }
+
+    def issue_items(self, *, limit: int = 50) -> list[dict]:
+        return self.registry.issue_items(limit=limit, include_ignored=True)
+
+    def retry_media_once(self, media_key: str, settings: CompanionSettings) -> DownloadOutcome | None:
+        """Execute one explicit user-requested retry, independent of auto mode."""
+        if not self.registry.prepare_manual_retry(media_key):
+            return None
+        spec = self._claim_one(media_key)
+        if spec is None:
+            return None
+        outcome = self._download_one(spec, settings)
+        self._apply_outcome(outcome)
+        return outcome
+
+    def ignore_issue(self, media_key: str) -> bool:
+        return self.registry.ignore_issue(media_key)
 
     def _recover_abandoned(self, now: datetime) -> int:
         cutoff = (now - timedelta(seconds=self.ABANDONED_DOWNLOAD_SECONDS)).isoformat()
@@ -392,6 +411,38 @@ class MediaBackfillService:
                     )
                 )
         return claimed
+
+    def _claim_one(self, media_key: str) -> DownloadSpec | None:
+        stamp = utc_now()
+        row = self.connection.execute(
+            """
+            SELECT media_key, current_url, filename, expected_size, content_type, attempt_count
+            FROM media_objects
+            WHERE media_key=? AND state='QUEUED'
+            """,
+            (str(media_key),),
+        ).fetchone()
+        if row is None:
+            return None
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE media_objects
+                SET state='DOWNLOADING', last_attempt_at=?, updated_at=?, attempt_count=attempt_count+1
+                WHERE media_key=? AND state='QUEUED'
+                """,
+                (stamp, stamp, str(media_key)),
+            )
+        if not cursor.rowcount:
+            return None
+        return DownloadSpec(
+            media_key=row["media_key"],
+            url=row["current_url"],
+            filename=row["filename"],
+            expected_size=int(row["expected_size"]) if row["expected_size"] is not None else None,
+            content_type=row["content_type"],
+            attempt_count=int(row["attempt_count"] or 0) + 1,
+        )
 
     def _download_one(self, spec: DownloadSpec, settings: CompanionSettings) -> DownloadOutcome:
         if not _is_allowed_discord_url(spec.url):
@@ -503,12 +554,19 @@ class MediaBackfillService:
                 )
 
             if spec.expected_size is not None and result.bytes_written != spec.expected_size:
+                # If HTTP announced exactly the payload we received, the transfer is
+                # complete and retrying it five times will only reproduce the same
+                # metadata-vs-CDN disagreement. Surface it once for user attention.
+                stable_mismatch = (
+                    result.announced_size is not None
+                    and result.announced_size == result.bytes_written
+                )
                 return DownloadOutcome(
                     media_key=spec.media_key,
-                    state="FAILED_RETRYABLE",
+                    state="FAILED_PERMANENT" if stable_mismatch else "FAILED_RETRYABLE",
                     http_status=result.http_status,
                     error=f"size mismatch: expected {spec.expected_size}, got {result.bytes_written}",
-                    failure_class="size_mismatch",
+                    failure_class="metadata_size_mismatch" if stable_mismatch else "size_mismatch",
                 )
 
             os.replace(temp_path, final_path)
@@ -712,4 +770,9 @@ class MediaBackfillService:
                 os.fsync(handle.fileno())
             if announced is not None and total != announced:
                 raise OSError(f"truncated response: announced {announced}, received {total}")
-            return TransportResult(bytes_written=total, sha256=digest.hexdigest(), http_status=status)
+            return TransportResult(
+                bytes_written=total,
+                sha256=digest.hexdigest(),
+                http_status=status,
+                announced_size=announced,
+            )

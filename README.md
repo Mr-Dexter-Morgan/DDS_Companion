@@ -1,78 +1,67 @@
-# DDS Companion 0.5.1 — UI / Settings Polish Candidate
+# DDS Companion 0.5.2 — Media Attention Recovery Candidate
 
-Status: **CANDIDATE / AUTOMATED PASS / WINDOWS LIVE PENDING**  
+Status: **CANDIDATE / 80/80 AUTOMATED PASS / WINDOWS LIVE PENDING**  
 Baseline: **0.5.0 — VERIFIED / LIVE TESTED / CURRENT RECOMMENDED**  
+Supersedes before promotion: **0.5.1 candidate**  
 Date: **2026-09-18**
 
 ## What this release is
 
-0.5.1 is a deliberately bounded user-interface release. It keeps the verified 0.5.0 archive/media runtime intact and cleans up the user-facing shell before the productization work begins in 0.6.x.
+0.5.2 keeps the 0.5.1 UI/Settings polish and closes a real Windows live finding in the Media Backfill layer: one attachment reached `FAILED_PERMANENT` after a repeated size mismatch and left Media Backfill permanently `LIMITED` without a user-facing recovery path.
 
-No database schema, media lifecycle, downloader, Watcher, capture contract or internal page/service identifier is renamed in this patch.
+This patch turns that terminal media state into an explicit, bounded user workflow instead of an unexplained permanent warning.
 
-## Changes in 0.5.1
+## User-facing behavior
 
-### Main navigation
-User-facing labels are localized while internal page IDs stay unchanged:
-- Dashboard → **Главная**
-- Library → **Библиотека**
-- Activity → **Активность**
-- Health → **Статус**
-- Settings → **Настройки**
+On **Статус**, media problems now have a dedicated **Медиафайлы, требующие внимания** surface. For each actionable item DDS shows:
+- filename;
+- human-readable reason;
+- state;
+- **Повторить**;
+- **Игнорировать**;
+- **Подробнее**.
 
-### Главная
-- removed the visible manual **Обновить** button;
-- automatic snapshot refresh remains active;
-- returning to Главная explicitly requests a fresh snapshot from the existing runtime;
-- internal refresh capability is preserved.
+`Игнорировать` is durable and removes the item from the unresolved Media Backfill warning count without deleting messages, attachment metadata or SQLite rows. Ignored items remain visible and can later be retried.
 
-### Настройки
-Tabs are now:
-- **Общие**
-- **Хранилище**
-- **Архив**
-- **Диагностика**
+`Повторить` performs one explicit retry even if automatic media download is disabled.
 
-**Общие** now owns behavior toggles:
-- **Автоматическая загрузка медиа** — same persisted `media_autodownload_enabled` backend key;
-- **Подтверждать очистку кэша** — same persisted `confirm_media_cache_clear` backend key.
+## Size-mismatch hardening
 
-**Хранилище** is ordered by user importance:
-1. **Хранение медиа** — cache size / max file / retention / cleanup;
-2. **Использование хранилища** — SQLite, DDS JSON, media, other, logs;
-3. **Расположение файлов** — direct folder access last.
+When Discord/CDN returns a complete HTTP payload whose `Content-Length` matches the bytes actually received, but Discord attachment metadata advertises a different expected size, DDS now classifies that as a stable metadata/CDN mismatch after one completed transfer instead of blindly downloading the identical payload up to five times.
 
-Technical diagnostic states/events such as `RUNNING`, `STALE_URL`, `EVICTED`, `DOWNLOADING`, `media_cached` remain unchanged.
+The binary is still not accepted into cache automatically: the item becomes user-actionable and the archive continues running.
 
-## Data-safety invariants preserved
+## Library path usability
 
-1. SQLite messages, DDS JSON and attachment metadata remain archive/source-of-truth data.
+The misleading **Открыть папку библиотеки** button is removed from Библиотека. It opened the technical application-data root (`config`, `database`, `logs`, `media`, backups/cache internals), not a human-readable library. Technical folder access remains under **Настройки → Хранилище → Расположение файлов**. The broader Library tree/details redesign remains separate until its UX is finalized.
+
+## Truthful status text
+
+- Media Backfill may be `LIMITED` while archive/capture overall remains `RUNNING`; media failure isolation is preserved.
+- The bottom status bar now says **ошибок импорта** instead of the ambiguous `unresolved failures`.
+- The former **Последняя ошибка** card is now **Последняя критическая ошибка**; media-file problems live in their own block.
+
+## Safety invariants preserved
+
+1. SQLite messages, DDS JSON and attachment metadata remain durable archive/source-of-truth data.
 2. Media binaries remain replaceable cache.
-3. Media clear/eviction cannot delete archived messages or attachment metadata.
-4. Media failures remain isolated from the healthy local archive.
-5. Existing 0.5.0 settings keys and media behavior are preserved.
-
-## Run
-
-Normal source/dev desktop launch:
-
-`run_companion.bat`
-
-The final 1.0 product will replace the BAT-facing workflow with packaged EXE/Installed/Portable flows according to the project roadmap.
+3. Ignore/retry actions never delete archived messages or attachment metadata.
+4. One bad media object cannot stop Watcher/import/archive/UI runtime.
+5. Existing schema v3 remains additive; 0.5.2 requires no schema rewrite.
+6. Internal technical states remain stable; the new durable state is `IGNORED` for explicit user acknowledgement.
 
 ## Validation
 
-Automated gate for this candidate: **74/74 PASS**.
+Automated gate: **81/81 PASS repeated three consecutive runs**.  
+`compileall`: PASS.  
+CLI version: `DDS Companion 0.5.2` PASS.
 
-Run:
+Windows live gate is intentionally short and targets only the new media-attention workflow plus normal shutdown.
 
-`python -m unittest discover -s dds_companion/tests -v`
-
-Also see:
+See:
 - `VALIDATION.txt`
-- `NEXT_PATCH_0.5.1.md`
-- `UI_CONTRACT.md`
-- `MEDIA_BACKFILL_CONTRACT.md` — verified 0.5.0 media foundation retained unchanged
-- `OBSERVABILITY_CONTRACT.md`
-
-0.5.1 must pass the short Windows visual/live gate before promotion.
+- `LIVE_TEST_CHECKLIST_0.5.2.txt`
+- `NEXT_PATCH_0.5.2.md`
+- `MEDIA_ATTENTION_CONTRACT_0.5.2.md`
+- historical `NEXT_PATCH_0.5.1.md` / `UI_CONTRACT.md`
+- `MEDIA_BACKFILL_CONTRACT.md`

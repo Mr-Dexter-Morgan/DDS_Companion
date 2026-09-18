@@ -72,6 +72,7 @@ class StatsSnapshot:
     media_too_large: int
     media_skipped: int
     media_evicted: int
+    media_ignored: int
     sqlite_bytes: int
     dds_json_bytes: int
     cache_bytes: int
@@ -212,6 +213,7 @@ class StatsService:
             "media_too_large": media_states.get("TOO_LARGE", 0),
             "media_skipped": media_states.get("SKIPPED", 0),
             "media_evicted": media_states.get("EVICTED", 0),
+            "media_ignored": media_states.get("IGNORED", 0),
             "last_successful_import": last_import_row[0] if last_import_row else None,
             **storage,
         }
