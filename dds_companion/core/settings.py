@@ -13,7 +13,7 @@ from typing import Any
 class CompanionSettings:
     """Persisted user-facing settings that already have real runtime behavior.
 
-    Values use ``None`` for an unlimited/forever policy. 0.5.0 adds the first
+    Values use ``None`` for an unlimited/forever policy. 0.5.x includes the first
     real automatic media-backfill switch; every exposed control has persistent
     runtime behavior and no decorative settings are stored.
     """

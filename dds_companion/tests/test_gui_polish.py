@@ -54,9 +54,9 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", normal)
         self.assertIn("run_companion.pyw", normal)
-        self.assertIn("DDS Companion 0.5.0", normal)
+        self.assertIn("DDS Companion 0.5.1", normal)
         self.assertIn("python -m dds_companion.gui.app", debug)
-        self.assertIn("DDS Companion 0.5.0", debug)
+        self.assertIn("DDS Companion 0.5.1", debug)
 
     def test_050_first_run_gui_dependency_bootstrap_is_automatic(self):
         normal = (self.root / "run_companion.bat").read_text(encoding="utf-8")
@@ -73,7 +73,7 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         self.assertNotIn('QPushButton("Open library")', window)
-        self.assertEqual(pages.count('QPushButton("Open library folder")'), 1)
+        self.assertEqual(pages.count('QPushButton("Открыть папку библиотеки")'), 1)
 
     def test_dashboard_is_scroll_safe(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
@@ -108,7 +108,7 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         self.assertNotIn('QPushButton("Open DDS_Data")', dashboard)
         self.assertNotIn('QPushButton("Open logs")', dashboard)
         self.assertIn("StorageDonut", dashboard)
-        self.assertIn('StorageRow("Media cache", SUCCESS)', dashboard)
+        self.assertIn('StorageRow("Медиакэш", SUCCESS)', dashboard)
 
     def test_050_global_health_status_is_a_shortcut(self):
         window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
@@ -120,13 +120,13 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         theme = (self.root / "dds_companion/gui/theme.py").read_text(encoding="utf-8")
         self.assertIn("QTabWidget", pages)
-        self.assertIn('self.tabs.addTab(general, "General")', pages)
-        self.assertIn('self.tabs.addTab(storage, "Data & Storage")', pages)
-        self.assertIn('self.tabs.addTab(archive, "Archive")', pages)
-        self.assertIn('self.tabs.addTab(diagnostics, "Diagnostics")', pages)
-        self.assertIn('SectionHeader("Media cache policy"', pages)
-        self.assertIn('QPushButton("Clear media cache")', pages)
-        self.assertIn('QPushButton("Run diagnostics")', pages)
+        self.assertIn('self.tabs.addTab(general, "Общие")', pages)
+        self.assertIn('self.tabs.addTab(storage, "Хранилище")', pages)
+        self.assertIn('self.tabs.addTab(archive, "Архив")', pages)
+        self.assertIn('self.tabs.addTab(diagnostics, "Диагностика")', pages)
+        self.assertIn('SectionHeader(\n            "Хранение медиа"', pages)
+        self.assertIn('QPushButton("Очистить медиакэш")', pages)
+        self.assertIn('QPushButton("Запустить диагностику")', pages)
         self.assertIn("QTabWidget#SettingsTabs", theme)
         self.assertIn('QFrame[settingRow="true"]', theme)
 
@@ -147,18 +147,63 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         widgets = (self.root / "dds_companion/gui/widgets.py").read_text(encoding="utf-8")
         self.assertIn('StorageRow("SQLite + WAL/SHM", ACCENT)', pages)
         self.assertIn('StorageRow("DDS JSON", INFO)', pages)
-        self.assertIn('StorageRow("Media cache", SUCCESS)', pages)
-        self.assertIn('StorageRow("Other", WARNING)', pages)
-        self.assertIn('StorageRow("Logs", MUTED)', pages)
+        self.assertIn('StorageRow("Медиакэш", SUCCESS)', pages)
+        self.assertIn('StorageRow("Прочее", WARNING)', pages)
+        self.assertIn('StorageRow("Логи", MUTED)', pages)
         self.assertIn("QProgressBar::chunk", widgets)
         self.assertIn("background:{self.color}", widgets)
 
     def test_050_only_real_new_media_toggle_is_exposed(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         self.assertNotIn('QCheckBox("Start with Windows")', pages)
-        self.assertIn('Automatic media download', pages)
+        self.assertIn('Автоматическая загрузка медиа', pages)
         self.assertIn('media_autodownload_enabled', pages)
         self.assertNotIn('QPushButton("Check for updates")', pages)
+
+    def test_051_navigation_is_localized_without_renaming_internal_page_ids(self):
+        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        self.assertIn('PAGE_NAMES = ("Dashboard", "Library", "Activity", "Health", "Settings")', window)
+        self.assertIn('PAGE_LABELS = ("Главная", "Библиотека", "Активность", "Статус", "Настройки")', window)
+        self.assertIn('"Главная"', pages)
+        self.assertIn('"Библиотека"', pages)
+        self.assertIn('"Активность"', pages)
+        self.assertIn('"Статус"', pages)
+        self.assertIn('"Настройки"', pages)
+
+    def test_051_dashboard_has_no_manual_refresh_but_refreshes_when_reopened(self):
+        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        dashboard = pages[pages.index("class DashboardPage"):pages.index("class LibraryPage")]
+        self.assertNotIn('Обновить', dashboard)
+        self.assertIn('if index == self.PAGE_NAMES.index("Dashboard"):', window)
+        self.assertIn('self.runtime.request_refresh()', window)
+
+    def test_051_general_owns_media_behavior_toggles_with_existing_backend_keys(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        general_start = pages.index('general, general_layout = self._make_scroll_page()')
+        storage_start = pages.index('storage, storage_layout = self._make_scroll_page()')
+        archive_start = pages.index('archive, archive_layout = self._make_scroll_page()')
+        general = pages[general_start:storage_start]
+        storage = pages[storage_start:archive_start]
+        self.assertIn('Автоматическая загрузка медиа', general)
+        self.assertIn('Подтверждать очистку кэша', general)
+        self.assertIn('media_autodownload_enabled', general)
+        self.assertIn('confirm_media_cache_clear', general)
+        self.assertNotIn('media_autodownload_enabled', storage)
+        self.assertNotIn('confirm_media_cache_clear', storage)
+
+    def test_051_storage_sections_are_ordered_by_user_importance(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        start = pages.index('storage, storage_layout = self._make_scroll_page()')
+        end = pages.index('archive, archive_layout = self._make_scroll_page()')
+        storage = pages[start:end]
+        policy = storage.index('"Хранение медиа"')
+        usage = storage.index('"Использование хранилища"')
+        paths = storage.index('"Расположение файлов"')
+        self.assertLess(policy, usage)
+        self.assertLess(usage, paths)
+
 
 
 if __name__ == "__main__":

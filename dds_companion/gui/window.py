@@ -44,6 +44,7 @@ class SignalBus(QObject):
 
 class MainWindow(QMainWindow):
     PAGE_NAMES = ("Dashboard", "Library", "Activity", "Health", "Settings")
+    PAGE_LABELS = ("Главная", "Библиотека", "Активность", "Статус", "Настройки")
 
     def __init__(self, *, dds_data: str | None = None, app_data: str | None = None, poll_ms: int = 750, settle_ms: int = 500):
         super().__init__()
@@ -136,7 +137,7 @@ class MainWindow(QMainWindow):
         side.addSpacing(16)
 
         self.nav_buttons: list[QPushButton] = []
-        for index, name in enumerate(self.PAGE_NAMES):
+        for index, name in enumerate(self.PAGE_LABELS):
             button = QPushButton(name)
             button.setCheckable(True)
             button.setProperty("nav", True)
@@ -187,7 +188,7 @@ class MainWindow(QMainWindow):
         content.addWidget(topbar)
 
         self.stack = QStackedWidget()
-        self.dashboard = DashboardPage(self.runtime.request_refresh)
+        self.dashboard = DashboardPage()
         self.library = LibraryPage(self.open_library)
         self.activity = ActivityPage()
         self.health = HealthPage()
@@ -350,12 +351,14 @@ class MainWindow(QMainWindow):
 
     def _select_page(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
+        if index == self.PAGE_NAMES.index("Dashboard"):
+            self.runtime.request_refresh()
         for i, button in enumerate(self.nav_buttons):
             button.setChecked(i == index)
         on_health = index == self.PAGE_NAMES.index("Health")
         self.top_status.setEnabled(not on_health)
         self.top_status.setToolTip(
-            "Текущая страница Health" if on_health else "Открыть Health"
+            "Текущая страница Статус" if on_health else "Открыть Статус"
         )
 
     def _open_health_from_status(self) -> None:
@@ -373,7 +376,7 @@ class MainWindow(QMainWindow):
         set_state_property(self.top_status, state)
         if self.stack.currentIndex() != self.PAGE_NAMES.index("Health"):
             detail = health.get("tooltip") or health.get("summary") or state
-            self.top_status.setToolTip(f"{detail}\nНажмите, чтобы открыть Health")
+            self.top_status.setToolTip(f"{detail}\nНажмите, чтобы открыть Статус")
         stats = snapshot.get("stats", {})
         self.status_text.setText(
             f"{stats.get('messages', 0)} сообщений · "

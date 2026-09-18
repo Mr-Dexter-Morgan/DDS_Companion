@@ -1,39 +1,32 @@
-DDS Companion 0.5.0 — Validation
+DDS Companion 0.5.1 — Validation
 =================================
-Status: CANDIDATE r2 / AUTOMATED PASS / WINDOWS LIVE PENDING
-Date: 2026-09-17
-Baseline: DDS Companion 0.4.6 — VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
+Status: CANDIDATE / AUTOMATED PASS / WINDOWS LIVE PENDING
+Date: 2026-09-18
+Baseline: DDS Companion 0.5.0 — VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
 
 AUTOMATED GATE
 - Python compileall: PASS
-- Full unittest discovery: 70/70 PASS
-- Full suite repeated three consecutive times on the r2 source tree: PASS / PASS / PASS
-- CLI --version: DDS Companion 0.5.0 PASS
-- Existing watcher/import/Health/UI/settings/cache regressions remain PASS
+- Full unittest discovery: 74/74 PASS
+- CLI --version: DDS Companion 0.5.1 PASS
+- Existing watcher/import/Health/media/settings/cache regressions: PASS
 
-NEW 0.5.0 COVERAGE
-- schema v1 archive upgrades additively to schema v3 without losing rows;
-- import registers stable media identity + message reference;
-- legacy pre-0.5 attachment projection is idempotent;
-- stale signed URL recovers when capture supplies a new URL;
-- intentional EVICTED state is not resurrected by ordinary signed-URL rotation;
-- successful download uses staging -> atomic cache path and records SHA-256/size;
-- one failed media item does not block another media item or archive rows;
-- media failure is visible as a Media subsystem problem without making the healthy local archive overall LIMITED;
-- max-file/cache policy can block network before transfer;
-- non-Discord URL is skipped before network (SSRF guard);
-- HTTP 403 becomes STALE_URL;
-- transient network error becomes bounded FAILED_RETRYABLE with backoff;
-- cache clear/eviction preserves archive metadata and marks registry EVICTED with reason;
-- manual-clear EVICTED rows stay inert until explicit user Off -> On, then requeue and can cache again;
-- legacy candidate-r1 EVICTED rows with NULL failure_class are recoverable by explicit r2 Off -> On without database reset;
-- policy-evicted rows are not resurrected by that explicit manual-clear recovery path;
-- rapid explicit autodownload True/False/True commands are recorded in Activity in order;
-- storage-row colors are tied to the same category palette as the donut chart;
-- abandoned DOWNLOADING claim is recovered;
-- Automatic media download setting persists;
-- GUI source contract exposes only the new real media toggle, not fake future controls.
+NEW 0.5.1 COVERAGE
+- user-facing navigation labels are Russian while internal PAGE_NAMES remain English/stable;
+- Главная contains no visible manual refresh button;
+- returning to Главная requests a fresh snapshot through the existing runtime;
+- Automatic media download and Confirm cache cleanup live in Общие but keep the same backend keys;
+- Хранилище order is policy -> usage -> paths;
+- 0.5.0 media runtime/state machine remains untouched by the UI reorganization.
 
-LIVE GATE
-Partially passed on Windows: migration, 67-message archive preservation, database quick check, 6 known -> 6 cached real backfill and restart dedup all passed. Candidate r1 manual-clear recovery failed and was fixed in r2. Continue with LIVE_TEST_CHECKLIST_0.5.0.txt using r2.
-0.4.6 remains CURRENT RECOMMENDED until the 0.5.0 Windows live gate is complete.
+ENVIRONMENT NOTE
+- Current Linux automation environment does not have PySide6 installed, so an offscreen GUI-render smoke could not run here.
+- Source/compile/regression contracts are green; Windows live/visual validation remains the promotion gate.
+
+WINDOWS LIVE GATE
+1. Launch over the existing 0.5.0 data root; archive/media counts remain intact.
+2. Verify sidebar: Главная / Библиотека / Активность / Статус / Настройки.
+3. Verify Главная has no manual Обновить button and remains current after leaving/returning.
+4. Verify Настройки tabs: Общие / Хранилище / Архив / Диагностика.
+5. Verify Automatic media download + cache-cleanup confirmation remain persistent and behaviorally unchanged.
+6. Verify Хранилище order: Хранение медиа -> Использование хранилища -> Расположение файлов.
+7. Normal close: no traceback; core Health remains truthful.

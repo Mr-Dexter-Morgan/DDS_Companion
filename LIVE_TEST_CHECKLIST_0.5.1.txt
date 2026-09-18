@@ -1,0 +1,36 @@
+DDS Companion 0.5.1 — Windows Live Test Checklist
+=================================================
+Status: CANDIDATE / 74 AUTOMATED TESTS PASS / WINDOWS LIVE PENDING
+Baseline: DDS Companion 0.5.0 VERIFIED / LIVE TESTED.
+
+1. START / DATA SAFETY
+[ ] Launch over the existing 0.5.0 data root without DB reset or manual migration.
+[ ] Existing message/media counts remain present; Overall Health remains truthful.
+
+2. MAIN NAVIGATION
+[ ] Sidebar shows: Главная / Библиотека / Активность / Статус / Настройки.
+[ ] Every button opens the same underlying page as before; no blank/mismatched page.
+
+3. ГЛАВНАЯ
+[ ] Visible manual «Обновить» button is gone.
+[ ] Leave Главная, let data change, return: current snapshot appears without manual action.
+
+4. НАСТРОЙКИ / ОБЩИЕ
+[ ] Tabs show: Общие / Хранилище / Архив / Диагностика.
+[ ] «Автоматическая загрузка медиа» and «Подтверждать очистку кэша» are in Общие.
+[ ] Toggle both, restart Companion, verify values persist and behavior is unchanged.
+
+5. НАСТРОЙКИ / ХРАНИЛИЩЕ
+[ ] Order is: Хранение медиа -> Использование хранилища -> Расположение файлов.
+[ ] Cache limit / max file / retention values remain unchanged from 0.5.0.
+[ ] «Очистить медиакэш» still removes cache binaries only, not archive metadata.
+
+6. АРХИВ / ДИАГНОСТИКА
+[ ] Russian labels render without clipping at the normal window size.
+[ ] Diagnostics actions still work and technical states/events remain unchanged.
+
+7. SHUTDOWN
+[ ] Normal close produces no traceback and runtime stops cleanly.
+
+PROMOTION GATE
+If these bounded UI/live checks pass, 0.5.1 can be promoted. Do not repeat the full 0.5.0 Media Backfill live campaign without a relevant regression.

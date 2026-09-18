@@ -1,80 +1,59 @@
-DDS Companion 0.5.0 — Media Backfill Core
+DDS Companion 0.5.1 — UI / Settings Polish
 ==========================================
-Date: 2026-09-17
-Status: CANDIDATE r2 / AUTOMATED PASS / WINDOWS LIVE PENDING
-Previous recommended: 0.4.6 — VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
+Date: 2026-09-18
+Status: CANDIDATE / AUTOMATED PASS / WINDOWS LIVE PENDING
+Baseline: 0.5.0 — VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
 
+USER-FACING NAVIGATION
+- Dashboard -> Главная.
+- Library -> Библиотека.
+- Activity -> Активность.
+- Health -> Статус.
+- Settings -> Настройки.
+- Internal PAGE_NAMES remain Dashboard / Library / Activity / Health / Settings; only UI labels changed.
 
-LIVE FINDING / CANDIDATE r2 FIXES
-- Windows live test confirmed first-run migration, registry bootstrap, real 6/6 attachment caching, restart dedup and database integrity.
-- Live test then exposed a recovery gap: after Automatic media download Off + Clear media cache, rows correctly became EVICTED but an explicit re-enable did not re-arm them, so cache remained 6 known / 0 cached.
-- Root cause: anti-thrash design intentionally excluded all EVICTED rows from ordinary planning but did not distinguish manual Clear from policy eviction.
-- Fix: cache removal now records eviction reason. Manual Clear uses evicted_manual_clear; policy eviction uses evicted_policy.
-- Upgrade compatibility: r1 EVICTED rows used NULL failure_class; an explicit r2 Off -> On may re-arm those legacy ambiguous rows once so an already-cleared r1 cache (like 6/0) recovers without DB surgery. Any subsequent r2 policy eviction is tagged and stays protected from requeue.
-- Explicit Automatic media download Off -> On re-arms only evicted_manual_clear rows. Policy evictions stay EVICTED, preserving anti-thrash behavior.
-- Autodownload UI actions now travel through an ordered control queue, so rapid enable/disable actions cannot be collapsed by a single wake Event.
-- Activity now records both media_backfill_enabled and media_backfill_disabled transitions, plus manual-clear requeue evidence when applicable.
-- Storage horizontal bars now match donut category colors (SQLite purple, DDS JSON blue, Media cache green, Other amber, Logs muted).
+ГЛАВНАЯ
+- Removed the visible manual Обновить button.
+- Existing automatic snapshot flow remains active.
+- Returning to Главная explicitly requests a fresh snapshot from the runtime.
+- Internal runtime refresh capability remains available.
 
-ARCHIVE / SCHEMA
-- SQLite schema version bumped from 2 to 3.
-- Added media_objects: durable media identity, lifecycle, retry, URL and local-cache metadata.
-- Added media_refs: message/attachment-position -> media identity mapping.
-- Existing archive tables are not rewritten.
-- Legacy 0.4.x attachment rows are projected into the media registry once on the isolated media thread.
-- Registry bootstrap self-heals if media_refs are unexpectedly missing.
+НАСТРОЙКИ / ОБЩИЕ
+- General -> Общие.
+- Automatic media download moved from storage to Общие and localized as «Автоматическая загрузка медиа».
+- Confirm cache cleanup moved to Общие and localized as «Подтверждать очистку кэша».
+- Existing persisted backend keys are unchanged.
+- Watcher timing stays read-only; future tray/autostart toggles are not faked early.
 
-MEDIA REGISTRY / STATE MACHINE
-- Added states: KNOWN, QUEUED, DOWNLOADING, CACHED, SKIPPED, TOO_LARGE,
-  FAILED_RETRYABLE, FAILED_PERMANENT, STALE_URL and EVICTED.
-- New signed URL resets stale/failed media to KNOWN automatically.
-- EVICTED is intentionally preserved across ordinary URL rotation to prevent cache-thrash loops.
-- Cached-file loss is reconciled back to KNOWN without touching archive metadata.
+НАСТРОЙКИ / ХРАНИЛИЩЕ
+- Data & Storage -> Хранилище.
+- Media cache policy moved to the top and localized as «Хранение медиа».
+- Storage usage follows as «Использование хранилища».
+- Direct folder/path access moved to the bottom as «Расположение файлов».
+- Cache policy values remain identical; only visible labels/order changed.
+- Media cache cleanup remains binary-only and archive-safe.
 
-DOWNLOAD ENGINE
-- Media I/O runs on a dedicated background runtime with its own SQLite connection.
-- Default bounded concurrency: 2 downloads; hard-clamped to a small worker count.
-- Per-request timeout and streamed 256 KiB chunks.
-- Temporary .part files live under media/.staging and are atomically renamed only after success.
-- SHA-256 and actual size are persisted after a complete download.
-- Expected-size mismatch is retryable instead of silently accepting a truncated file.
-- Free-disk preflight prevents knowingly unsafe downloads.
-
-NETWORK / SECURITY
-- Automatic download accepts HTTPS Discord media hosts only.
-- Redirect targets and final URLs are revalidated.
-- Raw attachment filenames never become filesystem paths; only a sanitized suffix is retained.
-- HTTP 401/403/404 -> STALE_URL (wait for a refreshed capture URL).
-- HTTP 429 / 5xx / transient network-I/O errors -> bounded retry with exponential backoff.
-- Retry-After on HTTP 429 is respected up to a safe cap.
-- Other permanent HTTP failures stop retrying until metadata changes.
-
-CACHE POLICY
-- Existing size / max-file / retention settings now govern the real backfill cache.
-- Registered media uses explicit cached-at / last-access timestamps; orphan files fall back to mtime.
-- Clear/eviction resets cached registry entries to EVICTED; archive metadata remains intact.
-- Policy EVICTED items are not automatically requeued. Manual-clear EVICTED items can be deliberately re-armed only by an explicit autodownload Off -> On transition.
-- Active .staging files are excluded from cache cleanup.
-
-UI / OBSERVABILITY
-- Added persistent Automatic media download switch (default Off).
-- Added Media Backfill card to Health.
-- Dashboard known/cached counter is registry-backed.
-- Diagnostics now include media Health and queue/failure counters.
-- Activity records media cached / retry / stale / permanent failure / maintenance events.
-- Media subsystem is non-critical: a media problem never makes the local archive unusable.
+АРХИВ / ДИАГНОСТИКА
+- Archive -> Архив.
+- Diagnostics -> Диагностика.
+- Common user-facing actions/labels received light Russian localization.
+- Technical diagnostic identifiers and status/event vocabulary remain unchanged where precision matters.
 
 REGRESSIONS PRESERVED
-- 0.4.6 Dashboard/Settings/Storage design remains intact.
-- Health shortcut, focus behavior and 1366x768 scroll safety remain covered.
-- Discord/Plugin/DDS_Data loss/recovery behavior remains covered.
-- PySide6 first-run source bootstrap remains automatic.
+- 0.5.0 schema v3 media registry and state machine unchanged.
+- Media Backfill runtime/downloader unchanged.
+- Settings persistence keys unchanged.
+- Health/Plugin/Discord/DDS_Data behavior unchanged.
+- Archive/cache safety boundary unchanged.
 
 AUTOMATED VALIDATION
-- 70/70 tests PASS on the r2 source tree, repeated three consecutive runs.
+- 74/74 unit/regression/source-contract tests PASS.
+- Added 0.5.1 contracts for localized navigation with stable internal IDs.
+- Added contract that Главная has no manual refresh button but refreshes on return.
+- Added contracts for General toggle ownership and Storage section ordering.
 - Python compileall PASS.
-- CLI version PASS: DDS Companion 0.5.0.
+- CLI version PASS: DDS Companion 0.5.1.
 
-PROMOTION RULE
-0.5.0 remains a candidate until the Windows live checklist passes. Any live failure keeps
-0.4.6 as CURRENT RECOMMENDED and is fixed in a new candidate rather than silently ignored.
+LIVE GATE
+- Windows visual/live check remains required before promotion.
+- High-value checks: navigation labels/routes, Settings placement/persistence, Главная freshness, normal shutdown.

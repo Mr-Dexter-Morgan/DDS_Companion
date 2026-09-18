@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title DDS Companion 0.5.0 - One-shot import
+title DDS Companion 0.5.1 - One-shot import
 python -m dds_companion.app --once %*
 set EXITCODE=%ERRORLEVEL%
 echo.

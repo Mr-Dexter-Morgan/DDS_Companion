@@ -104,24 +104,14 @@ class Page(QWidget):
 
 
 class DashboardPage(Page):
-    def __init__(self, on_refresh, parent=None):
+    def __init__(self, parent=None):
         super().__init__(
-            "Dashboard",
+            "Главная",
             "Состояние архива, активность и использование хранилища — без технического шума.",
             parent,
             scrollable=True,
         )
         self.latest_snapshot: dict = {}
-
-        actions = QHBoxLayout()
-        actions.setSpacing(8)
-        actions.addStretch(1)
-        refresh = QPushButton("↻  Обновить")
-        refresh.setProperty("secondary", True)
-        refresh.setProperty("compact", True)
-        refresh.clicked.connect(on_refresh)
-        actions.addWidget(refresh)
-        self.body.addLayout(actions)
 
         self.metrics_grid = QGridLayout()
         metrics = self.metrics_grid
@@ -163,15 +153,15 @@ class DashboardPage(Page):
         storage_layout = QVBoxLayout(self.storage_detail)
         storage_layout.setContentsMargins(16, 14, 16, 14)
         storage_layout.setSpacing(6)
-        storage_layout.addWidget(SectionHeader("Storage usage", "Архив отдельно, media cache отдельно"))
+        storage_layout.addWidget(SectionHeader("Использование хранилища", "Архив отдельно, медиакэш отдельно"))
         self.storage_donut = StorageDonut()
         storage_layout.addWidget(self.storage_donut, 0, Qt.AlignHCenter)
         self.storage_rows = {
             "sqlite_bytes": StorageRow("SQLite + WAL/SHM", ACCENT),
             "dds_json_bytes": StorageRow("DDS JSON", INFO),
-            "media_bytes": StorageRow("Media cache", SUCCESS),
-            "other_bytes": StorageRow("Other", WARNING),
-            "logs_bytes": StorageRow("Logs", MUTED),
+            "media_bytes": StorageRow("Медиакэш", SUCCESS),
+            "other_bytes": StorageRow("Прочее", WARNING),
+            "logs_bytes": StorageRow("Логи", MUTED),
         }
         for row in self.storage_rows.values():
             storage_layout.addWidget(row)
@@ -310,7 +300,7 @@ class DashboardPage(Page):
 class LibraryPage(Page):
     def __init__(self, on_open_library, parent=None):
         super().__init__(
-            "Library",
+            "Библиотека",
             "Структура накопленного архива: Server → Channel → Thread. Поиск по сообщениям появится отдельным этапом.",
             parent,
         )
@@ -318,7 +308,7 @@ class LibraryPage(Page):
         self.filter = QLineEdit()
         self.filter.setPlaceholderText("Фильтр по серверам, каналам и тредам…")
         self.filter.textChanged.connect(self.apply_filter)
-        open_btn = QPushButton("Open library folder")
+        open_btn = QPushButton("Открыть папку библиотеки")
         open_btn.setProperty("secondary", True)
         open_btn.clicked.connect(on_open_library)
         tools.addWidget(self.filter, 1)
@@ -431,7 +421,7 @@ class LibraryPage(Page):
 class ActivityPage(Page):
     def __init__(self, parent=None):
         super().__init__(
-            "Activity",
+            "Активность",
             "Человеческий журнал действий Companion без файлового спама и технической каши.",
             parent,
         )
@@ -489,7 +479,7 @@ class ActivityPage(Page):
 class HealthPage(Page):
     def __init__(self, parent=None):
         super().__init__(
-            "Health",
+            "Статус",
             "Проверка жизненно важных подсистем, heartbeat и ошибок, которые не должны останавливать архив.",
             parent,
             scrollable=True,
@@ -625,7 +615,7 @@ class SettingsPage(Page):
         ("5 GB", 5 * 1024**3),
         ("10 GB", 10 * 1024**3),
         ("20 GB", 20 * 1024**3),
-        ("Unlimited", None),
+        ("Без ограничений", None),
     ]
     MAX_FILE_LIMITS = [
         ("25 MB", 25 * 1024**2),
@@ -633,14 +623,14 @@ class SettingsPage(Page):
         ("100 MB", 100 * 1024**2),
         ("250 MB", 250 * 1024**2),
         ("500 MB", 500 * 1024**2),
-        ("Unlimited", None),
+        ("Без ограничений", None),
     ]
     RETENTION_LIMITS = [
-        ("3 days", 3),
-        ("1 week", 7),
-        ("1 month", 30),
-        ("3 months", 90),
-        ("Forever", None),
+        ("3 дня", 3),
+        ("1 неделя", 7),
+        ("1 месяц", 30),
+        ("3 месяца", 90),
+        ("Всегда", None),
     ]
 
     def __init__(
@@ -654,7 +644,7 @@ class SettingsPage(Page):
         parent=None,
     ):
         super().__init__(
-            "Settings",
+            "Настройки",
             "Настройки и обслуживание разделены: только реальные, сохраняемые и проверяемые действия.",
             parent,
         )
@@ -666,17 +656,38 @@ class SettingsPage(Page):
         self.body.addWidget(self.tabs, 1)
 
         general, general_layout = self._make_scroll_page()
-        general_layout.addWidget(SectionHeader("General", "Только уже работающие параметры"))
+        general_layout.addWidget(SectionHeader("Общие", "Основное поведение Companion"))
+
+        self.media_autodownload = QCheckBox("Включить")
+        self.media_autodownload.toggled.connect(
+            lambda value: self._on_setting_changed("media_autodownload_enabled", bool(value))
+        )
+        general_layout.addWidget(SettingRow(
+            "Автоматическая загрузка медиа",
+            "Автоматически загружать вложения Discord в локальный медиакэш.",
+            control=self.media_autodownload,
+        ))
+
+        self.confirm_clear = QCheckBox("Подтверждать")
+        self.confirm_clear.toggled.connect(
+            lambda value: self._on_setting_changed("confirm_media_cache_clear", bool(value))
+        )
+        general_layout.addWidget(SettingRow(
+            "Подтверждать очистку кэша",
+            "Запрашивать подтверждение перед очисткой медиакэша.",
+            control=self.confirm_clear,
+        ))
+
         self.watcher_policy = QLabel("poll — · settle —")
         self.watcher_policy.setStyleSheet(f"color:{TEXT};font-weight:650;")
         general_layout.addWidget(SettingRow(
-            "Watcher policy",
-            "Read-only до отдельного безопасного редактора runtime-параметров.",
+            "Политика наблюдения",
+            "Технические интервалы Watcher пока доступны только для просмотра.",
             control=self.watcher_policy,
         ))
         info = QLabel(
-            "Start with Windows, Start minimized, tray и Close behavior появятся только вместе "
-            "с реальной persistent-реализацией. 0.5.0 по-прежнему не показывает декоративные переключатели."
+            "Автозапуск, запуск свёрнутым, трей и поведение кнопки закрытия появятся вместе "
+            "с реальной persistent-реализацией в следующих версиях."
         )
         info.setObjectName("SectionHint")
         info.setWordWrap(True)
@@ -684,47 +695,10 @@ class SettingsPage(Page):
         general_layout.addStretch(1)
 
         storage, storage_layout = self._make_scroll_page()
-        storage_layout.addWidget(SectionHeader("Data & Storage", "Архив защищён; очищается только media cache"))
-        self.path_rows: dict[str, PathRow] = {}
-        for key, label in [
-            ("dds_data", "DDS_Data (plugin export)"),
-            ("app_data", "Companion archive / data root"),
-        ]:
-            row = PathRow(label, "—")
-            self.path_rows[key] = row
-            storage_layout.addWidget(row)
-
-        usage = Card()
-        usage_layout = QVBoxLayout(usage)
-        usage_layout.setContentsMargins(16, 14, 16, 14)
-        usage_layout.setSpacing(6)
-        usage_layout.addWidget(SectionHeader("Storage usage", "Источник данных и cache считаются отдельно"))
-        self.storage_total = QLabel("—")
-        self.storage_total.setStyleSheet(f"color:{TEXT};font-size:17pt;font-weight:750;")
-        usage_layout.addWidget(self.storage_total)
-        self.storage_rows = {
-            "sqlite_bytes": StorageRow("SQLite + WAL/SHM", ACCENT),
-            "dds_json_bytes": StorageRow("DDS JSON", INFO),
-            "media_bytes": StorageRow("Media cache", SUCCESS),
-            "other_bytes": StorageRow("Other", WARNING),
-            "logs_bytes": StorageRow("Logs", MUTED),
-        }
-        for row in self.storage_rows.values():
-            usage_layout.addWidget(row)
-        storage_layout.addWidget(usage)
-
-        storage_layout.addWidget(SectionHeader("Media Backfill", "Сеть включается только явным persistent-переключателем"))
-        self.media_autodownload = QCheckBox("Автоматически")
-        self.media_autodownload.toggled.connect(
-            lambda value: self._on_setting_changed("media_autodownload_enabled", bool(value))
-        )
-        storage_layout.addWidget(SettingRow(
-            "Automatic media download",
-            "Если включено, Companion фоново кэширует известные Discord attachments; ошибки media не блокируют архив.",
-            control=self.media_autodownload,
+        storage_layout.addWidget(SectionHeader(
+            "Хранение медиа",
+            "Сначала — политика медиакэша; архивные metadata при очистке не удаляются.",
         ))
-
-        storage_layout.addWidget(SectionHeader("Media cache policy", "Политика применяется к реальному Media Backfill cache"))
         self.cache_limit_combo = self._combo(self.CACHE_LIMITS)
         self.max_file_combo = self._combo(self.MAX_FILE_LIMITS)
         self.retention_combo = self._combo(self.RETENTION_LIMITS)
@@ -738,101 +712,123 @@ class SettingsPage(Page):
             lambda _i: self._emit_combo("media_retention_days", self.retention_combo)
         )
         storage_layout.addWidget(SettingRow(
-            "Cache size limit",
-            "При превышении удаляются самые старые media-файлы; архивные metadata остаются.",
+            "Лимит медиакэша",
+            "При превышении удаляются самые старые медиафайлы; архивные metadata остаются.",
             control=self.cache_limit_combo,
         ))
         storage_layout.addWidget(SettingRow(
-            "Max single media file",
-            "Файл крупнее лимита не остаётся в локальном media cache.",
+            "Максимальный размер файла",
+            "Файл крупнее лимита не сохраняется в локальном медиакэше.",
             control=self.max_file_combo,
         ))
         storage_layout.addWidget(SettingRow(
-            "Keep unused media",
-            "Для зарегистрированного media используется last-access/cached-at; для orphan-файлов безопасный fallback — mtime.",
+            "Хранить неиспользуемые медиа",
+            "Срок хранения считается по last-access/cached-at; для orphan-файлов используется безопасный fallback по mtime.",
             control=self.retention_combo,
         ))
-
-        self.confirm_clear = QCheckBox("Подтверждать")
-        self.confirm_clear.toggled.connect(
-            lambda value: self._on_setting_changed("confirm_media_cache_clear", bool(value))
-        )
-        storage_layout.addWidget(SettingRow(
-            "Confirm cache cleanup",
-            "Защищает от случайной очистки media cache.",
-            control=self.confirm_clear,
-        ))
-        self.clear_media_button = QPushButton("Clear media cache")
+        self.clear_media_button = QPushButton("Очистить медиакэш")
         self.clear_media_button.setProperty("secondary", True)
         self.clear_media_button.clicked.connect(on_clear_media_cache)
         storage_layout.addWidget(SettingRow(
-            "Media cache cleanup",
+            "Очистка медиакэша",
             "Удаляет только бинарники из media; SQLite, DDS JSON и attachment metadata не трогаются.",
             control=self.clear_media_button,
         ))
+
+        usage = Card()
+        usage_layout = QVBoxLayout(usage)
+        usage_layout.setContentsMargins(16, 14, 16, 14)
+        usage_layout.setSpacing(6)
+        usage_layout.addWidget(SectionHeader("Использование хранилища", "Источник данных и кэш считаются отдельно"))
+        self.storage_total = QLabel("—")
+        self.storage_total.setStyleSheet(f"color:{TEXT};font-size:17pt;font-weight:750;")
+        usage_layout.addWidget(self.storage_total)
+        self.storage_rows = {
+            "sqlite_bytes": StorageRow("SQLite + WAL/SHM", ACCENT),
+            "dds_json_bytes": StorageRow("DDS JSON", INFO),
+            "media_bytes": StorageRow("Медиакэш", SUCCESS),
+            "other_bytes": StorageRow("Прочее", WARNING),
+            "logs_bytes": StorageRow("Логи", MUTED),
+        }
+        for row in self.storage_rows.values():
+            usage_layout.addWidget(row)
+        storage_layout.addWidget(usage)
+
+        storage_layout.addWidget(SectionHeader(
+            "Расположение файлов",
+            "Редко используемый прямой доступ к папкам данных.",
+        ))
+        self.path_rows: dict[str, PathRow] = {}
+        for key, label in [
+            ("dds_data", "DDS_Data — экспорт плагина"),
+            ("app_data", "Данные Companion"),
+        ]:
+            row = PathRow(label, "—")
+            self.path_rows[key] = row
+            storage_layout.addWidget(row)
         storage_layout.addStretch(1)
 
         archive, archive_layout = self._make_scroll_page()
-        archive_layout.addWidget(SectionHeader("Archive", "Информационный экран без destructive controls"))
+        archive_layout.addWidget(SectionHeader("Архив", "Информационный экран без опасных действий"))
         self.archive_messages = QLabel("—")
         self.archive_context = QLabel("—")
         self.archive_db = QLabel("—")
         self.archive_json = QLabel("—")
         for title, hint, label in [
-            ("Messages stored", "Накопительный архив сообщений", self.archive_messages),
-            ("Archived structure", "Servers · channels · threads", self.archive_context),
-            ("Database size", "SQLite + WAL/SHM", self.archive_db),
-            ("DDS JSON size", "Исходные capture-файлы Plugin", self.archive_json),
+            ("Сообщения в архиве", "Накопительный архив сообщений", self.archive_messages),
+            ("Структура архива", "Серверы · каналы · треды", self.archive_context),
+            ("Размер базы", "SQLite + WAL/SHM", self.archive_db),
+            ("Размер DDS JSON", "Исходные capture-файлы Plugin", self.archive_json),
         ]:
             label.setStyleSheet(f"color:{TEXT};font-weight:650;")
             archive_layout.addWidget(SettingRow(title, hint, control=label))
-        archive_note = QLabel("Удаление/retention архива не реализованы намеренно: archive data не является cache.")
+        archive_note = QLabel("Удаление и retention архива намеренно не реализованы: данные архива не являются кэшем.")
         archive_note.setObjectName("SectionHint")
         archive_note.setWordWrap(True)
         archive_layout.addWidget(archive_note)
         archive_layout.addStretch(1)
 
         diagnostics, diag_layout = self._make_scroll_page()
-        diag_layout.addWidget(SectionHeader("Diagnostics", "Логи, отчёт и безопасные проверки"))
+        diag_layout.addWidget(SectionHeader("Диагностика", "Логи, отчёт и безопасные проверки"))
         self.diag_rows: dict[str, PathRow] = {}
         for key, label in [
-            ("logs", "Logs"),
-            ("app_data", "Companion data folder"),
+            ("logs", "Логи"),
+            ("app_data", "Папка данных Companion"),
         ]:
             row = PathRow(label, "—")
             self.diag_rows[key] = row
             diag_layout.addWidget(row)
 
-        run_diag = QPushButton("Run diagnostics")
+        run_diag = QPushButton("Запустить диагностику")
         run_diag.setProperty("secondary", True)
         run_diag.clicked.connect(on_run_diagnostics)
         self.diag_status = QLabel("Не запускалась")
         self.diag_status.setObjectName("SettingHint")
         diag_layout.addWidget(SettingRow(
-            "System report",
-            "Снимок версий, Health, путей, storage и unresolved failures.",
+            "Системный отчёт",
+            "Снимок версий, Статуса, путей, хранилища и unresolved failures.",
             control=run_diag,
         ))
         diag_layout.addWidget(self.diag_status)
 
-        db_check = QPushButton("Database quick check")
+        db_check = QPushButton("Быстрая проверка базы")
         db_check.setProperty("secondary", True)
         db_check.clicked.connect(on_database_check)
         self.db_check_status = QLabel("Не запускалась")
         self.db_check_status.setObjectName("SettingHint")
         diag_layout.addWidget(SettingRow(
-            "SQLite integrity",
+            "Целостность SQLite",
             "PRAGMA quick_check через отдельное read connection.",
             control=db_check,
         ))
         diag_layout.addWidget(self.db_check_status)
 
-        self.copy_report = QPushButton("Copy report")
+        self.copy_report = QPushButton("Копировать отчёт")
         self.copy_report.setProperty("secondary", True)
         self.copy_report.setEnabled(False)
         self.copy_report.clicked.connect(on_copy_report)
         diag_layout.addWidget(SettingRow(
-            "Copy last report",
+            "Последний отчёт",
             "Копирует последний diagnostics report в буфер обмена.",
             control=self.copy_report,
         ))
@@ -840,18 +836,18 @@ class SettingsPage(Page):
         self.plugin_value = QLabel("—")
         self.contract_value = QLabel("—")
         for title, hint, label in [
-            ("Companion version", "Текущая версия приложения", self.version_value),
-            ("Plugin version", "Версия из heartbeat/manifest", self.plugin_value),
-            ("Capture contract", "Версия capture schema / heartbeat contract", self.contract_value),
+            ("Версия Companion", "Текущая версия приложения", self.version_value),
+            ("Версия плагина", "Версия из heartbeat/manifest", self.plugin_value),
+            ("Контракт захвата", "Версия capture schema / heartbeat contract", self.contract_value),
         ]:
             label.setStyleSheet(f"color:{TEXT};font-weight:650;")
             diag_layout.addWidget(SettingRow(title, hint, control=label))
         diag_layout.addStretch(1)
 
-        self.tabs.addTab(general, "General")
-        self.tabs.addTab(storage, "Data & Storage")
-        self.tabs.addTab(archive, "Archive")
-        self.tabs.addTab(diagnostics, "Diagnostics")
+        self.tabs.addTab(general, "Общие")
+        self.tabs.addTab(storage, "Хранилище")
+        self.tabs.addTab(archive, "Архив")
+        self.tabs.addTab(diagnostics, "Диагностика")
 
     @staticmethod
     def _make_scroll_page() -> tuple[QWidget, QVBoxLayout]:

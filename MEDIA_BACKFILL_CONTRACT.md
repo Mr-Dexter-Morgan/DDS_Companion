@@ -1,6 +1,6 @@
 # DDS Companion 0.5.0 — Media Backfill Contract
 
-Status: **IMPLEMENTED IN 0.5.0 CANDIDATE r2 / LIVE VALIDATION PENDING**  
+Status: **IMPLEMENTED IN 0.5.0 / VERIFIED / LIVE TESTED / RETAINED FOUNDATION**  
 Date: **2026-09-17**
 
 ## 1. Layer boundary
