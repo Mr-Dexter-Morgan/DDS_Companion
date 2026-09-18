@@ -1,12 +1,11 @@
-DDS Companion 0.5.3 — Library UX
-================================
+DDS Companion 0.5.4 — Library Message Viewer / Export Selection
 
-- Reworked Library into a two-pane archive browser.
-- Kept natural Discord hierarchy: server -> channel -> thread.
-- Replaced developer-facing ID column with human columns: Раздел / Сообщений / Медиа.
-- Added details panel: type, archive location, message count, media count, last activity and technical ID.
-- Added explicit Copy ID action in details instead of exposing IDs in the main tree.
-- Updated Library search wording and removed ID-based filtering from the ordinary search field.
-- Extended LibraryService snapshots with media counts and last-activity timestamps.
-- Preserved selection/expansion across refresh and auto-selects the first server when available.
-- No SQLite schema, Watcher, importer or Media Runtime redesign.
+- Главная: пользовательские подписи русифицированы; Медиа = «Найдено / Стырено», embeds = «Вложения».
+- Удалена декоративная карточка LOCAL FIRST.
+- Библиотека: удалены поиск, технические ID и дублирующая карточка сведений.
+- Справа теперь Discord-подобная лента сообщений: автор, время, текст, вложения и локальные изображения.
+- Сообщения подгружаются порциями по 50; кнопка «Показать ещё».
+- Добавлены правила будущей выгрузки Drive на сервер/канал/тему: По умолчанию / Выгружать / Не выгружать.
+- Ближайшее явное правило побеждает; корневое безопасное значение по умолчанию — «не выгружать».
+- Добавлена additive schema v4 только для таблицы archive_export_rules; архив сообщений и media registry не переписываются.
+- Реальной выгрузки на Drive в этом патче нет.

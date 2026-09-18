@@ -62,6 +62,86 @@ class LibraryServiceTests(unittest.TestCase):
         self.assertEqual(channel["threads"][0]["last_activity"], "2026-09-13T11:59:00.000Z")
 
 
+    def test_export_rules_default_and_nearest_explicit_override(self):
+        self.importer.import_file(self._write(sample_capture()))
+        thread_capture = copy.deepcopy(sample_capture(thread=True))
+        thread_capture["messages"][0]["id"] = "777777777777777777"
+        self.importer.import_file(self._write(thread_capture, thread=True))
+        service = LibraryService(self.conn)
+
+        tree = service.snapshot()
+        guild = tree[0]
+        channel = guild["channels"][0]
+        thread = channel["threads"][0]
+        self.assertEqual(guild["effective_export_rule"], "EXCLUDE")
+        self.assertEqual(channel["effective_export_rule"], "EXCLUDE")
+        self.assertEqual(thread["effective_export_rule"], "EXCLUDE")
+
+        service.set_export_rule("guild", guild["id"], "INCLUDE")
+        tree = service.snapshot()
+        guild = tree[0]
+        channel = guild["channels"][0]
+        thread = channel["threads"][0]
+        self.assertEqual(guild["export_rule"], "INCLUDE")
+        self.assertEqual(channel["export_rule"], "DEFAULT")
+        self.assertEqual(channel["effective_export_rule"], "INCLUDE")
+        self.assertEqual(thread["effective_export_rule"], "INCLUDE")
+
+        service.set_export_rule("channel", channel["id"], "EXCLUDE")
+        service.set_export_rule("thread", thread["id"], "INCLUDE")
+        tree = service.snapshot()
+        channel = tree[0]["channels"][0]
+        thread = channel["threads"][0]
+        self.assertEqual(channel["effective_export_rule"], "EXCLUDE")
+        self.assertEqual(thread["effective_export_rule"], "INCLUDE")
+
+        service.set_export_rule("thread", thread["id"], "DEFAULT")
+        tree = service.snapshot()
+        self.assertEqual(tree[0]["channels"][0]["threads"][0]["effective_export_rule"], "EXCLUDE")
+
+    def test_message_page_is_bounded_to_50_and_keeps_thread_messages_separate(self):
+        capture = sample_capture()
+        messages = []
+        for index in range(55):
+            message = copy.deepcopy(capture["messages"][0])
+            message["id"] = f"{700000000000000000 + index}"
+            message["timestamp"] = f"2026-09-13T11:{index:02d}:00.000Z"
+            message["content"] = f"message {index}"
+            message["attachments"] = []
+            message["embeds"] = []
+            messages.append(message)
+        capture["messages"] = messages
+        capture["messageCount"] = len(messages)
+        capture["oldestMessageId"] = messages[0]["id"]
+        capture["newestMessageId"] = messages[-1]["id"]
+        self.importer.import_file(self._write(capture))
+
+        thread_capture = copy.deepcopy(sample_capture(thread=True, content="thread only"))
+        thread_capture["messages"][0]["id"] = "999999999999999998"
+        self.importer.import_file(self._write(thread_capture, thread=True))
+
+        service = LibraryService(self.conn)
+        first = service.message_page("channel", "222222222222222222", limit=50)
+        self.assertEqual(len(first["messages"]), 50)
+        self.assertTrue(first["has_more"])
+        self.assertEqual(first["messages"][0]["content"], "message 5")
+        self.assertEqual(first["messages"][-1]["content"], "message 54")
+        self.assertNotIn("thread only", [item["content"] for item in first["messages"]])
+
+        second = service.message_page(
+            "channel",
+            "222222222222222222",
+            limit=50,
+            before_timestamp=first["oldest_timestamp"],
+            before_id=first["oldest_id"],
+        )
+        self.assertEqual([item["content"] for item in second["messages"]], [f"message {i}" for i in range(5)])
+        self.assertFalse(second["has_more"])
+
+        thread_page = service.message_page("thread", "333333333333333333", limit=50)
+        self.assertEqual([item["content"] for item in thread_page["messages"]], ["thread only"])
+
+
 class GuiRuntimeTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -129,6 +209,52 @@ class GuiRuntimeTests(unittest.TestCase):
         self.assertEqual(first_running["stats"]["guilds"], 1)
         self.assertEqual(len(first_running["library"]), 1)
         self.assertTrue(any(a.get("event_type") == "startup_sync" for a in activities))
+
+    def test_runtime_serves_library_pages_and_persists_export_rule(self):
+        running = threading.Event()
+        page_ready = threading.Event()
+        rule_ready = threading.Event()
+        pages: list[dict] = []
+
+        def on_snapshot(snapshot: dict) -> None:
+            if snapshot.get("health", {}).get("state") == "RUNNING":
+                running.set()
+            library = snapshot.get("library") or []
+            if library and library[0].get("export_rule") == "INCLUDE":
+                rule_ready.set()
+
+        def on_page(payload: dict) -> None:
+            pages.append(payload)
+            page_ready.set()
+
+        runtime = GuiRuntime(
+            dds_data=self.dds,
+            app_data=self.app_data,
+            poll_ms=100,
+            settle_ms=50,
+            snapshot_sink=on_snapshot,
+            library_message_sink=on_page,
+        )
+        thread = threading.Thread(target=runtime.run)
+        thread.start()
+        self.assertTrue(running.wait(3.0), "runtime did not start")
+
+        runtime.request_library_messages({
+            "scope_kind": "channel",
+            "scope_id": "222222222222222222",
+            "limit": 50,
+            "generation": 1,
+            "reset": True,
+        })
+        self.assertTrue(page_ready.wait(3.0), "message page was not returned")
+        self.assertEqual([item["content"] for item in pages[-1]["messages"]], ["hello"])
+
+        runtime.request_export_rule_change("guild", "111111111111111111", "INCLUDE")
+        self.assertTrue(rule_ready.wait(3.0), "export rule snapshot was not refreshed")
+
+        runtime.stop()
+        thread.join(3.0)
+        self.assertFalse(thread.is_alive())
 
     def test_runtime_detects_live_capture_change(self):
         activity_event = threading.Event()

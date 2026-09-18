@@ -40,6 +40,7 @@ class SignalBus(QObject):
     runtime_error = Signal(str)
     stopped = Signal()
     maintenance_done = Signal(object)
+    library_messages = Signal(object)
 
 
 class MainWindow(QMainWindow):
@@ -70,6 +71,7 @@ class MainWindow(QMainWindow):
             watch_sink=self.bus.watch_event.emit,
             error_sink=self.bus.runtime_error.emit,
             stopped_sink=self.bus.stopped.emit,
+            library_message_sink=self.bus.library_messages.emit,
         )
         self.runtime_thread = threading.Thread(
             target=self.runtime.run,
@@ -147,19 +149,6 @@ class MainWindow(QMainWindow):
         self.nav_buttons[0].setChecked(True)
         side.addStretch(1)
 
-        footer = QFrame()
-        footer.setProperty("card", True)
-        foot = QVBoxLayout(footer)
-        foot.setContentsMargins(11, 10, 11, 10)
-        foot.setSpacing(4)
-        foot_title = QLabel("LOCAL FIRST")
-        foot_title.setObjectName("CardEyebrow")
-        foot_text = QLabel("Архив остаётся на этой машине")
-        foot_text.setWordWrap(True)
-        foot_text.setStyleSheet(f"color:{MUTED};font-size:8.5pt;")
-        foot.addWidget(foot_title)
-        foot.addWidget(foot_text)
-        side.addWidget(footer)
         outer.addWidget(self.sidebar)
 
         content = QVBoxLayout()
@@ -189,7 +178,10 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         self.dashboard = DashboardPage()
-        self.library = LibraryPage()
+        self.library = LibraryPage(
+            on_messages_requested=self._request_library_messages,
+            on_export_rule_changed=self._change_export_rule,
+        )
         self.activity = ActivityPage()
         self.health = HealthPage(
             on_media_retry=self._retry_media_issue,
@@ -351,6 +343,7 @@ class MainWindow(QMainWindow):
         self.bus.runtime_error.connect(self._on_runtime_error)
         self.bus.stopped.connect(self._on_runtime_stopped)
         self.bus.maintenance_done.connect(self._on_maintenance_done)
+        self.bus.library_messages.connect(self.library.set_message_page)
 
     def _select_page(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
@@ -428,6 +421,19 @@ class MainWindow(QMainWindow):
         if self._closing:
             return
         self.status_text.setText("Runtime остановлен")
+
+
+    def _request_library_messages(self, request: dict) -> None:
+        self.runtime.request_library_messages(request)
+
+    def _change_export_rule(self, scope_kind: str, scope_id: str, mode: str) -> None:
+        self.runtime.request_export_rule_change(scope_kind, scope_id, mode)
+        label = {
+            "DEFAULT": "По умолчанию",
+            "INCLUDE": "Выгружать",
+            "EXCLUDE": "Не выгружать",
+        }.get(str(mode).upper(), str(mode))
+        self.statusBar().showMessage(f"Правило выгрузки: {label}", 2500)
 
     def _retry_media_issue(self, media_key: str) -> None:
         if not media_key:

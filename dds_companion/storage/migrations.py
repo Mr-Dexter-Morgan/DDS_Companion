@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 BASE_SCHEMA_SQL = r"""
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -256,15 +256,30 @@ CREATE INDEX IF NOT EXISTS idx_media_refs_media_key ON media_refs(media_key);
 """
 
 
+V4_SCHEMA_SQL = r"""
+CREATE TABLE IF NOT EXISTS archive_export_rules (
+    scope_kind TEXT NOT NULL,
+    scope_id TEXT NOT NULL,
+    mode TEXT NOT NULL CHECK(mode IN ('INCLUDE', 'EXCLUDE')),
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY(scope_kind, scope_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_archive_export_rules_mode
+    ON archive_export_rules(mode);
+"""
+
+
 def apply_migrations(connection: sqlite3.Connection) -> None:
     """Apply additive migrations in place.
 
-    Migrations are additive. 0.5.0 adds the media registry/state contract without
-    rewriting existing archive tables, so older verified databases upgrade in place.
+    Migrations are additive. 0.5.4 adds future-export selection rules without
+    rewriting archive/message/media tables, so older verified databases upgrade in place.
     """
     connection.executescript(BASE_SCHEMA_SQL)
     connection.executescript(V2_SCHEMA_SQL)
     connection.executescript(V3_SCHEMA_SQL)
+    connection.executescript(V4_SCHEMA_SQL)
     connection.execute(
         "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",

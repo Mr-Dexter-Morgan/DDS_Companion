@@ -1,9 +1,0 @@
-DDS Companion 0.5.3 — short Windows live check
-================================================
-
-[ ] Библиотека shows Раздел / Сообщений / Медиа and no ID column.
-[ ] Selecting server/channel/thread updates the right-side details correctly.
-[ ] Search by visible name works; Копировать ID copies the selected technical ID.
-[ ] Existing 0.5.2 media/status behavior remains normal and app closes cleanly.
-
-That is the whole promotion gate for 0.5.3.

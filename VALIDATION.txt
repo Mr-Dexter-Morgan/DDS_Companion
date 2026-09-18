@@ -1,22 +1,8 @@
-DDS Companion 0.5.3 — Validation
-=================================
-Status: CANDIDATE / AUTOMATED PASS / WINDOWS LIVE PENDING
+DDS Companion 0.5.4 — Validation
 
-AUTOMATED
-- Full unittest discovery: 84/84 PASS.
-- Repeated consecutive runs: 84/84 PASS x3.
+- Full automated suite: 84/84 PASS.
 - compileall: PASS.
-- CLI --version: DDS Companion 0.5.3 PASS.
-- Existing archive/media/settings/recovery regressions remain green.
-
-NEW COVERAGE
-- Library snapshot exposes message/media counts and last activity at guild/channel/thread levels.
-- Human Library columns/search/details source contract is enforced.
-- Technical ID is no longer a main-tree column.
-- Library no longer receives an app-data folder-open callback.
-
-WINDOWS LIVE GATE
-1. Open Библиотека: tree + details panel render cleanly.
-2. Select a server, channel and thread: details/counts/last activity update sensibly.
-3. Search by a visible server/channel/thread name and copy one technical ID.
-4. Normal use/close shows no regression.
+- CLI --version: DDS Companion 0.5.4 PASS.
+- Runtime library paging + export-rule command path: PASS.
+- Additive schema v1 -> v4 migration preservation: PASS.
+- Qt visual/live check: pending on Windows (PySide6 is not installed in the automation environment).

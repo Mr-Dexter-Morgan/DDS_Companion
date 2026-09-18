@@ -24,6 +24,7 @@ ActivitySink = Callable[[dict], None]
 WatchSink = Callable[[dict], None]
 ErrorSink = Callable[[str], None]
 StoppedSink = Callable[[], None]
+LibraryMessageSink = Callable[[dict], None]
 
 
 class GuiRuntime:
@@ -45,6 +46,7 @@ class GuiRuntime:
         watch_sink: WatchSink | None = None,
         error_sink: ErrorSink | None = None,
         stopped_sink: StoppedSink | None = None,
+        library_message_sink: LibraryMessageSink | None = None,
     ):
         self.paths: RuntimePaths = build_runtime_paths(dds_data, app_data)
         self.poll_ms = max(100, int(poll_ms))
@@ -54,10 +56,12 @@ class GuiRuntime:
         self.watch_sink = watch_sink
         self.error_sink = error_sink
         self.stopped_sink = stopped_sink
+        self.library_message_sink = library_message_sink
         self.stop_event = Event()
         self.refresh_event = Event()
         self.media_wake_event = Event()
         self.media_control_queue: queue.Queue[object] = queue.Queue()
+        self.library_control_queue: queue.Queue[dict] = queue.Queue()
         self._last_snapshot_at = 0.0
         self._last_library_refresh_at = 0.0
         self._library_cache: list[dict] = []
@@ -81,6 +85,19 @@ class GuiRuntime:
     def request_media_ignore(self, media_key: str) -> None:
         self.media_control_queue.put({"action": "ignore", "media_key": str(media_key)})
         self.media_wake_event.set()
+
+    def request_library_messages(self, request: dict) -> None:
+        self.library_control_queue.put({"action": "messages", **dict(request)})
+        self.refresh_event.set()
+
+    def request_export_rule_change(self, scope_kind: str, scope_id: str, mode: str) -> None:
+        self.library_control_queue.put({
+            "action": "export_rule",
+            "scope_kind": str(scope_kind),
+            "scope_id": str(scope_id),
+            "mode": str(mode),
+        })
+        self.refresh_event.set()
 
     def stop(self) -> None:
         self.stop_event.set()
@@ -214,7 +231,13 @@ class GuiRuntime:
                 force = self.refresh_event.is_set()
                 if force:
                     self.refresh_event.clear()
-                self._emit_snapshot(stats, health, activity, library, force=force)
+                library_changed = self._process_library_commands(library)
+                if library_changed:
+                    self._library_cache = library.snapshot()
+                    self._last_library_refresh_at = time.monotonic()
+                self._emit_snapshot(
+                    stats, health, activity, library, force=force or library_changed
+                )
 
             watcher.run(self.stop_event, on_tick=tick)
 
@@ -259,6 +282,56 @@ class GuiRuntime:
                 except Exception:
                     pass
             self._safe(self.stopped_sink)
+
+
+    def _process_library_commands(self, library: LibraryService) -> bool:
+        changed = False
+        while True:
+            try:
+                command = self.library_control_queue.get_nowait()
+            except queue.Empty:
+                break
+            action = str(command.get("action") or "")
+            try:
+                if action == "export_rule":
+                    library.set_export_rule(
+                        str(command.get("scope_kind") or ""),
+                        str(command.get("scope_id") or ""),
+                        str(command.get("mode") or "DEFAULT"),
+                    )
+                    changed = True
+                elif action == "messages":
+                    payload = library.message_page(
+                        str(command.get("scope_kind") or ""),
+                        str(command.get("scope_id") or ""),
+                        limit=int(command.get("limit") or 50),
+                        before_timestamp=command.get("before_timestamp"),
+                        before_id=command.get("before_id"),
+                    )
+                    payload.update({
+                        "scope_kind": str(command.get("scope_kind") or ""),
+                        "scope_id": str(command.get("scope_id") or ""),
+                        "generation": command.get("generation"),
+                        "reset": bool(command.get("reset", False)),
+                    })
+                    self._safe(self.library_message_sink, payload)
+            except Exception as exc:
+                if action == "messages":
+                    self._safe(
+                        self.library_message_sink,
+                        {
+                            "scope_kind": str(command.get("scope_kind") or ""),
+                            "scope_id": str(command.get("scope_id") or ""),
+                            "generation": command.get("generation"),
+                            "reset": bool(command.get("reset", False)),
+                            "messages": [],
+                            "has_more": False,
+                            "error": f"{type(exc).__name__}: {exc}",
+                        },
+                    )
+                else:
+                    self._safe(self.error_sink, f"Library command failed: {type(exc).__name__}: {exc}")
+        return changed
 
     def _emit_snapshot(
         self,

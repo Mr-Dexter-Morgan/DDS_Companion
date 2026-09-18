@@ -54,9 +54,9 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", normal)
         self.assertIn("run_companion.pyw", normal)
-        self.assertIn("DDS Companion 0.5.3", normal)
+        self.assertIn("DDS Companion 0.5.4", normal)
         self.assertIn("python -m dds_companion.gui.app", debug)
-        self.assertIn("DDS Companion 0.5.3", debug)
+        self.assertIn("DDS Companion 0.5.4", debug)
 
     def test_050_first_run_gui_dependency_bootstrap_is_automatic(self):
         normal = (self.root / "run_companion.bat").read_text(encoding="utf-8")
@@ -145,8 +145,8 @@ class GuiPolishSourceContractTests(unittest.TestCase):
     def test_050_storage_rows_match_donut_category_colors(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         widgets = (self.root / "dds_companion/gui/widgets.py").read_text(encoding="utf-8")
-        self.assertIn('StorageRow("SQLite + WAL/SHM", ACCENT)', pages)
-        self.assertIn('StorageRow("DDS JSON", INFO)', pages)
+        self.assertIn('StorageRow("База данных", ACCENT)', pages)
+        self.assertIn('StorageRow("Данные DDS", INFO)', pages)
         self.assertIn('StorageRow("Медиакэш", SUCCESS)', pages)
         self.assertIn('StorageRow("Прочее", WARNING)', pages)
         self.assertIn('StorageRow("Логи", MUTED)', pages)
@@ -207,63 +207,46 @@ class GuiPolishSourceContractTests(unittest.TestCase):
 
 
 
-class LibraryUx053SourceContractTests(unittest.TestCase):
+class LibraryUx054SourceContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.root = Path(__file__).resolve().parents[2]
 
-    def test_053_library_uses_human_tree_columns_and_search_copy(self):
+    def test_054_library_is_navigation_plus_message_viewer_without_search_or_ids(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
-        self.assertIn('self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа"])', pages)
-        self.assertNotIn('self.tree.setHeaderLabels(["Архив", "Сообщения", "ID"])', pages)
-        self.assertIn('Поиск по серверу, каналу или теме…', pages)
-        self.assertIn('Технический ID', pages)
-        self.assertIn('QPushButton("Копировать ID")', pages)
-        self.assertIn('QSplitter(Qt.Horizontal)', pages)
+        library = pages[pages.index("class LibraryPage"):pages.index("class ActivityPage")]
+        self.assertIn('self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа", "Выгрузка"])', library)
+        self.assertIn('QSplitter(Qt.Horizontal)', library)
+        self.assertIn('QPushButton("Показать ещё")', library)
+        self.assertIn('PAGE_SIZE = 50', library)
+        self.assertNotIn('Поиск по серверу, каналу или теме…', library)
+        self.assertNotIn('Технический ID', library)
+        self.assertNotIn('Копировать ID', library)
+        self.assertNotIn('Последняя активность', library)
 
-    def test_053_library_details_are_backed_by_archive_aggregates(self):
+    def test_054_library_has_three_state_future_export_rule(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         service = (self.root / "dds_companion/services/library_service.py").read_text(encoding="utf-8")
-        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
-        self.assertIn('media_count', service)
-        self.assertIn('last_activity', service)
-        self.assertIn('Последняя активность', pages)
-        self.assertIn('Расположение', pages)
+        migrations = (self.root / "dds_companion/storage/migrations.py").read_text(encoding="utf-8")
+        self.assertIn('"По умолчанию — выгружать"', pages)
+        self.assertIn('"По умолчанию — не выгружать"', pages)
+        self.assertIn('combo.addItem("Выгружать", "INCLUDE")', pages)
+        self.assertIn('combo.addItem("Не выгружать", "EXCLUDE")', pages)
+        self.assertIn('archive_export_rules', service)
+        self.assertIn('archive_export_rules', migrations)
 
-    def test_053_library_no_longer_receives_or_exposes_app_data_open_action(self):
-        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
+    def test_054_dashboard_localizes_user_facing_storage_and_snatcher_labels(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
-        self.assertIn('self.library = LibraryPage()', window)
-        self.assertNotIn('def open_library(self)', window)
-        self.assertNotIn('Открыть папку библиотеки', pages)
+        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
+        dashboard = pages[pages.index("class DashboardPage"):pages.index("class LibraryPage")]
+        self.assertIn('StorageRow("База данных", ACCENT)', dashboard)
+        self.assertIn('StorageRow("Данные DDS", INFO)', dashboard)
+        self.assertIn('Найдено / Стырено', dashboard)
+        self.assertIn('Вложения', dashboard)
+        self.assertIn('импортов', dashboard)
+        self.assertIn('событий активности', dashboard)
+        self.assertNotIn('LOCAL FIRST', window)
+
 
 if __name__ == "__main__":
     unittest.main()
-
-
-class MediaAttention052SourceContractTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.root = Path(__file__).resolve().parents[2]
-
-    def test_052_status_exposes_retry_ignore_details_actions(self):
-        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
-        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
-        runtime = (self.root / "dds_companion/gui/runtime.py").read_text(encoding="utf-8")
-        self.assertIn('"Медиафайлы, требующие внимания"', pages)
-        self.assertIn('QPushButton("Повторить")', pages)
-        self.assertIn('QPushButton("Игнорировать")', pages)
-        self.assertIn('QPushButton("Подробнее")', pages)
-        self.assertIn("request_media_retry", runtime)
-        self.assertIn("request_media_ignore", runtime)
-        self.assertIn("_retry_media_issue", window)
-        self.assertIn("_ignore_media_issue", window)
-
-    def test_052_misleading_library_folder_button_is_removed(self):
-        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
-        self.assertNotIn('QPushButton("Открыть папку библиотеки")', pages)
-        self.assertIn("Расположение файлов", pages)
-
-    def test_052_statusbar_names_import_failures_precisely(self):
-        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
-        self.assertIn("ошибок импорта:", window)
-        self.assertNotIn('f"unresolved failures:', window)

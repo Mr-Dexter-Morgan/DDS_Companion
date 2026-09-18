@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -124,7 +125,7 @@ class DashboardPage(Page):
         self.storage_card = MetricCard("Общее хранилище", "—", "архив + локальные служебные данные")
         self.messages_card = MetricCard("Сообщения", "—", "накопительный архив")
         self.context_card = MetricCard("Структура", "—", "серверы · каналы · треды")
-        self.media_card = MetricCard("Медиа", "—", "known / cached")
+        self.media_card = MetricCard("Медиа", "—", "Найдено / Стырено")
         metrics.addWidget(self.storage_card, 0, 0)
         metrics.addWidget(self.messages_card, 0, 1)
         metrics.addWidget(self.context_card, 0, 2)
@@ -161,8 +162,8 @@ class DashboardPage(Page):
         self.storage_donut = StorageDonut()
         storage_layout.addWidget(self.storage_donut, 0, Qt.AlignHCenter)
         self.storage_rows = {
-            "sqlite_bytes": StorageRow("SQLite + WAL/SHM", ACCENT),
-            "dds_json_bytes": StorageRow("DDS JSON", INFO),
+            "sqlite_bytes": StorageRow("База данных", ACCENT),
+            "dds_json_bytes": StorageRow("Данные DDS", INFO),
             "media_bytes": StorageRow("Медиакэш", SUCCESS),
             "other_bytes": StorageRow("Прочее", WARNING),
             "logs_bytes": StorageRow("Логи", MUTED),
@@ -180,8 +181,8 @@ class DashboardPage(Page):
         session_layout.addWidget(SectionHeader("Текущая сессия", "Изменения после запуска Companion"))
         self.session_messages = QLabel("+0 сообщений")
         self.session_messages.setStyleSheet(f"color:{TEXT};font-size:14pt;font-weight:750;")
-        self.session_imports = QLabel("+0 imports")
-        self.session_events = QLabel("+0 activity events")
+        self.session_imports = QLabel("+0 импортов")
+        self.session_events = QLabel("+0 событий активности")
         self.session_imports.setObjectName("SectionHint")
         self.session_events.setObjectName("SectionHint")
         session_layout.addWidget(self.session_messages)
@@ -262,7 +263,7 @@ class DashboardPage(Page):
         )
         self.media_card.set_data(
             f"{stats.get('known_media', 0)} / {stats.get('cached_media_files', 0)}",
-            f"known / cached · embeds {stats.get('embeds', 0)}",
+            f"Найдено / Стырено · Вложения {stats.get('embeds', 0)}",
         )
 
         total = max(1, int(stats.get("total_known_storage_bytes", 0)))
@@ -273,20 +274,26 @@ class DashboardPage(Page):
                 row.setVisible(value > 0)
 
         self.storage_donut.set_segments([
-            ("SQLite", int(stats.get("sqlite_bytes", 0)), ACCENT),
-            ("DDS JSON", int(stats.get("dds_json_bytes", 0)), INFO),
-            ("Media cache", int(stats.get("media_bytes", 0)), SUCCESS),
-            ("Other", int(stats.get("other_bytes", 0)), WARNING),
-            ("Logs", int(stats.get("logs_bytes", 0)), MUTED),
+            ("База данных", int(stats.get("sqlite_bytes", 0)), ACCENT),
+            ("Данные DDS", int(stats.get("dds_json_bytes", 0)), INFO),
+            ("Медиакэш", int(stats.get("media_bytes", 0)), SUCCESS),
+            ("Прочее", int(stats.get("other_bytes", 0)), WARNING),
+            ("Логи", int(stats.get("logs_bytes", 0)), MUTED),
         ])
         self.session_storage.setText(f"За сессию: {signed_size(stats.get('session_storage_delta_bytes', 0))}")
         self.session_messages.setText(f"+{stats.get('session_messages_added', 0)} сообщений")
-        self.session_imports.setText(f"+{stats.get('session_imports_added', 0)} imports")
-        self.session_events.setText(f"+{stats.get('session_activity_events_added', 0)} activity events")
+        self.session_imports.setText(f"+{stats.get('session_imports_added', 0)} импортов")
+        self.session_events.setText(f"+{stats.get('session_activity_events_added', 0)} событий активности")
 
         if activity:
             latest = activity[0]
-            self.current_activity.setText(latest.get("summary", "—"))
+            summary = latest.get("summary", "—")
+            event_type = str(latest.get("event_type") or "")
+            if event_type == "media_backfill_enabled":
+                summary = "Автозагрузка медиа включена"
+            elif event_type == "media_backfill_disabled":
+                summary = "Автозагрузка медиа выключена"
+            self.current_activity.setText(summary)
             meta = [
                 local_time(latest.get("occurred_at"), seconds=True),
                 latest.get("subsystem", "runtime"),
@@ -302,23 +309,28 @@ class DashboardPage(Page):
 
 
 class LibraryPage(Page):
-    """Human-facing archive browser.
+    """Human-facing archive browser with Discord-like message viewing.
 
-    The tree is navigation, not a database inspector. Technical identifiers stay
-    out of the main columns and are available only in the details card.
+    The tree is navigation. The right side is content, not a second inspector.
+    Future Drive selection is an explicit three-state user rule at every node.
     """
 
-    def __init__(self, parent=None):
+    PAGE_SIZE = 50
+
+    def __init__(
+        self,
+        parent=None,
+        *,
+        on_messages_requested: Callable[[dict], None] | None = None,
+        on_export_rule_changed: Callable[[str, str, str], None] | None = None,
+    ):
         super().__init__(
             "Библиотека",
             "Просмотр накопленного архива по серверам, каналам и темам.",
             parent,
         )
-
-        self.filter = QLineEdit()
-        self.filter.setPlaceholderText("Поиск по серверу, каналу или теме…")
-        self.filter.textChanged.connect(self.apply_filter)
-        self.body.addWidget(self.filter)
+        self.on_messages_requested = on_messages_requested
+        self.on_export_rule_changed = on_export_rule_changed
 
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setChildrenCollapsible(False)
@@ -330,80 +342,73 @@ class LibraryPage(Page):
         tree_layout.addWidget(SectionHeader("Архив", "Сервер → канал → тема"))
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа"])
+        self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа", "Выгрузка"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setUniformRowHeights(True)
         self.tree.setSelectionMode(QAbstractItemView.SingleSelection)
         self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
         self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.tree.header().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.tree.header().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.tree.currentItemChanged.connect(self._selection_changed)
         tree_layout.addWidget(self.tree, 1)
 
-        details_card = Card()
-        details_card.setMinimumWidth(285)
-        details_layout = QVBoxLayout(details_card)
-        details_layout.setContentsMargins(16, 16, 16, 16)
-        details_layout.setSpacing(12)
+        content_card = Card()
+        content_layout = QVBoxLayout(content_card)
+        content_layout.setContentsMargins(14, 14, 14, 14)
+        content_layout.setSpacing(10)
 
-        self.detail_title = QLabel("Выберите раздел")
-        self.detail_title.setObjectName("SectionTitle")
-        self.detail_hint = QLabel("Здесь появятся сведения о сервере, канале или теме.")
-        self.detail_hint.setObjectName("SectionHint")
-        self.detail_hint.setWordWrap(True)
-        details_layout.addWidget(self.detail_title)
-        details_layout.addWidget(self.detail_hint)
+        self.content_title = QLabel("Выберите канал или тему")
+        self.content_title.setObjectName("SectionTitle")
+        self.content_hint = QLabel("Сообщения выбранного раздела появятся здесь.")
+        self.content_hint.setObjectName("SectionHint")
+        self.content_hint.setWordWrap(True)
+        content_layout.addWidget(self.content_title)
+        content_layout.addWidget(self.content_hint)
 
-        detail_grid = QGridLayout()
-        detail_grid.setHorizontalSpacing(16)
-        detail_grid.setVerticalSpacing(10)
-        self.detail_type = self._add_detail_row(detail_grid, 0, "Тип")
-        self.detail_location = self._add_detail_row(detail_grid, 1, "Расположение")
-        self.detail_messages = self._add_detail_row(detail_grid, 2, "Сообщений")
-        self.detail_media = self._add_detail_row(detail_grid, 3, "Медиа")
-        self.detail_activity = self._add_detail_row(detail_grid, 4, "Последняя активность")
-        details_layout.addLayout(detail_grid)
+        self.show_more_button = QPushButton("Показать ещё")
+        self.show_more_button.setProperty("secondary", True)
+        self.show_more_button.setVisible(False)
+        self.show_more_button.clicked.connect(self._request_more)
+        content_layout.addWidget(self.show_more_button, 0, Qt.AlignLeft)
 
-        details_layout.addSpacing(4)
-        technical = QLabel("Технический ID")
-        technical.setObjectName("CardEyebrow")
-        self.detail_id = QLabel("—")
-        self.detail_id.setObjectName("SectionHint")
-        self.detail_id.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.detail_id.setWordWrap(True)
-        details_layout.addWidget(technical)
-        details_layout.addWidget(self.detail_id)
-
-        self.copy_id_button = QPushButton("Копировать ID")
-        self.copy_id_button.setProperty("secondary", True)
-        self.copy_id_button.setEnabled(False)
-        self.copy_id_button.clicked.connect(self.copy_selected_id)
-        details_layout.addWidget(self.copy_id_button)
-        details_layout.addStretch(1)
+        self.message_scroll = QScrollArea()
+        self.message_scroll.setWidgetResizable(True)
+        self.message_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.message_scroll.setFrameShape(QFrame.NoFrame)
+        self.message_host = QWidget()
+        self.message_layout = QVBoxLayout(self.message_host)
+        self.message_layout.setContentsMargins(0, 0, 6, 0)
+        self.message_layout.setSpacing(8)
+        self.message_empty = QLabel("Выберите канал или тему слева.")
+        self.message_empty.setObjectName("SectionHint")
+        self.message_empty.setWordWrap(True)
+        self.message_layout.addWidget(self.message_empty)
+        self.message_layout.addStretch(1)
+        self.message_scroll.setWidget(self.message_host)
+        content_layout.addWidget(self.message_scroll, 1)
 
         self.splitter.addWidget(tree_card)
-        self.splitter.addWidget(details_card)
-        self.splitter.setStretchFactor(0, 3)
-        self.splitter.setStretchFactor(1, 2)
-        self.splitter.setSizes([720, 360])
+        self.splitter.addWidget(content_card)
+        self.splitter.setStretchFactor(0, 2)
+        self.splitter.setStretchFactor(1, 5)
+        self.splitter.setSizes([460, 900])
         self.body.addWidget(self.splitter, 1)
 
         self._library: list[dict] = []
+        self._media_root = Path()
         self._selected_detail: dict | None = None
-
-    @staticmethod
-    def _add_detail_row(layout: QGridLayout, row: int, label: str) -> QLabel:
-        name = QLabel(label)
-        name.setObjectName("CardEyebrow")
-        value = QLabel("—")
-        value.setStyleSheet(f"color:{TEXT};font-weight:650;")
-        value.setWordWrap(True)
-        value.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        layout.addWidget(name, row, 0, Qt.AlignTop)
-        layout.addWidget(value, row, 1, Qt.AlignTop)
-        return value
+        self._messages: list[dict] = []
+        self._has_more = False
+        self._oldest_timestamp: str | None = None
+        self._oldest_id: str | None = None
+        self._generation = 0
+        self._message_loading = False
 
     def update_snapshot(self, snapshot: dict) -> None:
+        media_root = snapshot.get("paths", {}).get("media")
+        if media_root:
+            self._media_root = Path(media_root)
         library = snapshot.get("library", [])
         if library == self._library:
             return
@@ -411,97 +416,321 @@ class LibraryPage(Page):
         self.rebuild()
 
     def rebuild(self) -> None:
-        expanded_ids = set()
+        expanded_ids: set[str] = set()
         root = self.tree.invisibleRootItem()
         for i in range(root.childCount()):
             self._collect_expanded(root.child(i), expanded_ids)
-        selected_id = self.tree.currentItem().data(0, Qt.UserRole) if self.tree.currentItem() else None
+        selected_key = self.tree.currentItem().data(0, Qt.UserRole) if self.tree.currentItem() else None
 
         self.tree.setUpdatesEnabled(False)
         self.tree.clear()
         selected_item = None
         for guild in self._library:
-            guild_detail = {
-                "kind": "guild",
-                "id": guild["id"],
-                "name": guild["name"],
-                "location": "—",
-                "message_count": guild.get("message_count", 0),
-                "media_count": guild.get("media_count", 0),
-                "last_activity": guild.get("last_activity"),
-            }
-            g = QTreeWidgetItem([
-                guild["name"],
-                str(guild.get("message_count", 0)),
-                str(guild.get("media_count", 0)),
-            ])
-            g.setData(0, Qt.UserRole, f"g:{guild['id']}")
-            g.setData(0, Qt.UserRole + 1, guild_detail)
-            g.setForeground(0, QColor(TEXT))
-            font = g.font(0)
-            font.setBold(True)
-            g.setFont(0, font)
+            guild_detail = self._detail("guild", guild)
+            g = self._tree_item(guild["name"], guild, guild_detail, bold=True)
             self.tree.addTopLevelItem(g)
+            self._install_rule_combo(g, guild_detail)
 
             for channel in guild.get("channels", []):
-                channel_detail = {
-                    "kind": "channel",
-                    "id": channel["id"],
-                    "name": channel["name"],
-                    "channel_type": channel.get("type"),
-                    "location": guild["name"],
-                    "message_count": channel.get("message_count", 0),
-                    "media_count": channel.get("media_count", 0),
-                    "last_activity": channel.get("last_activity"),
-                }
-                c = QTreeWidgetItem([
-                    f"# {channel['name']}",
-                    str(channel.get("message_count", 0)),
-                    str(channel.get("media_count", 0)),
-                ])
-                c.setData(0, Qt.UserRole, f"c:{channel['id']}")
-                c.setData(0, Qt.UserRole + 1, channel_detail)
+                channel_detail = self._detail("channel", channel)
+                c = self._tree_item(f"# {channel['name']}", channel, channel_detail)
                 c.setForeground(0, QColor("#cdd5e7"))
                 g.addChild(c)
+                self._install_rule_combo(c, channel_detail)
 
                 for thread in channel.get("threads", []):
-                    thread_detail = {
-                        "kind": "thread",
-                        "id": thread["id"],
-                        "name": thread["name"],
-                        "location": f"{guild['name']} → # {channel['name']}",
-                        "message_count": thread.get("message_count", 0),
-                        "media_count": thread.get("media_count", 0),
-                        "last_activity": thread.get("last_activity"),
-                    }
-                    t = QTreeWidgetItem([
-                        f"↳ {thread['name']}",
-                        str(thread.get("message_count", 0)),
-                        str(thread.get("media_count", 0)),
-                    ])
-                    t.setData(0, Qt.UserRole, f"t:{thread['id']}")
-                    t.setData(0, Qt.UserRole + 1, thread_detail)
+                    thread_detail = self._detail("thread", thread)
+                    t = self._tree_item(f"↳ {thread['name']}", thread, thread_detail)
                     t.setForeground(0, QColor(MUTED))
                     c.addChild(t)
-                    if t.data(0, Qt.UserRole) == selected_id:
+                    self._install_rule_combo(t, thread_detail)
+                    if t.data(0, Qt.UserRole) == selected_key:
                         selected_item = t
-                if c.data(0, Qt.UserRole) == selected_id:
+                if c.data(0, Qt.UserRole) == selected_key:
                     selected_item = c
-            if g.data(0, Qt.UserRole) == selected_id:
+            if g.data(0, Qt.UserRole) == selected_key:
                 selected_item = g
 
         for i in range(self.tree.topLevelItemCount()):
             self._restore_expanded(self.tree.topLevelItem(i), expanded_ids)
 
-        if selected_item is None and self.tree.topLevelItemCount():
-            selected_item = self.tree.topLevelItem(0)
-        if selected_item:
+        if selected_item is None and selected_key is not None:
+            selected_item = self._find_item(selected_key)
+        if selected_item is not None:
             self.tree.setCurrentItem(selected_item)
+        elif self.tree.topLevelItemCount():
+            self.tree.setCurrentItem(self.tree.topLevelItem(0))
         else:
-            self._show_empty_details()
-
+            self._show_empty_messages("Архив пока пуст.")
         self.tree.setUpdatesEnabled(True)
-        self.apply_filter(self.filter.text())
+
+    @staticmethod
+    def _detail(kind: str, data: dict) -> dict:
+        return {
+            "kind": kind,
+            "id": str(data.get("id") or ""),
+            "name": str(data.get("name") or "Без названия"),
+            "channel_type": data.get("type"),
+            "message_count": int(data.get("message_count", 0)),
+            "media_count": int(data.get("media_count", 0)),
+            "export_rule": str(data.get("export_rule") or "DEFAULT"),
+            "default_export_rule": str(data.get("default_export_rule") or "EXCLUDE"),
+            "effective_export_rule": str(data.get("effective_export_rule") or "EXCLUDE"),
+        }
+
+    def _tree_item(self, label: str, data: dict, detail: dict, *, bold: bool = False) -> QTreeWidgetItem:
+        prefix = {"guild": "g", "channel": "c", "thread": "t"}[detail["kind"]]
+        item = QTreeWidgetItem([
+            label,
+            str(data.get("message_count", 0)),
+            str(data.get("media_count", 0)),
+            "",
+        ])
+        item.setData(0, Qt.UserRole, f"{prefix}:{detail['id']}")
+        item.setData(0, Qt.UserRole + 1, detail)
+        item.setForeground(0, QColor(TEXT))
+        if bold:
+            font = item.font(0)
+            font.setBold(True)
+            item.setFont(0, font)
+        return item
+
+    def _install_rule_combo(self, item: QTreeWidgetItem, detail: dict) -> None:
+        combo = QComboBox()
+        combo.setMinimumWidth(176)
+        default_effective = detail.get("default_export_rule") == "INCLUDE"
+        default_label = (
+            "По умолчанию — выгружать"
+            if default_effective
+            else "По умолчанию — не выгружать"
+        )
+        combo.addItem(default_label, "DEFAULT")
+        combo.addItem("Выгружать", "INCLUDE")
+        combo.addItem("Не выгружать", "EXCLUDE")
+        wanted = str(detail.get("export_rule") or "DEFAULT")
+        index = combo.findData(wanted)
+        combo.blockSignals(True)
+        combo.setCurrentIndex(max(0, index))
+        combo.blockSignals(False)
+        combo.currentIndexChanged.connect(
+            lambda _index, c=combo, d=detail: self._rule_changed(c, d)
+        )
+        self.tree.setItemWidget(item, 3, combo)
+
+    def _rule_changed(self, combo: QComboBox, detail: dict) -> None:
+        mode = str(combo.currentData() or "DEFAULT")
+        detail["export_rule"] = mode
+        if self.on_export_rule_changed is not None:
+            self.on_export_rule_changed(detail["kind"], detail["id"], mode)
+
+    def _selection_changed(self, current: QTreeWidgetItem | None, previous: QTreeWidgetItem | None) -> None:
+        del previous
+        if current is None:
+            self._selected_detail = None
+            self._show_empty_messages("Выберите канал или тему слева.")
+            return
+        detail = current.data(0, Qt.UserRole + 1)
+        if not isinstance(detail, dict):
+            return
+        self._selected_detail = detail
+        self._generation += 1
+        self._messages = []
+        self._has_more = False
+        self._oldest_timestamp = None
+        self._oldest_id = None
+        self.show_more_button.setVisible(False)
+
+        if detail.get("kind") == "guild":
+            self.content_title.setText(detail.get("name") or "Сервер")
+            self.content_hint.setText("Выберите канал или тему этого сервера.")
+            self._show_empty_messages("Сообщения сервера не смешиваются в одну ленту.")
+            return
+
+        title = detail.get("name") or "Без названия"
+        if detail.get("kind") == "channel":
+            title = f"# {title}"
+        self.content_title.setText(title)
+        self.content_hint.setText(
+            f"{detail.get('message_count', 0)} сообщений · {detail.get('media_count', 0)} медиа"
+        )
+        self._request_messages(reset=True)
+
+    def _request_messages(self, *, reset: bool) -> None:
+        detail = self._selected_detail
+        if detail is None or detail.get("kind") not in {"channel", "thread"}:
+            return
+        if self._message_loading or self.on_messages_requested is None:
+            return
+        self._message_loading = True
+        self.show_more_button.setEnabled(False)
+        if reset:
+            self._show_empty_messages("Загружаю сообщения…")
+        self.on_messages_requested({
+            "scope_kind": detail["kind"],
+            "scope_id": detail["id"],
+            "limit": self.PAGE_SIZE,
+            "before_timestamp": None if reset else self._oldest_timestamp,
+            "before_id": None if reset else self._oldest_id,
+            "generation": self._generation,
+            "reset": reset,
+        })
+
+    def _request_more(self) -> None:
+        if self._has_more:
+            self._request_messages(reset=False)
+
+    def set_message_page(self, payload: dict) -> None:
+        detail = self._selected_detail
+        if detail is None:
+            return
+        if payload.get("generation") != self._generation:
+            return
+        if payload.get("scope_kind") != detail.get("kind") or payload.get("scope_id") != detail.get("id"):
+            return
+        self._message_loading = False
+        self.show_more_button.setEnabled(True)
+        error = payload.get("error")
+        if error:
+            self._show_empty_messages(f"Не удалось загрузить сообщения: {error}")
+            self.show_more_button.setVisible(False)
+            return
+
+        incoming = list(payload.get("messages") or [])
+        if payload.get("reset"):
+            self._messages = incoming
+        else:
+            known = {str(item.get("id")) for item in self._messages}
+            older = [item for item in incoming if str(item.get("id")) not in known]
+            self._messages = older + self._messages
+        self._has_more = bool(payload.get("has_more"))
+        if self._messages:
+            self._oldest_timestamp = self._messages[0].get("sort_time")
+            self._oldest_id = self._messages[0].get("id")
+        self.show_more_button.setVisible(self._has_more)
+        self._render_messages()
+
+    def _render_messages(self) -> None:
+        self._clear_message_layout()
+        if not self._messages:
+            self.message_empty = QLabel("В этом разделе пока нет сообщений.")
+            self.message_empty.setObjectName("SectionHint")
+            self.message_layout.addWidget(self.message_empty)
+            self.message_layout.addStretch(1)
+            return
+        for message in self._messages:
+            self.message_layout.addWidget(self._message_card(message))
+        self.message_layout.addStretch(1)
+
+    def _message_card(self, message: dict) -> QWidget:
+        card = Card()
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setSpacing(6)
+
+        header = QHBoxLayout()
+        author = QLabel(str(message.get("author_name") or "Неизвестный автор"))
+        author.setStyleSheet(f"color:{TEXT};font-weight:750;")
+        when = QLabel(local_time(message.get("timestamp"), seconds=True))
+        when.setObjectName("SectionHint")
+        header.addWidget(author)
+        header.addStretch(1)
+        header.addWidget(when)
+        layout.addLayout(header)
+
+        content = str(message.get("content") or "").strip()
+        if content:
+            text = QLabel(content)
+            text.setWordWrap(True)
+            text.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            text.setStyleSheet(f"color:{TEXT};")
+            layout.addWidget(text)
+
+        for attachment in message.get("attachments") or []:
+            layout.addWidget(self._attachment_widget(attachment))
+        for embed in message.get("embeds") or []:
+            layout.addWidget(self._embed_widget(embed))
+        if not content and not message.get("attachments") and not message.get("embeds"):
+            empty = QLabel("Сообщение без текстового содержимого")
+            empty.setObjectName("SectionHint")
+            layout.addWidget(empty)
+        return card
+
+    def _attachment_widget(self, attachment: dict) -> QWidget:
+        box = QFrame()
+        box.setProperty("card", True)
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(4)
+        name = QLabel(str(attachment.get("filename") or "Вложение"))
+        name.setStyleSheet(f"color:{TEXT};font-weight:650;")
+        layout.addWidget(name)
+
+        details = []
+        content_type = attachment.get("content_type")
+        if content_type:
+            details.append(str(content_type))
+        size = attachment.get("size")
+        if size is not None:
+            details.append(human_size(int(size)))
+        state = str(attachment.get("media_state") or "KNOWN")
+        details.append("сохранено локально" if state == "CACHED" else "не сохранено локально")
+        meta = QLabel(" · ".join(details))
+        meta.setObjectName("SectionHint")
+        layout.addWidget(meta)
+
+        description = str(attachment.get("description") or "").strip()
+        if description:
+            desc = QLabel(description)
+            desc.setObjectName("SectionHint")
+            desc.setWordWrap(True)
+            layout.addWidget(desc)
+
+        relpath = attachment.get("local_relpath")
+        if relpath and str(content_type or "").lower().startswith("image/"):
+            path = self._media_root / str(relpath)
+            if path.is_file():
+                pixmap = QPixmap(str(path))
+                if not pixmap.isNull():
+                    preview = QLabel()
+                    preview.setAlignment(Qt.AlignLeft)
+                    preview.setPixmap(
+                        pixmap.scaled(560, 360, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    )
+                    layout.addWidget(preview)
+        return box
+
+    @staticmethod
+    def _embed_widget(embed: dict) -> QWidget:
+        box = QFrame()
+        box.setProperty("card", True)
+        layout = QVBoxLayout(box)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(4)
+        title = QLabel(str(embed.get("title") or "Встроенное вложение"))
+        title.setStyleSheet(f"color:{TEXT};font-weight:650;")
+        layout.addWidget(title)
+        description = str(embed.get("description") or "").strip()
+        if description:
+            desc = QLabel(description)
+            desc.setWordWrap(True)
+            desc.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            layout.addWidget(desc)
+        return box
+
+    def _show_empty_messages(self, text: str) -> None:
+        self._clear_message_layout()
+        self.message_empty = QLabel(text)
+        self.message_empty.setObjectName("SectionHint")
+        self.message_empty.setWordWrap(True)
+        self.message_layout.addWidget(self.message_empty)
+        self.message_layout.addStretch(1)
+
+    def _clear_message_layout(self) -> None:
+        while self.message_layout.count():
+            item = self.message_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
 
     def _collect_expanded(self, item: QTreeWidgetItem, ids: set[str]) -> None:
         if item.isExpanded():
@@ -515,69 +744,21 @@ class LibraryPage(Page):
         for i in range(item.childCount()):
             self._restore_expanded(item.child(i), ids)
 
-    def apply_filter(self, text: str) -> None:
-        needle = text.strip().casefold()
-        for i in range(self.tree.topLevelItemCount()):
-            self._filter_item(self.tree.topLevelItem(i), needle)
+    def _find_item(self, key: str) -> QTreeWidgetItem | None:
+        def walk(item: QTreeWidgetItem) -> QTreeWidgetItem | None:
+            if item.data(0, Qt.UserRole) == key:
+                return item
+            for index in range(item.childCount()):
+                found = walk(item.child(index))
+                if found is not None:
+                    return found
+            return None
 
-    def _filter_item(self, item: QTreeWidgetItem, needle: str) -> bool:
-        own = not needle or needle in item.text(0).casefold()
-        child_match = False
-        for i in range(item.childCount()):
-            child_match |= self._filter_item(item.child(i), needle)
-        visible = own or child_match
-        item.setHidden(not visible)
-        if needle and child_match:
-            item.setExpanded(True)
-        return visible
-
-    def _selection_changed(self, current: QTreeWidgetItem | None, previous: QTreeWidgetItem | None) -> None:
-        del previous
-        if current is None:
-            self._show_empty_details()
-            return
-        detail = current.data(0, Qt.UserRole + 1)
-        if not isinstance(detail, dict):
-            self._show_empty_details()
-            return
-        self._selected_detail = detail
-        kind = detail.get("kind")
-        kind_label = {
-            "guild": "Сервер",
-            "channel": "Форум" if detail.get("channel_type") == 15 else "Канал",
-            "thread": "Тема",
-        }.get(kind, "Раздел")
-        title = detail.get("name") or "Без названия"
-        if kind == "channel":
-            title = f"# {title}"
-        self.detail_title.setText(title)
-        self.detail_hint.setText(f"{kind_label} в накопленном архиве DDS.")
-        self.detail_type.setText(kind_label)
-        self.detail_location.setText(str(detail.get("location") or "—"))
-        self.detail_messages.setText(str(detail.get("message_count", 0)))
-        self.detail_media.setText(str(detail.get("media_count", 0)))
-        self.detail_activity.setText(local_time(detail.get("last_activity")))
-        self.detail_id.setText(str(detail.get("id") or "—"))
-        self.copy_id_button.setEnabled(bool(detail.get("id")))
-
-    def _show_empty_details(self) -> None:
-        self._selected_detail = None
-        self.detail_title.setText("Выберите раздел")
-        self.detail_hint.setText("Здесь появятся сведения о сервере, канале или теме.")
-        for label in (
-            self.detail_type,
-            self.detail_location,
-            self.detail_messages,
-            self.detail_media,
-            self.detail_activity,
-            self.detail_id,
-        ):
-            label.setText("—")
-        self.copy_id_button.setEnabled(False)
-
-    def copy_selected_id(self) -> None:
-        if self._selected_detail and self._selected_detail.get("id"):
-            QApplication.clipboard().setText(str(self._selected_detail["id"]))
+        for index in range(self.tree.topLevelItemCount()):
+            found = walk(self.tree.topLevelItem(index))
+            if found is not None:
+                return found
+        return None
 
 
 class ActivityPage(Page):

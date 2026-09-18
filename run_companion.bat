@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title DDS Companion 0.5.3
+title DDS Companion 0.5.4
 
 rem DDS Companion source/dev bootstrap: PySide6 is a required GUI component.
 rem If it is missing, install it automatically without asking the user.
@@ -13,7 +13,7 @@ goto launch_gui
 :bootstrap_gui
 cls
 echo ============================================================
-echo  DDS Companion 0.5.3 - Preparing application components
+echo  DDS Companion 0.5.4 - Preparing application components
 echo ============================================================
 echo.
 echo Required desktop components are missing and will be installed
