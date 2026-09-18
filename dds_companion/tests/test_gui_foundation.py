@@ -49,11 +49,17 @@ class LibraryServiceTests(unittest.TestCase):
         tree = LibraryService(self.conn).snapshot()
         self.assertEqual(len(tree), 1)
         self.assertEqual(tree[0]["message_count"], 2)
+        self.assertEqual(tree[0]["media_count"], 2)
+        self.assertEqual(tree[0]["last_activity"], "2026-09-13T11:59:00.000Z")
         self.assertEqual(len(tree[0]["channels"]), 1)
         channel = tree[0]["channels"][0]
         self.assertEqual(channel["direct_message_count"], 1)
+        self.assertEqual(channel["message_count"], 2)
+        self.assertEqual(channel["media_count"], 2)
         self.assertEqual(len(channel["threads"]), 1)
         self.assertEqual(channel["threads"][0]["message_count"], 1)
+        self.assertEqual(channel["threads"][0]["media_count"], 1)
+        self.assertEqual(channel["threads"][0]["last_activity"], "2026-09-13T11:59:00.000Z")
 
 
 class GuiRuntimeTests(unittest.TestCase):

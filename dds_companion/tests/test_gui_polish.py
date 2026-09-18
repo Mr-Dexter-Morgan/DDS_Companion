@@ -54,9 +54,9 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", normal)
         self.assertIn("run_companion.pyw", normal)
-        self.assertIn("DDS Companion 0.5.2", normal)
+        self.assertIn("DDS Companion 0.5.3", normal)
         self.assertIn("python -m dds_companion.gui.app", debug)
-        self.assertIn("DDS Companion 0.5.2", debug)
+        self.assertIn("DDS Companion 0.5.3", debug)
 
     def test_050_first_run_gui_dependency_bootstrap_is_automatic(self):
         normal = (self.root / "run_companion.bat").read_text(encoding="utf-8")
@@ -206,6 +206,36 @@ class GuiPolishSourceContractTests(unittest.TestCase):
 
 
 
+
+class LibraryUx053SourceContractTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.root = Path(__file__).resolve().parents[2]
+
+    def test_053_library_uses_human_tree_columns_and_search_copy(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        self.assertIn('self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа"])', pages)
+        self.assertNotIn('self.tree.setHeaderLabels(["Архив", "Сообщения", "ID"])', pages)
+        self.assertIn('Поиск по серверу, каналу или теме…', pages)
+        self.assertIn('Технический ID', pages)
+        self.assertIn('QPushButton("Копировать ID")', pages)
+        self.assertIn('QSplitter(Qt.Horizontal)', pages)
+
+    def test_053_library_details_are_backed_by_archive_aggregates(self):
+        service = (self.root / "dds_companion/services/library_service.py").read_text(encoding="utf-8")
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        self.assertIn('media_count', service)
+        self.assertIn('last_activity', service)
+        self.assertIn('Последняя активность', pages)
+        self.assertIn('Расположение', pages)
+
+    def test_053_library_no_longer_receives_or_exposes_app_data_open_action(self):
+        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        self.assertIn('self.library = LibraryPage()', window)
+        self.assertNotIn('def open_library(self)', window)
+        self.assertNotIn('Открыть папку библиотеки', pages)
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -231,7 +261,7 @@ class MediaAttention052SourceContractTests(unittest.TestCase):
     def test_052_misleading_library_folder_button_is_removed(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         self.assertNotIn('QPushButton("Открыть папку библиотеки")', pages)
-        self.assertIn("technical path access in Settings -> Storage", pages)
+        self.assertIn("Расположение файлов", pages)
 
     def test_052_statusbar_names_import_failures_precisely(self):
         window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")

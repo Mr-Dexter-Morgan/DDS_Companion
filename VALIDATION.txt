@@ -1,38 +1,22 @@
-DDS Companion 0.5.2 — Validation
+DDS Companion 0.5.3 — Validation
 =================================
 Status: CANDIDATE / AUTOMATED PASS / WINDOWS LIVE PENDING
-Date: 2026-09-18
-Baseline: DDS Companion 0.5.0 — VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
-Derived from: 0.5.1 UI/Settings candidate after Windows live media finding
 
-AUTOMATED GATE
-- Full unittest discovery: 81/81 PASS
-- Repeated consecutive runs: 81/81 PASS x3
-- Python compileall: PASS
-- CLI --version: DDS Companion 0.5.2 PASS
-- Existing watcher/import/Health/media/settings/cache regressions: PASS
+AUTOMATED
+- Full unittest discovery: 84/84 PASS.
+- Repeated consecutive runs: 84/84 PASS x3.
+- compileall: PASS.
+- CLI --version: DDS Companion 0.5.3 PASS.
+- Existing archive/media/settings/recovery regressions remain green.
 
-NEW 0.5.2 COVERAGE
-- complete HTTP size mismatch with matching Content-Length becomes metadata_size_mismatch after one attempt;
-- mismatched payload is not silently cached;
-- terminal/stale/ignored media items are exposed as bounded Status data;
-- Ignore changes only media lifecycle state and removes unresolved media warning;
-- Ignore survives signed-URL rotation;
-- ignored item can be explicitly retried later;
-- explicit Retry performs one selected download even when automatic media download is Off;
-- Status source contract exposes Повторить / Игнорировать / Подробнее;
-- bottom status distinguishes import failures from media issues;
-- misleading Library folder button is removed; technical paths remain in Settings/Storage.
-
-ENVIRONMENT NOTE
-- Current automation environment does not have PySide6 available for a real Qt/Windows render.
-- Windows live/visual validation remains the promotion gate.
+NEW COVERAGE
+- Library snapshot exposes message/media counts and last activity at guild/channel/thread levels.
+- Human Library columns/search/details source contract is enforced.
+- Technical ID is no longer a main-tree column.
+- Library no longer receives an app-data folder-open callback.
 
 WINDOWS LIVE GATE
-1. Launch 0.5.2 over the existing real data root.
-2. Existing failed media appears in the attention surface with human-readable reason.
-3. Подробнее opens selected item detail.
-4. Повторить performs a bounded retry without affecting unrelated media.
-5. Игнорировать changes the item to ignored; Media Backfill leaves LIMITED if no other unresolved media problem exists.
-6. Restart preserves ignored state.
-7. Normal close: no traceback/shutdown regression.
+1. Open Библиотека: tree + details panel render cleanly.
+2. Select a server, channel and thread: details/counts/last activity update sensibly.
+3. Search by a visible server/channel/thread name and copy one technical ID.
+4. Normal use/close shows no regression.

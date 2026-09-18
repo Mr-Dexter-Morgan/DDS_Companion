@@ -1,112 +1,12 @@
-DDS Companion 0.5.2 — Media Attention Recovery
-================================================
-Date: 2026-09-18
-Status: CANDIDATE / 80/80 AUTOMATED PASS / WINDOWS LIVE PENDING
-Baseline: 0.5.0 — VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
-Supersedes before promotion: 0.5.1 candidate
+DDS Companion 0.5.3 — Library UX
+================================
 
-LIVE FINDING CLOSED
-- A real attachment advertised 1,304,279 bytes but repeatedly returned a complete 329,666-byte payload.
-- 0.5.1 eventually marked the object FAILED_PERMANENT and left Media Backfill LIMITED with no normal user action.
-- Archive/capture remained healthy; defect classified as media recovery/usability, not archive integrity.
-
-MEDIA ATTENTION UX
-- Added Status block «Медиафайлы, требующие внимания».
-- Shows filename, human reason and state.
-- Added actions: «Повторить», «Игнорировать», «Подробнее».
-- Human count wording includes «1 медиафайл требует внимания».
-- Ignored items stay visible and are reversible through Retry.
-
-RECOVERY SEMANTICS
-- Added durable media lifecycle state IGNORED.
-- Ignore removes the item from unresolved Media Backfill attention without deleting archive metadata.
-- Signed-URL rotation does not silently undo an explicit Ignore.
-- Explicit Retry targets one media key and performs one attempt even when automatic media download is Off.
-
-SIZE-MISMATCH HARDENING
-- Transport records HTTP Content-Length when available.
-- A fully received payload whose Content-Length equals received bytes but differs from Discord metadata is classified as metadata_size_mismatch after one attempt.
-- DDS does not cache that mismatched binary automatically.
-- Incomplete/truncated responses remain retryable.
-
-LIBRARY PATH USABILITY
-- Removed misleading «Открыть папку библиотеки» from Библиотека; it opened the technical app-data root.
-- Technical path access remains in Настройки -> Хранилище -> Расположение файлов.
-- Broader Library tree/details redesign remains separate pending finalized UX.
-
-TRUTHFUL STATUS
-- Bottom status now says «ошибок импорта» rather than ambiguous unresolved failures.
-- «Последняя ошибка» became «Последняя критическая ошибка»; per-file media problems are shown separately.
-- Media failures remain isolated: Overall archive/capture can stay RUNNING while Media Backfill needs attention.
-
-AUTOMATED VALIDATION
-- 81/81 PASS repeated three consecutive runs.
-- compileall PASS.
-- CLI version PASS: DDS Companion 0.5.2.
-
-WINDOWS LIVE GATE
-- Short bounded verification remains required before promotion.
-
-------------------------------------------------------------
-HISTORICAL 0.5.1 CANDIDATE CHANGELOG FOLLOWS
-------------------------------------------------------------
-
-DDS Companion 0.5.1 — UI / Settings Polish
-==========================================
-Date: 2026-09-18
-Status: CANDIDATE / AUTOMATED PASS / WINDOWS LIVE PENDING
-Baseline: 0.5.0 — VERIFIED / LIVE TESTED / CURRENT RECOMMENDED
-
-USER-FACING NAVIGATION
-- Dashboard -> Главная.
-- Library -> Библиотека.
-- Activity -> Активность.
-- Health -> Статус.
-- Settings -> Настройки.
-- Internal PAGE_NAMES remain Dashboard / Library / Activity / Health / Settings; only UI labels changed.
-
-ГЛАВНАЯ
-- Removed the visible manual Обновить button.
-- Existing automatic snapshot flow remains active.
-- Returning to Главная explicitly requests a fresh snapshot from the runtime.
-- Internal runtime refresh capability remains available.
-
-НАСТРОЙКИ / ОБЩИЕ
-- General -> Общие.
-- Automatic media download moved from storage to Общие and localized as «Автоматическая загрузка медиа».
-- Confirm cache cleanup moved to Общие and localized as «Подтверждать очистку кэша».
-- Existing persisted backend keys are unchanged.
-- Watcher timing stays read-only; future tray/autostart toggles are not faked early.
-
-НАСТРОЙКИ / ХРАНИЛИЩЕ
-- Data & Storage -> Хранилище.
-- Media cache policy moved to the top and localized as «Хранение медиа».
-- Storage usage follows as «Использование хранилища».
-- Direct folder/path access moved to the bottom as «Расположение файлов».
-- Cache policy values remain identical; only visible labels/order changed.
-- Media cache cleanup remains binary-only and archive-safe.
-
-АРХИВ / ДИАГНОСТИКА
-- Archive -> Архив.
-- Diagnostics -> Диагностика.
-- Common user-facing actions/labels received light Russian localization.
-- Technical diagnostic identifiers and status/event vocabulary remain unchanged where precision matters.
-
-REGRESSIONS PRESERVED
-- 0.5.0 schema v3 media registry and state machine unchanged.
-- Media Backfill runtime/downloader unchanged.
-- Settings persistence keys unchanged.
-- Health/Plugin/Discord/DDS_Data behavior unchanged.
-- Archive/cache safety boundary unchanged.
-
-AUTOMATED VALIDATION
-- 74/74 unit/regression/source-contract tests PASS.
-- Added 0.5.1 contracts for localized navigation with stable internal IDs.
-- Added contract that Главная has no manual refresh button but refreshes on return.
-- Added contracts for General toggle ownership and Storage section ordering.
-- Python compileall PASS.
-- CLI version PASS: DDS Companion 0.5.1.
-
-LIVE GATE
-- Windows visual/live check remains required before promotion.
-- High-value checks: navigation labels/routes, Settings placement/persistence, Главная freshness, normal shutdown.
+- Reworked Library into a two-pane archive browser.
+- Kept natural Discord hierarchy: server -> channel -> thread.
+- Replaced developer-facing ID column with human columns: Раздел / Сообщений / Медиа.
+- Added details panel: type, archive location, message count, media count, last activity and technical ID.
+- Added explicit Copy ID action in details instead of exposing IDs in the main tree.
+- Updated Library search wording and removed ID-based filtering from the ordinary search field.
+- Extended LibraryService snapshots with media counts and last-activity timestamps.
+- Preserved selection/expansion across refresh and auto-selects the first server when available.
+- No SQLite schema, Watcher, importer or Media Runtime redesign.

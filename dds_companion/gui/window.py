@@ -189,7 +189,7 @@ class MainWindow(QMainWindow):
 
         self.stack = QStackedWidget()
         self.dashboard = DashboardPage()
-        self.library = LibraryPage(self.open_library)
+        self.library = LibraryPage()
         self.activity = ActivityPage()
         self.health = HealthPage(
             on_media_retry=self._retry_media_issue,
@@ -639,9 +639,6 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"{label}: {detail}", 3500)
         else:
             QMessageBox.warning(self, "DDS Companion", detail)
-
-    def open_library(self) -> None:
-        self._open("app_data", "Library")
 
     def open_dds(self) -> None:
         self._open("dds_data", "DDS_Data")

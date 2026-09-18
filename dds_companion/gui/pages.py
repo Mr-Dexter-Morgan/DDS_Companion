@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QFrame,
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSplitter,
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
@@ -300,36 +302,106 @@ class DashboardPage(Page):
 
 
 class LibraryPage(Page):
-    def __init__(self, on_open_library, parent=None):
+    """Human-facing archive browser.
+
+    The tree is navigation, not a database inspector. Technical identifiers stay
+    out of the main columns and are available only in the details card.
+    """
+
+    def __init__(self, parent=None):
         super().__init__(
             "Библиотека",
-            "Структура накопленного архива: Server → Channel → Thread. Поиск по сообщениям появится отдельным этапом.",
+            "Просмотр накопленного архива по серверам, каналам и темам.",
             parent,
         )
-        tools = QHBoxLayout()
-        self.filter = QLineEdit()
-        self.filter.setPlaceholderText("Фильтр по серверам, каналам и тредам…")
-        self.filter.textChanged.connect(self.apply_filter)
-        # The old “Открыть папку библиотеки” action opened the application data
-        # root (config/database/logs/media internals), not a human library. Keep
-        # technical path access in Settings -> Storage instead of misleading users.
-        tools.addWidget(self.filter, 1)
-        self.body.addLayout(tools)
 
-        card = Card()
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(10, 10, 10, 10)
+        self.filter = QLineEdit()
+        self.filter.setPlaceholderText("Поиск по серверу, каналу или теме…")
+        self.filter.textChanged.connect(self.apply_filter)
+        self.body.addWidget(self.filter)
+
+        self.splitter = QSplitter(Qt.Horizontal)
+        self.splitter.setChildrenCollapsible(False)
+
+        tree_card = Card()
+        tree_layout = QVBoxLayout(tree_card)
+        tree_layout.setContentsMargins(10, 10, 10, 10)
+        tree_layout.setSpacing(8)
+        tree_layout.addWidget(SectionHeader("Архив", "Сервер → канал → тема"))
+
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Архив", "Сообщения", "ID"])
-        self.tree.setColumnWidth(0, 480)
-        self.tree.setColumnWidth(1, 110)
+        self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setUniformRowHeights(True)
         self.tree.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.tree.header().setStretchLastSection(True)
-        layout.addWidget(self.tree)
-        self.body.addWidget(card, 1)
+        self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.tree.header().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.tree.currentItemChanged.connect(self._selection_changed)
+        tree_layout.addWidget(self.tree, 1)
+
+        details_card = Card()
+        details_card.setMinimumWidth(285)
+        details_layout = QVBoxLayout(details_card)
+        details_layout.setContentsMargins(16, 16, 16, 16)
+        details_layout.setSpacing(12)
+
+        self.detail_title = QLabel("Выберите раздел")
+        self.detail_title.setObjectName("SectionTitle")
+        self.detail_hint = QLabel("Здесь появятся сведения о сервере, канале или теме.")
+        self.detail_hint.setObjectName("SectionHint")
+        self.detail_hint.setWordWrap(True)
+        details_layout.addWidget(self.detail_title)
+        details_layout.addWidget(self.detail_hint)
+
+        detail_grid = QGridLayout()
+        detail_grid.setHorizontalSpacing(16)
+        detail_grid.setVerticalSpacing(10)
+        self.detail_type = self._add_detail_row(detail_grid, 0, "Тип")
+        self.detail_location = self._add_detail_row(detail_grid, 1, "Расположение")
+        self.detail_messages = self._add_detail_row(detail_grid, 2, "Сообщений")
+        self.detail_media = self._add_detail_row(detail_grid, 3, "Медиа")
+        self.detail_activity = self._add_detail_row(detail_grid, 4, "Последняя активность")
+        details_layout.addLayout(detail_grid)
+
+        details_layout.addSpacing(4)
+        technical = QLabel("Технический ID")
+        technical.setObjectName("CardEyebrow")
+        self.detail_id = QLabel("—")
+        self.detail_id.setObjectName("SectionHint")
+        self.detail_id.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.detail_id.setWordWrap(True)
+        details_layout.addWidget(technical)
+        details_layout.addWidget(self.detail_id)
+
+        self.copy_id_button = QPushButton("Копировать ID")
+        self.copy_id_button.setProperty("secondary", True)
+        self.copy_id_button.setEnabled(False)
+        self.copy_id_button.clicked.connect(self.copy_selected_id)
+        details_layout.addWidget(self.copy_id_button)
+        details_layout.addStretch(1)
+
+        self.splitter.addWidget(tree_card)
+        self.splitter.addWidget(details_card)
+        self.splitter.setStretchFactor(0, 3)
+        self.splitter.setStretchFactor(1, 2)
+        self.splitter.setSizes([720, 360])
+        self.body.addWidget(self.splitter, 1)
+
         self._library: list[dict] = []
+        self._selected_detail: dict | None = None
+
+    @staticmethod
+    def _add_detail_row(layout: QGridLayout, row: int, label: str) -> QLabel:
+        name = QLabel(label)
+        name.setObjectName("CardEyebrow")
+        value = QLabel("—")
+        value.setStyleSheet(f"color:{TEXT};font-weight:650;")
+        value.setWordWrap(True)
+        value.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(name, row, 0, Qt.AlignTop)
+        layout.addWidget(value, row, 1, Qt.AlignTop)
+        return value
 
     def update_snapshot(self, snapshot: dict) -> None:
         library = snapshot.get("library", [])
@@ -349,31 +421,66 @@ class LibraryPage(Page):
         self.tree.clear()
         selected_item = None
         for guild in self._library:
-            g = QTreeWidgetItem([guild["name"], str(guild["message_count"]), guild["id"]])
+            guild_detail = {
+                "kind": "guild",
+                "id": guild["id"],
+                "name": guild["name"],
+                "location": "—",
+                "message_count": guild.get("message_count", 0),
+                "media_count": guild.get("media_count", 0),
+                "last_activity": guild.get("last_activity"),
+            }
+            g = QTreeWidgetItem([
+                guild["name"],
+                str(guild.get("message_count", 0)),
+                str(guild.get("media_count", 0)),
+            ])
             g.setData(0, Qt.UserRole, f"g:{guild['id']}")
+            g.setData(0, Qt.UserRole + 1, guild_detail)
             g.setForeground(0, QColor(TEXT))
             font = g.font(0)
             font.setBold(True)
             g.setFont(0, font)
             self.tree.addTopLevelItem(g)
+
             for channel in guild.get("channels", []):
-                direct = channel.get("direct_message_count", 0)
-                thread_total = sum(t.get("message_count", 0) for t in channel.get("threads", []))
+                channel_detail = {
+                    "kind": "channel",
+                    "id": channel["id"],
+                    "name": channel["name"],
+                    "channel_type": channel.get("type"),
+                    "location": guild["name"],
+                    "message_count": channel.get("message_count", 0),
+                    "media_count": channel.get("media_count", 0),
+                    "last_activity": channel.get("last_activity"),
+                }
                 c = QTreeWidgetItem([
                     f"# {channel['name']}",
-                    str(direct + thread_total),
-                    channel["id"],
+                    str(channel.get("message_count", 0)),
+                    str(channel.get("media_count", 0)),
                 ])
                 c.setData(0, Qt.UserRole, f"c:{channel['id']}")
+                c.setData(0, Qt.UserRole + 1, channel_detail)
                 c.setForeground(0, QColor("#cdd5e7"))
                 g.addChild(c)
+
                 for thread in channel.get("threads", []):
+                    thread_detail = {
+                        "kind": "thread",
+                        "id": thread["id"],
+                        "name": thread["name"],
+                        "location": f"{guild['name']} → # {channel['name']}",
+                        "message_count": thread.get("message_count", 0),
+                        "media_count": thread.get("media_count", 0),
+                        "last_activity": thread.get("last_activity"),
+                    }
                     t = QTreeWidgetItem([
                         f"↳ {thread['name']}",
-                        str(thread["message_count"]),
-                        thread["id"],
+                        str(thread.get("message_count", 0)),
+                        str(thread.get("media_count", 0)),
                     ])
                     t.setData(0, Qt.UserRole, f"t:{thread['id']}")
+                    t.setData(0, Qt.UserRole + 1, thread_detail)
                     t.setForeground(0, QColor(MUTED))
                     c.addChild(t)
                     if t.data(0, Qt.UserRole) == selected_id:
@@ -385,8 +492,14 @@ class LibraryPage(Page):
 
         for i in range(self.tree.topLevelItemCount()):
             self._restore_expanded(self.tree.topLevelItem(i), expanded_ids)
+
+        if selected_item is None and self.tree.topLevelItemCount():
+            selected_item = self.tree.topLevelItem(0)
         if selected_item:
             self.tree.setCurrentItem(selected_item)
+        else:
+            self._show_empty_details()
+
         self.tree.setUpdatesEnabled(True)
         self.apply_filter(self.filter.text())
 
@@ -408,7 +521,7 @@ class LibraryPage(Page):
             self._filter_item(self.tree.topLevelItem(i), needle)
 
     def _filter_item(self, item: QTreeWidgetItem, needle: str) -> bool:
-        own = not needle or needle in item.text(0).casefold() or needle in item.text(2).casefold()
+        own = not needle or needle in item.text(0).casefold()
         child_match = False
         for i in range(item.childCount()):
             child_match |= self._filter_item(item.child(i), needle)
@@ -417,6 +530,54 @@ class LibraryPage(Page):
         if needle and child_match:
             item.setExpanded(True)
         return visible
+
+    def _selection_changed(self, current: QTreeWidgetItem | None, previous: QTreeWidgetItem | None) -> None:
+        del previous
+        if current is None:
+            self._show_empty_details()
+            return
+        detail = current.data(0, Qt.UserRole + 1)
+        if not isinstance(detail, dict):
+            self._show_empty_details()
+            return
+        self._selected_detail = detail
+        kind = detail.get("kind")
+        kind_label = {
+            "guild": "Сервер",
+            "channel": "Форум" if detail.get("channel_type") == 15 else "Канал",
+            "thread": "Тема",
+        }.get(kind, "Раздел")
+        title = detail.get("name") or "Без названия"
+        if kind == "channel":
+            title = f"# {title}"
+        self.detail_title.setText(title)
+        self.detail_hint.setText(f"{kind_label} в накопленном архиве DDS.")
+        self.detail_type.setText(kind_label)
+        self.detail_location.setText(str(detail.get("location") or "—"))
+        self.detail_messages.setText(str(detail.get("message_count", 0)))
+        self.detail_media.setText(str(detail.get("media_count", 0)))
+        self.detail_activity.setText(local_time(detail.get("last_activity")))
+        self.detail_id.setText(str(detail.get("id") or "—"))
+        self.copy_id_button.setEnabled(bool(detail.get("id")))
+
+    def _show_empty_details(self) -> None:
+        self._selected_detail = None
+        self.detail_title.setText("Выберите раздел")
+        self.detail_hint.setText("Здесь появятся сведения о сервере, канале или теме.")
+        for label in (
+            self.detail_type,
+            self.detail_location,
+            self.detail_messages,
+            self.detail_media,
+            self.detail_activity,
+            self.detail_id,
+        ):
+            label.setText("—")
+        self.copy_id_button.setEnabled(False)
+
+    def copy_selected_id(self) -> None:
+        if self._selected_detail and self._selected_detail.get("id"):
+            QApplication.clipboard().setText(str(self._selected_detail["id"]))
 
 
 class ActivityPage(Page):
