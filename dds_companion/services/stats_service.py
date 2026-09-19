@@ -61,6 +61,7 @@ class StatsSnapshot:
     activity_events: int
     failed_jobs_total: int
     failed_jobs_unresolved: int
+    total_media: int
     known_media: int
     cached_media_files: int
     physical_media_files: int
@@ -73,6 +74,8 @@ class StatsSnapshot:
     media_skipped: int
     media_evicted: int
     media_ignored: int
+    media_unresolved: int
+    media_attention: int
     sqlite_bytes: int
     dds_json_bytes: int
     cache_bytes: int
@@ -187,9 +190,25 @@ class StatsService:
             "SELECT state, COUNT(*) FROM media_objects GROUP BY state"
         ).fetchall()
         media_states = {str(row[0]): int(row[1]) for row in state_rows}
-        known_media = int(
+        total_media = int(
             self.connection.execute("SELECT COUNT(DISTINCT media_key) FROM media_refs").fetchone()[0]
         )
+        known_media = int(
+            self.connection.execute(
+                """
+                SELECT COUNT(DISTINCT mr.media_key)
+                FROM media_refs mr
+                JOIN media_objects mo ON mo.media_key=mr.media_key
+                WHERE mo.state='CACHED'
+                   OR (
+                        mo.current_url IS NOT NULL
+                        AND TRIM(mo.current_url) <> ''
+                        AND mo.state NOT IN ('STALE_URL', 'IGNORED', 'UNRESOLVED')
+                   )
+                """
+            ).fetchone()[0]
+        )
+        media_attention = media_states.get("FAILED_PERMANENT", 0) + media_states.get("STALE_URL", 0)
 
         return {
             "messages": _count(self.connection, "messages"),
@@ -203,6 +222,7 @@ class StatsService:
             "activity_events": _count(self.connection, "activity_events"),
             "failed_jobs_total": _count(self.connection, "failed_jobs"),
             "failed_jobs_unresolved": unresolved,
+            "total_media": total_media,
             "known_media": known_media,
             "cached_media_files": media_states.get("CACHED", 0),
             "media_queued": media_states.get("QUEUED", 0),
@@ -214,6 +234,8 @@ class StatsService:
             "media_skipped": media_states.get("SKIPPED", 0),
             "media_evicted": media_states.get("EVICTED", 0),
             "media_ignored": media_states.get("IGNORED", 0),
+            "media_unresolved": media_states.get("UNRESOLVED", 0),
+            "media_attention": media_attention,
             "last_successful_import": last_import_row[0] if last_import_row else None,
             **storage,
         }

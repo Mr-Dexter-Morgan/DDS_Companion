@@ -19,6 +19,7 @@ MEDIA_STATES = {
     "STALE_URL",
     "EVICTED",
     "IGNORED",
+    "UNRESOLVED",
 }
 
 
@@ -290,6 +291,31 @@ class MediaRegistryService:
             ).fetchone()[0]
         )
 
+    def known_count(self) -> int:
+        """Return media currently known well enough to be acted on.
+
+        ``referenced_count`` is historical archive identity: it answers how many
+        attachments the archive has ever seen.  The user-facing ``known`` value is
+        deliberately narrower.  A stale/ignored/unresolved signed URL is not a
+        currently usable discovery, even though the stable attachment identity is
+        retained for future rediscovery.
+        """
+        return int(
+            self.connection.execute(
+                """
+                SELECT COUNT(DISTINCT mr.media_key)
+                FROM media_refs mr
+                JOIN media_objects mo ON mo.media_key=mr.media_key
+                WHERE mo.state='CACHED'
+                   OR (
+                        mo.current_url IS NOT NULL
+                        AND TRIM(mo.current_url) <> ''
+                        AND mo.state NOT IN ('STALE_URL', 'IGNORED', 'UNRESOLVED')
+                   )
+                """
+            ).fetchone()[0]
+        )
+
     def cached_count(self) -> int:
         return int(
             self.connection.execute(
@@ -313,7 +339,7 @@ class MediaRegistryService:
             ORDER BY CASE state WHEN 'IGNORED' THEN 1 ELSE 0 END, updated_at DESC, media_key
             LIMIT ?
             """,
-            (*states, max(1, min(int(limit), 200))),
+            (*states, max(1, min(int(limit), 1000))),
         ).fetchall()
         return [
             {
@@ -355,7 +381,7 @@ class MediaRegistryService:
             cursor = self.connection.execute(
                 """
                 UPDATE media_objects
-                SET state='IGNORED', updated_at=?, next_retry_at=NULL, failure_class='user_ignored'
+                SET state='IGNORED', updated_at=?, next_retry_at=NULL
                 WHERE media_key=?
                   AND state IN ('FAILED_PERMANENT', 'STALE_URL', 'FAILED_RETRYABLE')
                   AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
@@ -363,6 +389,47 @@ class MediaRegistryService:
                 (stamp, str(media_key)),
             )
         return bool(cursor.rowcount)
+
+    def ignore_all_issues(self) -> int:
+        """Acknowledge every currently actionable media problem in one action."""
+        stamp = utc_now()
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE media_objects
+                SET state='IGNORED', updated_at=?, next_retry_at=NULL
+                WHERE state IN ('FAILED_PERMANENT', 'STALE_URL')
+                  AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
+                """,
+                (stamp,),
+            )
+        return int(cursor.rowcount or 0)
+
+    def clear_processed_issues(self) -> int:
+        """Move acknowledged issues into rediscovery-only state.
+
+        Clearing is intentionally *not* a retry.  The stale/current signed URL is
+        discarded so the planner cannot immediately feed the same dead URL back
+        into the worker.  Stable attachment/message identity stays in the archive;
+        the next fresh capture of that attachment supplies a URL again and
+        ``register_attachment`` promotes the row back to KNOWN automatically.
+        """
+        stamp = utc_now()
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE media_objects
+                SET state='UNRESOLVED', current_url=NULL, proxy_url=NULL,
+                    url_observed_at=NULL, updated_at=?, attempt_count=0,
+                    next_retry_at=NULL, last_attempt_at=NULL, last_http_status=NULL,
+                    last_error='ожидает повторного обнаружения ссылки Discord',
+                    failure_class='awaiting_rediscovery'
+                WHERE state='IGNORED'
+                  AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
+                """,
+                (stamp,),
+            )
+        return int(cursor.rowcount or 0)
 
     def reset_removed_cache_paths(
         self,

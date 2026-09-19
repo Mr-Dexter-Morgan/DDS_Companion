@@ -63,6 +63,7 @@ class MediaBackfillRuntime:
                 # GUI control changes are queued, not represented by a single Event.
                 # Rapid Off -> On -> Off actions therefore cannot be coalesced and
                 # Activity records every user-visible transition in order.
+                control_changed = False
                 while True:
                     try:
                         command = self.control_queue.get_nowait()
@@ -72,6 +73,7 @@ class MediaBackfillRuntime:
                         requested_enabled = command
                         if requested_enabled:
                             requeued = service.registry.requeue_manual_clear_evictions()
+                            control_changed = control_changed or bool(requeued)
                             activity.publish(
                                 subsystem="media",
                                 event_type="media_backfill_enabled",
@@ -98,6 +100,7 @@ class MediaBackfillRuntime:
                         media_key = str(command.get("media_key") or "")
                         if action == "retry" and media_key:
                             outcome = service.retry_media_once(media_key, settings_store.load())
+                            control_changed = control_changed or outcome is not None
                             activity.publish(
                                 level="INFO" if outcome is not None else "WARNING",
                                 subsystem="media",
@@ -111,6 +114,7 @@ class MediaBackfillRuntime:
                             )
                         elif action == "ignore" and media_key:
                             changed = service.ignore_issue(media_key)
+                            control_changed = control_changed or bool(changed)
                             activity.publish(
                                 level="INFO" if changed else "WARNING",
                                 subsystem="media",
@@ -121,6 +125,24 @@ class MediaBackfillRuntime:
                                     else f"Media ignore ignored; item is no longer actionable: {media_key}"
                                 ),
                                 details={"media_key": media_key, "changed": bool(changed)},
+                            )
+                        elif action == "ignore_all":
+                            changed = service.ignore_all_issues()
+                            control_changed = control_changed or bool(changed)
+                            activity.publish(
+                                subsystem="media",
+                                event_type="media_user_ignored_all",
+                                summary=f"User ignored {changed} media issue(s)",
+                                details={"changed": int(changed)},
+                            )
+                        elif action == "clear_processed":
+                            changed = service.clear_processed_issues()
+                            control_changed = control_changed or bool(changed)
+                            activity.publish(
+                                subsystem="media",
+                                event_type="media_processed_cleared",
+                                summary=f"Cleared {changed} processed media issue(s); awaiting rediscovery",
+                                details={"changed": int(changed)},
                             )
 
                 settings = settings_store.load()
@@ -134,17 +156,16 @@ class MediaBackfillRuntime:
                             event_type="media_backfill_disabled",
                             summary="Automatic media backfill disabled",
                         )
-                    if last_enabled is not False:
+                    if last_enabled is not False or control_changed:
+                        counts = service.counts()
                         health.set_subsystem(
                             "media",
                             "STOPPED",
                             "automatic media backfill is disabled",
                             details={
-                                **service.counts(),
-                                "attention_items": service.issue_items(limit=50),
-                                "attention_count": sum(
-                                    1 for item in service.issue_items(limit=50) if item.get("state") != "IGNORED"
-                                ),
+                                **counts,
+                                "attention_items": service.issue_items(limit=500),
+                                "attention_count": counts["attention"],
                             },
                         )
                     last_enabled = False
@@ -178,18 +199,20 @@ class MediaBackfillRuntime:
                                 storage_delta_bytes=-int(maintenance.bytes_removed),
                             )
                     counts = service.counts()
-                    attention_items = service.issue_items(limit=50)
-                    attention_count = sum(1 for item in attention_items if item.get("state") != "IGNORED")
+                    attention_items = service.issue_items(limit=500)
+                    attention_count = counts["attention"]
                     limited = counts["retryable_failed"] + counts["permanent_failed"] + counts["stale_url"]
                     state = "LIMITED" if limited else "RUNNING"
                     summary = (
-                        f"Кэш медиа: {counts['cached']}/{counts['known']}"
-                        f" · в очереди {counts['queued']} · загружается {counts['downloading']}"
+                        f"Всего: {counts['total']} · известно: {counts['known']} · кэшировано: {counts['cached']}"
+                        f" · очередь: {counts['queued']} · загрузка: {counts['downloading']}"
                     )
                     if attention_count:
                         summary += f" · требует внимания: {attention_count}"
                     if counts.get("ignored"):
                         summary += f" · игнорируется: {counts['ignored']}"
+                    if counts.get("unresolved"):
+                        summary += f" · ждёт переобнаружения: {counts['unresolved']}"
                     health.set_subsystem(
                         "media",
                         state,

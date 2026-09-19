@@ -1,8 +1,12 @@
-DDS Companion 0.5.4 — Validation
+DDS Companion 0.5.5 — Validation
 
-- Full automated suite: 84/84 PASS.
+- Full automated suite: 88/88 PASS.
 - compileall: PASS.
-- CLI --version: DDS Companion 0.5.4 PASS.
-- Runtime library paging + export-rule command path: PASS.
-- Additive schema v1 -> v4 migration preservation: PASS.
-- Qt visual/live check: pending on Windows (PySide6 is not installed in the automation environment).
+- CLI --version: DDS Companion 0.5.5 PASS.
+- Library click-only selection / stale request protection contract: PASS.
+- Media lifecycle regression: stale -> ignored -> unresolved -> fresh URL -> known: PASS.
+- Bulk Ignore All / Clear Processed service path: PASS.
+- Stats lifecycle counters contract: PASS.
+- Existing library paging / export-rule persistence regression: PASS.
+- Additive schema compatibility: PASS; no new schema migration required for UNRESOLVED state.
+- Qt visual/live check: PENDING on Windows (PySide6 is not installed in the automation environment).

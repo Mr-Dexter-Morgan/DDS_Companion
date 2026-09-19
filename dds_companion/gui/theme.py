@@ -138,12 +138,12 @@ QPushButton[ghost="true"] {{
 }}
 QPushButton[ghost="true"]:hover {{ color: {TEXT}; background: #151a25; }}
 QPushButton:disabled {{ color: #555e6e; background: #141821; border-color: #1c2230; }}
-QTabWidget#SettingsTabs::pane {{
+QTabWidget#SettingsTabs::pane, QTabWidget#HealthTabs::pane {{
     border: none;
     background: transparent;
     top: -1px;
 }}
-QTabWidget#SettingsTabs QTabBar::tab {{
+QTabWidget#SettingsTabs QTabBar::tab, QTabWidget#HealthTabs QTabBar::tab {{
     color: {MUTED};
     background: #10151f;
     border: 1px solid #1b2230;
@@ -154,12 +154,12 @@ QTabWidget#SettingsTabs QTabBar::tab {{
     border-top-right-radius: 8px;
     font-weight: 650;
 }}
-QTabWidget#SettingsTabs QTabBar::tab:hover {{
+QTabWidget#SettingsTabs QTabBar::tab:hover, QTabWidget#HealthTabs QTabBar::tab:hover {{
     color: {TEXT};
     background: #171e2a;
     border-color: #2b3548;
 }}
-QTabWidget#SettingsTabs QTabBar::tab:selected {{
+QTabWidget#SettingsTabs QTabBar::tab:selected, QTabWidget#HealthTabs QTabBar::tab:selected {{
     color: white;
     background: #27263d;
     border-color: #6668f1;

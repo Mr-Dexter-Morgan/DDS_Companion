@@ -186,6 +186,8 @@ class MainWindow(QMainWindow):
         self.health = HealthPage(
             on_media_retry=self._retry_media_issue,
             on_media_ignore=self._ignore_media_issue,
+            on_media_ignore_all=self._ignore_all_media_issues,
+            on_media_clear_processed=self._clear_processed_media_issues,
         )
         self.settings = SettingsPage(
             on_setting_changed=self._on_setting_changed,
@@ -449,6 +451,18 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("Проблема медиа помечена как игнорируемая", 3500)
         self.runtime.request_refresh()
 
+    def _ignore_all_media_issues(self) -> None:
+        self.runtime.request_media_ignore_all()
+        self.statusBar().showMessage("Все текущие проблемы медиа помечены как обработанные", 3500)
+        self.runtime.request_refresh()
+
+    def _clear_processed_media_issues(self) -> None:
+        self.runtime.request_media_clear_processed()
+        self.statusBar().showMessage(
+            "Обработанные медиа переведены в ожидание переобнаружения", 4000
+        )
+        self.runtime.request_refresh()
+
     def _on_setting_changed(self, key: str, value) -> None:
         try:
             self.settings_store.update(**{key: value})
@@ -578,9 +592,10 @@ class MainWindow(QMainWindow):
             f"Watcher: {subs.get('watcher', {}).get('state', 'UNKNOWN')}",
             f"Media Backfill: {subs.get('media', {}).get('state', 'UNKNOWN')}",
             f"Messages: {stats.get('messages', 0)}",
-            f"Media known/cached: {stats.get('known_media', 0)} / {stats.get('cached_media_files', 0)}",
+            f"Media total/known/cached: {stats.get('total_media', 0)} / {stats.get('known_media', 0)} / {stats.get('cached_media_files', 0)}",
             f"Media queued/downloading: {stats.get('media_queued', 0)} / {stats.get('media_downloading', 0)}",
             f"Media retry/stale/failed: {stats.get('media_retryable_failed', 0)} / {stats.get('media_stale_url', 0)} / {stats.get('media_permanent_failed', 0)}",
+            f"Media attention/ignored/unresolved: {stats.get('media_attention', 0)} / {stats.get('media_ignored', 0)} / {stats.get('media_unresolved', 0)}",
             f"Storage bytes: {stats.get('total_known_storage_bytes', 0)}",
             f"SQLite bytes: {stats.get('sqlite_bytes', 0)}",
             f"DDS JSON bytes: {stats.get('dds_json_bytes', 0)}",

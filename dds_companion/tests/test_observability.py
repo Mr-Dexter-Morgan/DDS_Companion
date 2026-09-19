@@ -304,8 +304,11 @@ class ObservabilityTests(unittest.TestCase):
         self.assertEqual(snapshot.messages, 1)
         self.assertEqual(snapshot.session_messages_added, 1)
         self.assertEqual(snapshot.session_imports_added, 1)
+        self.assertEqual(snapshot.total_media, 1)
         self.assertEqual(snapshot.known_media, 1)
         self.assertEqual(snapshot.cached_media_files, 0)
+        self.assertEqual(snapshot.media_unresolved, 0)
+        self.assertEqual(snapshot.media_attention, 0)
         self.assertGreaterEqual(snapshot.session_activity_events_added, 1)
 
     def test_schema_v1_archive_upgrades_additively_to_v4(self):

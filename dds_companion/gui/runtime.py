@@ -86,6 +86,14 @@ class GuiRuntime:
         self.media_control_queue.put({"action": "ignore", "media_key": str(media_key)})
         self.media_wake_event.set()
 
+    def request_media_ignore_all(self) -> None:
+        self.media_control_queue.put({"action": "ignore_all"})
+        self.media_wake_event.set()
+
+    def request_media_clear_processed(self) -> None:
+        self.media_control_queue.put({"action": "clear_processed"})
+        self.media_wake_event.set()
+
     def request_library_messages(self, request: dict) -> None:
         self.library_control_queue.put({"action": "messages", **dict(request)})
         self.refresh_event.set()

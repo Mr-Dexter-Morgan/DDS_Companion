@@ -461,6 +461,60 @@ class MediaAttention052Tests(unittest.TestCase):
             )
         self.assertEqual(self.registry.get(key).state, 'IGNORED')
 
+    def test_stale_url_is_not_counted_as_currently_known(self):
+        key = self._register(size=100)
+        self.assertEqual(self.registry.referenced_count(), 1)
+        self.assertEqual(self.registry.known_count(), 1)
+        with self.connection:
+            self.connection.execute(
+                "UPDATE media_objects SET state='STALE_URL', last_error='HTTP 403', failure_class='stale_url' WHERE media_key=?",
+                (key,),
+            )
+        self.assertEqual(self.registry.referenced_count(), 1)
+        self.assertEqual(self.registry.known_count(), 0)
+
+    def test_ignore_all_then_clear_processed_waits_for_fresh_rediscovery(self):
+        key = self._register(size=100)
+        with self.connection:
+            self.connection.execute(
+                "UPDATE media_objects SET state='STALE_URL', last_error='HTTP 403', failure_class='stale_url' WHERE media_key=?",
+                (key,),
+            )
+        service = MediaBackfillService(self.connection, self.media, max_workers=1)
+        self.assertEqual(service.ignore_all_issues(), 1)
+        ignored = self.registry.get(key)
+        self.assertEqual(ignored.state, 'IGNORED')
+        self.assertEqual(ignored.failure_class, 'stale_url')
+        self.assertEqual(service.counts()['ignored'], 1)
+        self.assertEqual(service.counts()['known'], 0)
+
+        self.assertEqual(service.clear_processed_issues(), 1)
+        unresolved = self.registry.get(key)
+        self.assertEqual(unresolved.state, 'UNRESOLVED')
+        self.assertIsNone(unresolved.current_url)
+        self.assertEqual(service.issue_items(), [])
+        counts = service.counts()
+        self.assertEqual(counts['total'], 1)
+        self.assertEqual(counts['known'], 0)
+        self.assertEqual(counts['ignored'], 0)
+        self.assertEqual(counts['unresolved'], 1)
+
+        with self.connection:
+            self.registry.register_attachment(
+                message_id='m',
+                position=0,
+                attachment={
+                    'id':'a1','filename':'file.png','contentType':'image/png','size':100,
+                    'url':'https://cdn.discordapp.com/attachments/a/b/file.png?fresh=1','proxyUrl':None
+                },
+            )
+        rediscovered = self.registry.get(key)
+        self.assertEqual(rediscovered.state, 'KNOWN')
+        self.assertIn('fresh=1', rediscovered.current_url)
+        counts = service.counts()
+        self.assertEqual(counts['known'], 1)
+        self.assertEqual(counts['unresolved'], 0)
+
     def test_manual_retry_runs_one_download_even_when_auto_mode_is_off(self):
         key = self._register(size=4)
         with self.connection:

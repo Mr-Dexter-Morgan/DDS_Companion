@@ -262,8 +262,12 @@ class DashboardPage(Page):
             "серверы · каналы · треды",
         )
         self.media_card.set_data(
-            f"{stats.get('known_media', 0)} / {stats.get('cached_media_files', 0)}",
-            f"Найдено / Стырено · Вложения {stats.get('embeds', 0)}",
+            f"{stats.get('cached_media_files', 0)} кэшировано",
+            (
+                f"Известно {stats.get('known_media', 0)} из {stats.get('total_media', 0)}"
+                f" · внимание {stats.get('media_attention', 0)}"
+                f" · ждут ссылки {stats.get('media_unresolved', 0)}"
+            ),
         )
 
         total = max(1, int(stats.get("total_known_storage_bytes", 0)))
@@ -349,8 +353,14 @@ class LibraryPage(Page):
         self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
         self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.tree.header().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.tree.header().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        self.tree.currentItemChanged.connect(self._selection_changed)
+        self.tree.header().setSectionResizeMode(3, QHeaderView.Interactive)
+        self.tree.header().resizeSection(3, 220)
+        # Content navigation must be click-driven.  Binding the preview to
+        # currentItemChanged made the right-hand pane follow transient Qt
+        # "current index" changes while the pointer moved across embedded
+        # widgets.  Keep hover/current/selection presentation separate from the
+        # explicit user action that opens a channel/thread.
+        self.tree.itemClicked.connect(self._item_clicked)
         tree_layout.addWidget(self.tree, 1)
 
         content_card = Card()
@@ -404,6 +414,7 @@ class LibraryPage(Page):
         self._oldest_id: str | None = None
         self._generation = 0
         self._message_loading = False
+        self._selected_key: str | None = None
 
     def update_snapshot(self, snapshot: dict) -> None:
         media_root = snapshot.get("paths", {}).get("media")
@@ -420,9 +431,10 @@ class LibraryPage(Page):
         root = self.tree.invisibleRootItem()
         for i in range(root.childCount()):
             self._collect_expanded(root.child(i), expanded_ids)
-        selected_key = self.tree.currentItem().data(0, Qt.UserRole) if self.tree.currentItem() else None
+        selected_key = self._selected_key
 
         self.tree.setUpdatesEnabled(False)
+        self.tree.blockSignals(True)
         self.tree.clear()
         selected_item = None
         for guild in self._library:
@@ -458,10 +470,28 @@ class LibraryPage(Page):
             selected_item = self._find_item(selected_key)
         if selected_item is not None:
             self.tree.setCurrentItem(selected_item)
-        elif self.tree.topLevelItemCount():
-            self.tree.setCurrentItem(self.tree.topLevelItem(0))
-        else:
+            selected_item.setSelected(True)
+            detail = selected_item.data(0, Qt.UserRole + 1)
+            if isinstance(detail, dict):
+                self._selected_detail = detail
+                self._update_content_heading(detail)
+        elif selected_key is not None:
+            self._selected_key = None
+            self._selected_detail = None
+            self._generation += 1
+            self._messages = []
+            self._has_more = False
+            self._oldest_timestamp = None
+            self._oldest_id = None
+            self.show_more_button.setVisible(False)
+            self._show_empty_messages("Выбранный раздел больше не существует в архиве.")
+        elif not self.tree.topLevelItemCount():
             self._show_empty_messages("Архив пока пуст.")
+        else:
+            self.tree.clearSelection()
+            self.tree.setCurrentItem(None)
+            self._show_empty_messages("Выберите канал или тему слева.")
+        self.tree.blockSignals(False)
         self.tree.setUpdatesEnabled(True)
 
     @staticmethod
@@ -472,6 +502,8 @@ class LibraryPage(Page):
             "name": str(data.get("name") or "Без названия"),
             "channel_type": data.get("type"),
             "message_count": int(data.get("message_count", 0)),
+            "direct_message_count": int(data.get("direct_message_count", data.get("message_count", 0))),
+            "thread_count": len(data.get("threads", [])),
             "media_count": int(data.get("media_count", 0)),
             "export_rule": str(data.get("export_rule") or "DEFAULT"),
             "default_export_rule": str(data.get("default_export_rule") or "EXCLUDE"),
@@ -523,37 +555,58 @@ class LibraryPage(Page):
         if self.on_export_rule_changed is not None:
             self.on_export_rule_changed(detail["kind"], detail["id"], mode)
 
-    def _selection_changed(self, current: QTreeWidgetItem | None, previous: QTreeWidgetItem | None) -> None:
-        del previous
-        if current is None:
-            self._selected_detail = None
-            self._show_empty_messages("Выберите канал или тему слева.")
-            return
+    def _item_clicked(self, current: QTreeWidgetItem, column: int) -> None:
+        del column
         detail = current.data(0, Qt.UserRole + 1)
         if not isinstance(detail, dict):
             return
+        self._selected_key = str(current.data(0, Qt.UserRole) or "") or None
+        self.tree.setCurrentItem(current)
+        current.setSelected(True)
         self._selected_detail = detail
         self._generation += 1
         self._messages = []
         self._has_more = False
         self._oldest_timestamp = None
         self._oldest_id = None
+        # A request for the previously selected node may still be in flight.
+        # Selection generations already make stale responses safe to discard, so
+        # the new explicit click must be allowed to queue its own request instead
+        # of inheriting the previous node's loading lock.
+        self._message_loading = False
         self.show_more_button.setVisible(False)
 
+        self._update_content_heading(detail)
+
+        if detail.get("kind") == "guild":
+            self._show_empty_messages("Сообщения сервера не смешиваются в одну ленту.")
+            return
+        self._request_messages(reset=True)
+
+    def _update_content_heading(self, detail: dict) -> None:
         if detail.get("kind") == "guild":
             self.content_title.setText(detail.get("name") or "Сервер")
             self.content_hint.setText("Выберите канал или тему этого сервера.")
-            self._show_empty_messages("Сообщения сервера не смешиваются в одну ленту.")
             return
-
         title = detail.get("name") or "Без названия"
         if detail.get("kind") == "channel":
             title = f"# {title}"
         self.content_title.setText(title)
-        self.content_hint.setText(
-            f"{detail.get('message_count', 0)} сообщений · {detail.get('media_count', 0)} медиа"
-        )
-        self._request_messages(reset=True)
+        if detail.get("kind") == "channel":
+            direct = int(detail.get("direct_message_count", 0))
+            total = int(detail.get("message_count", 0))
+            if total != direct:
+                self.content_hint.setText(
+                    f"{direct} сообщений в канале · {total} всего с темами · {detail.get('media_count', 0)} медиа"
+                )
+            else:
+                self.content_hint.setText(
+                    f"{direct} сообщений · {detail.get('media_count', 0)} медиа"
+                )
+        else:
+            self.content_hint.setText(
+                f"{detail.get('message_count', 0)} сообщений · {detail.get('media_count', 0)} медиа"
+            )
 
     def _request_messages(self, *, reset: bool) -> None:
         detail = self._selected_detail
@@ -612,7 +665,16 @@ class LibraryPage(Page):
     def _render_messages(self) -> None:
         self._clear_message_layout()
         if not self._messages:
-            self.message_empty = QLabel("В этом разделе пока нет сообщений.")
+            detail = self._selected_detail or {}
+            if (
+                detail.get("kind") == "channel"
+                and int(detail.get("direct_message_count", 0)) == 0
+                and int(detail.get("thread_count", 0)) > 0
+            ):
+                empty_text = "В самом канале сообщений нет. Выберите тему слева — сообщения находятся внутри неё."
+            else:
+                empty_text = "В этом разделе пока нет сохранённых сообщений."
+            self.message_empty = QLabel(empty_text)
             self.message_empty.setObjectName("SectionHint")
             self.message_layout.addWidget(self.message_empty)
             self.message_layout.addStretch(1)
@@ -820,16 +882,36 @@ class ActivityPage(Page):
 
 
 class HealthPage(Page):
-    def __init__(self, on_media_retry=None, on_media_ignore=None, parent=None):
+    def __init__(
+        self,
+        on_media_retry=None,
+        on_media_ignore=None,
+        on_media_ignore_all=None,
+        on_media_clear_processed=None,
+        parent=None,
+    ):
         super().__init__(
             "Статус",
-            "Проверка жизненно важных подсистем, heartbeat и ошибок, которые не должны останавливать архив.",
+            "Состояние подсистем и жизненный цикл медиа — раздельно и без смешивания технических сигналов.",
             parent,
-            scrollable=True,
+            scrollable=False,
         )
         self.on_media_retry = on_media_retry
         self.on_media_ignore = on_media_ignore
+        self.on_media_ignore_all = on_media_ignore_all
+        self.on_media_clear_processed = on_media_clear_processed
         self._media_issue_by_key: dict[str, dict] = {}
+        self._media_attention_count = 0
+        self._media_ignored_count = 0
+
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("HealthTabs")
+        self.body.addWidget(self.tabs, 1)
+
+        status, status_layout = self._make_scroll_tab()
+        lifecycle, lifecycle_layout = self._make_scroll_tab()
+        self.tabs.addTab(status, "Статус")
+        self.tabs.addTab(lifecycle, "Жизненный цикл медиа")
 
         self.overall = Card()
         o = QHBoxLayout(self.overall)
@@ -846,7 +928,7 @@ class HealthPage(Page):
         set_state_property(self.overall_pill, "STARTING")
         o.addLayout(texts, 1)
         o.addWidget(self.overall_pill)
-        self.body.addWidget(self.overall)
+        status_layout.addWidget(self.overall)
 
         grid = QGridLayout()
         grid.setSpacing(12)
@@ -888,7 +970,66 @@ class HealthPage(Page):
             self.cards[key] = (card, state, summary, updated)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
-        self.body.addLayout(grid)
+        status_layout.addLayout(grid)
+
+        err = Card()
+        err_layout = QVBoxLayout(err)
+        err_layout.setContentsMargins(16, 14, 16, 14)
+        err_layout.addWidget(SectionHeader(
+            "Последняя критическая ошибка",
+            "Проблемы отдельных медиафайлов находятся на вкладке «Жизненный цикл медиа».",
+        ))
+        self.last_error = QLabel("Критических ошибок нет")
+        self.last_error.setWordWrap(True)
+        self.last_error.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.last_error.setStyleSheet(f"color:{MUTED};")
+        err_layout.addWidget(self.last_error)
+        status_layout.addWidget(err)
+        status_layout.addStretch(1)
+
+        lifecycle_layout.addWidget(SectionHeader(
+            "Жизненный цикл медиа",
+            "Discord-ссылки не вечные: здесь видно, что известно сейчас, что уже закэшировано и что ждёт новой ссылки.",
+        ))
+        lifecycle_metrics = QGridLayout()
+        lifecycle_metrics.setHorizontalSpacing(12)
+        lifecycle_metrics.setVerticalSpacing(12)
+        self.media_total_card = MetricCard("Всего вложений", "—", "стабильные записи архива")
+        self.media_known_card = MetricCard("Известно", "—", "есть рабочая ссылка или локальная копия")
+        self.media_cached_card = MetricCard("Кэшировано", "—", "файл сохранён локально")
+        self.media_attention_card = MetricCard("Требует внимания", "—", "ошибка или протухшая ссылка")
+        self.media_ignored_card = MetricCard("Обработано", "—", "игнорируется до очистки")
+        self.media_unresolved_card = MetricCard("Ждёт переобнаружения", "—", "нужна свежая ссылка Discord")
+        lifecycle_cards = [
+            self.media_total_card,
+            self.media_known_card,
+            self.media_cached_card,
+            self.media_attention_card,
+            self.media_ignored_card,
+            self.media_unresolved_card,
+        ]
+        for i, card in enumerate(lifecycle_cards):
+            lifecycle_metrics.addWidget(card, i // 3, i % 3)
+        for col in range(3):
+            lifecycle_metrics.setColumnStretch(col, 1)
+        lifecycle_layout.addLayout(lifecycle_metrics)
+
+        runtime_card = Card()
+        runtime_layout = QVBoxLayout(runtime_card)
+        runtime_layout.setContentsMargins(16, 14, 16, 14)
+        runtime_layout.setSpacing(8)
+        runtime_top = QHBoxLayout()
+        runtime_top.addWidget(QLabel("Media Backfill"))
+        runtime_top.addStretch(1)
+        self.media_runtime_state = QLabel("UNKNOWN")
+        self.media_runtime_state.setStyleSheet(f"color:{MUTED};font-weight:750;")
+        runtime_top.addWidget(self.media_runtime_state)
+        self.media_runtime_summary = QLabel("Ожидание данных…")
+        self.media_runtime_summary.setObjectName("SectionHint")
+        self.media_runtime_summary.setWordWrap(True)
+        runtime_layout.addLayout(runtime_top)
+        runtime_layout.addWidget(self.media_runtime_summary)
+        lifecycle_layout.addWidget(runtime_card)
 
         self.media_attention = Card()
         media_attention_layout = QVBoxLayout(self.media_attention)
@@ -896,10 +1037,10 @@ class HealthPage(Page):
         media_attention_layout.setSpacing(10)
         self.media_attention_header = SectionHeader(
             "Медиафайлы, требующие внимания",
-            "Здесь можно повторить загрузку, посмотреть причину или осознанно игнорировать проблему.",
+            "Повтори загрузку, посмотри причину, игнорируй выборочно или обработай весь текущий список разом.",
         )
         media_attention_layout.addWidget(self.media_attention_header)
-        self.media_attention_summary = QLabel("—")
+        self.media_attention_summary = QLabel("Медиа-проблем нет")
         self.media_attention_summary.setObjectName("SectionHint")
         media_attention_layout.addWidget(self.media_attention_summary)
         self.media_issue_table = QTableWidget(0, 3)
@@ -910,42 +1051,52 @@ class HealthPage(Page):
         self.media_issue_table.setAlternatingRowColors(True)
         self.media_issue_table.verticalHeader().setVisible(False)
         self.media_issue_table.setColumnWidth(0, 280)
-        self.media_issue_table.setColumnWidth(2, 150)
-        self.media_issue_table.setMinimumHeight(150)
-        self.media_issue_table.setMaximumHeight(260)
+        self.media_issue_table.setColumnWidth(2, 170)
+        self.media_issue_table.setMinimumHeight(180)
+        self.media_issue_table.setMaximumHeight(360)
         self.media_issue_table.horizontalHeader().setStretchLastSection(False)
         self.media_issue_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.media_issue_table.itemSelectionChanged.connect(self._update_media_action_state)
         media_attention_layout.addWidget(self.media_issue_table)
+
         media_actions = QHBoxLayout()
         self.media_retry_button = QPushButton("Повторить")
         self.media_ignore_button = QPushButton("Игнорировать")
+        self.media_ignore_all_button = QPushButton("Игнорировать всё")
         self.media_details_button = QPushButton("Подробнее")
+        self.media_clear_processed_button = QPushButton("Очистить обработанные")
         self.media_retry_button.clicked.connect(self._retry_selected_media)
         self.media_ignore_button.clicked.connect(self._ignore_selected_media)
+        self.media_ignore_all_button.clicked.connect(self._ignore_all_media)
         self.media_details_button.clicked.connect(self._show_selected_media_details)
+        self.media_clear_processed_button.clicked.connect(self._clear_processed_media)
         media_actions.addWidget(self.media_retry_button)
         media_actions.addWidget(self.media_ignore_button)
+        media_actions.addWidget(self.media_ignore_all_button)
         media_actions.addWidget(self.media_details_button)
         media_actions.addStretch(1)
+        media_actions.addWidget(self.media_clear_processed_button)
         media_attention_layout.addLayout(media_actions)
-        self.media_attention.setVisible(False)
-        self.body.addWidget(self.media_attention)
+        lifecycle_layout.addWidget(self.media_attention)
+        lifecycle_layout.addStretch(1)
+        self._update_media_action_state()
 
-        err = Card()
-        err_layout = QVBoxLayout(err)
-        err_layout.setContentsMargins(16, 14, 16, 14)
-        err_layout.addWidget(SectionHeader(
-            "Последняя критическая ошибка",
-            "Проблемы отдельных медиафайлов отображаются отдельным блоком выше.",
-        ))
-        self.last_error = QLabel("Критических ошибок нет")
-        self.last_error.setWordWrap(True)
-        self.last_error.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.last_error.setStyleSheet(f"color:{MUTED};")
-        err_layout.addWidget(self.last_error)
-        self.body.addWidget(err)
-        self.body.addStretch(1)
+    @staticmethod
+    def _make_scroll_tab() -> tuple[QWidget, QVBoxLayout]:
+        page = QWidget()
+        root = QVBoxLayout(page)
+        root.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QFrame.NoFrame)
+        host = QWidget()
+        layout = QVBoxLayout(host)
+        layout.setContentsMargins(0, 0, 6, 4)
+        layout.setSpacing(16)
+        scroll.setWidget(host)
+        root.addWidget(scroll)
+        return page, layout
 
     @staticmethod
     def _attention_count_text(count: int) -> str:
@@ -966,8 +1117,6 @@ class HealthPage(Page):
             return "Размер файла не совпадает с данными Discord"
         if failure == "stale_url" or item.get("state") == "STALE_URL":
             return "Ссылка Discord устарела или недоступна"
-        if failure == "user_ignored" or item.get("state") == "IGNORED":
-            return "Игнорируется пользователем"
         if failure == "http_permanent":
             return "Discord вернул постоянную HTTP-ошибку"
         if error:
@@ -990,6 +1139,8 @@ class HealthPage(Page):
         self.media_retry_button.setEnabled(enabled)
         self.media_ignore_button.setEnabled(enabled and not ignored)
         self.media_details_button.setEnabled(enabled)
+        self.media_ignore_all_button.setEnabled(self._media_attention_count > 0)
+        self.media_clear_processed_button.setEnabled(self._media_ignored_count > 0)
 
     def _retry_selected_media(self) -> None:
         issue = self._selected_media_issue()
@@ -1004,13 +1155,42 @@ class HealthPage(Page):
             self,
             "DDS Companion — Игнорировать медиафайл",
             "Игнорировать эту проблему?\n\n"
-            "Файл останется в архиве как метаданные, но не будет удерживать Media Backfill в LIMITED. "
-            "Позже его можно снова выбрать и нажать «Повторить».",
+            "Запись останется в архиве. Затем её можно либо повторить вручную, либо убрать из списка "
+            "кнопкой «Очистить обработанные» и ждать свежую ссылку Discord.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
         if answer == QMessageBox.Yes:
             self.on_media_ignore(str(issue.get("media_key")))
+
+    def _ignore_all_media(self) -> None:
+        if self._media_attention_count <= 0 or not self.on_media_ignore_all:
+            return
+        answer = QMessageBox.question(
+            self,
+            "DDS Companion — Игнорировать все проблемы",
+            f"Игнорировать все текущие проблемы ({self._media_attention_count})?\n\n"
+            "Они останутся как обработанные, пока ты не нажмёшь «Очистить обработанные».",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            self.on_media_ignore_all()
+
+    def _clear_processed_media(self) -> None:
+        if self._media_ignored_count <= 0 or not self.on_media_clear_processed:
+            return
+        answer = QMessageBox.question(
+            self,
+            "DDS Companion — Очистить обработанные",
+            f"Очистить обработанные записи ({self._media_ignored_count})?\n\n"
+            "Старые ссылки будут забыты, а сами вложения останутся в архиве в состоянии "
+            "«Ждёт переобнаружения». Они снова станут известными только после получения свежей ссылки Discord.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            self.on_media_clear_processed()
 
     def _show_selected_media_details(self) -> None:
         issue = self._selected_media_issue()
@@ -1042,7 +1222,36 @@ class HealthPage(Page):
         )
         self.overall_pill.setToolTip(health.get("tooltip") or self.overall_hint.text())
         subs = health.get("subsystems", {})
-        media_details = (subs.get("media", {}) or {}).get("details", {}) or {}
+        media_info = subs.get("media", {}) or {}
+        media_details = media_info.get("details", {}) or {}
+        stats = snapshot.get("stats", {}) or {}
+
+        total = int(media_details.get("total", stats.get("total_media", 0)) or 0)
+        known = int(media_details.get("known", stats.get("known_media", 0)) or 0)
+        cached = int(media_details.get("cached", stats.get("cached_media_files", 0)) or 0)
+        attention_count = int(media_details.get("attention_count", media_details.get("attention", stats.get("media_attention", 0))) or 0)
+        ignored_count = int(media_details.get("ignored", stats.get("media_ignored", 0)) or 0)
+        unresolved_count = int(media_details.get("unresolved", stats.get("media_unresolved", 0)) or 0)
+        queued = int(media_details.get("queued", stats.get("media_queued", 0)) or 0)
+        downloading = int(media_details.get("downloading", stats.get("media_downloading", 0)) or 0)
+
+        self._media_attention_count = attention_count
+        self._media_ignored_count = ignored_count
+        self.media_total_card.set_data(str(total), "все вложения, которые архив когда-либо видел")
+        self.media_known_card.set_data(str(known), "доступны сейчас для работы или уже сохранены")
+        self.media_cached_card.set_data(str(cached), "локальные файлы медиакэша")
+        self.media_attention_card.set_data(str(attention_count), "нужна ручная проверка или решение")
+        self.media_ignored_card.set_data(str(ignored_count), "осознанно обработаны пользователем")
+        self.media_unresolved_card.set_data(str(unresolved_count), "ждут новой ссылки из Discord")
+        media_state = str(media_info.get("state") or "UNKNOWN")
+        self.media_runtime_state.setText(media_state)
+        self.media_runtime_state.setStyleSheet(f"color:{state_color(media_state)};font-weight:750;")
+        self.media_runtime_summary.setText(
+            f"Известно: {known} из {total} · кэшировано: {cached} · очередь: {queued} · "
+            f"загружается: {downloading} · внимание: {attention_count} · обработано: {ignored_count} · "
+            f"ждёт переобнаружения: {unresolved_count}"
+        )
+
         issues = list(media_details.get("attention_items") or [])
         selected_before = self._selected_media_issue()
         selected_key = str(selected_before.get("media_key")) if selected_before else None
@@ -1057,26 +1266,22 @@ class HealthPage(Page):
             name_item.setData(Qt.UserRole, str(issue.get("media_key") or ""))
             self.media_issue_table.setItem(row, 0, name_item)
             self.media_issue_table.setItem(row, 1, QTableWidgetItem(self._human_media_reason(issue)))
-            state_text = "Игнорируется" if issue.get("state") == "IGNORED" else "Требует внимания"
+            state_text = "Обработано" if issue.get("state") == "IGNORED" else "Требует внимания"
             self.media_issue_table.setItem(row, 2, QTableWidgetItem(state_text))
             if selected_key and str(issue.get("media_key") or "") == selected_key:
                 selected_row = row
-        attention_count = int(media_details.get("attention_count") or 0)
-        ignored_count = int(media_details.get("ignored") or 0)
-        if issues:
-            parts = []
-            if attention_count:
-                parts.append(self._attention_count_text(attention_count))
-            if ignored_count:
-                parts.append(f"Игнорируется: {ignored_count}")
-            self.media_attention_summary.setText(" · ".join(parts) or "Медиа-проблем нет")
-            self.media_attention.setVisible(True)
-            if selected_row >= 0:
-                self.media_issue_table.selectRow(selected_row)
-            elif self.media_issue_table.rowCount() and self.media_issue_table.currentRow() < 0:
-                self.media_issue_table.selectRow(0)
-        else:
-            self.media_attention.setVisible(False)
+        parts = []
+        if attention_count:
+            parts.append(self._attention_count_text(attention_count))
+        if ignored_count:
+            parts.append(f"Обработано: {ignored_count}")
+        if unresolved_count:
+            parts.append(f"Ждёт переобнаружения: {unresolved_count}")
+        self.media_attention_summary.setText(" · ".join(parts) or "Медиа-проблем нет")
+        if selected_row >= 0:
+            self.media_issue_table.selectRow(selected_row)
+        elif self.media_issue_table.rowCount() and self.media_issue_table.currentRow() < 0:
+            self.media_issue_table.selectRow(0)
         self._update_media_action_state()
 
         for key, (_, state_label, summary_label, updated_label) in self.cards.items():

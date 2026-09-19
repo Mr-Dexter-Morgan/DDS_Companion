@@ -208,7 +208,7 @@ class MediaBackfillService:
                             "FAILED_PERMANENT",
                             stamp=stamp,
                             error="retry limit exhausted",
-                            failure_class=outcome.failure_class or "retry_exhausted",
+                            failure_class="retry_exhausted",
                         )
                         continue
                     retry_promoted += 1
@@ -329,8 +329,10 @@ class MediaBackfillService:
 
     def counts(self) -> dict[str, int]:
         counts = self.registry.state_counts()
+        attention = counts.get("FAILED_PERMANENT", 0) + counts.get("STALE_URL", 0)
         return {
-            "known": self.registry.referenced_count(),
+            "total": self.registry.referenced_count(),
+            "known": self.registry.known_count(),
             "cached": counts.get("CACHED", 0),
             "queued": counts.get("QUEUED", 0),
             "downloading": counts.get("DOWNLOADING", 0),
@@ -341,6 +343,8 @@ class MediaBackfillService:
             "skipped": counts.get("SKIPPED", 0),
             "evicted": counts.get("EVICTED", 0),
             "ignored": counts.get("IGNORED", 0),
+            "unresolved": counts.get("UNRESOLVED", 0),
+            "attention": attention,
         }
 
     def issue_items(self, *, limit: int = 50) -> list[dict]:
@@ -359,6 +363,12 @@ class MediaBackfillService:
 
     def ignore_issue(self, media_key: str) -> bool:
         return self.registry.ignore_issue(media_key)
+
+    def ignore_all_issues(self) -> int:
+        return self.registry.ignore_all_issues()
+
+    def clear_processed_issues(self) -> int:
+        return self.registry.clear_processed_issues()
 
     def _recover_abandoned(self, now: datetime) -> int:
         cutoff = (now - timedelta(seconds=self.ABANDONED_DOWNLOAD_SECONDS)).isoformat()

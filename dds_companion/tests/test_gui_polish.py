@@ -54,9 +54,9 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", normal)
         self.assertIn("run_companion.pyw", normal)
-        self.assertIn("DDS Companion 0.5.4", normal)
+        self.assertIn("DDS Companion 0.5.5", normal)
         self.assertIn("python -m dds_companion.gui.app", debug)
-        self.assertIn("DDS Companion 0.5.4", debug)
+        self.assertIn("DDS Companion 0.5.5", debug)
 
     def test_050_first_run_gui_dependency_bootstrap_is_automatic(self):
         normal = (self.root / "run_companion.bat").read_text(encoding="utf-8")
@@ -89,7 +89,10 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         self.assertIn('("plugin", "DDS Plugin")', pages)
         self.assertIn('("updates", "Update check")', pages)
         self.assertIn('("media", "Media Backfill")', pages)
-        self.assertIn('scrollable=True', pages[pages.index("class HealthPage"):pages.index("class SettingsPage")])
+        health = pages[pages.index("class HealthPage"):pages.index("class SettingsPage")]
+        self.assertIn('self.tabs.setObjectName("HealthTabs")', health)
+        self.assertIn('self.tabs.addTab(status, "Статус")', health)
+        self.assertIn('self.tabs.addTab(lifecycle, "Жизненный цикл медиа")', health)
         self.assertIn('Last attempt:', pages)
 
     def test_045_startup_foreground_is_one_shot_and_not_persistent_topmost(self):
@@ -235,17 +238,41 @@ class LibraryUx054SourceContractTests(unittest.TestCase):
         self.assertIn('archive_export_rules', service)
         self.assertIn('archive_export_rules', migrations)
 
-    def test_054_dashboard_localizes_user_facing_storage_and_snatcher_labels(self):
+    def test_055_dashboard_uses_unambiguous_media_lifecycle_counts(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
         dashboard = pages[pages.index("class DashboardPage"):pages.index("class LibraryPage")]
         self.assertIn('StorageRow("База данных", ACCENT)', dashboard)
         self.assertIn('StorageRow("Данные DDS", INFO)', dashboard)
-        self.assertIn('Найдено / Стырено', dashboard)
-        self.assertIn('Вложения', dashboard)
+        self.assertIn('кэшировано', dashboard)
+        self.assertIn("known_media", dashboard)
+        self.assertIn("total_media", dashboard)
+        self.assertIn("media_attention", dashboard)
+        self.assertIn("media_unresolved", dashboard)
         self.assertIn('импортов', dashboard)
         self.assertIn('событий активности', dashboard)
         self.assertNotIn('LOCAL FIRST', window)
+
+    def test_055_library_preview_is_click_driven_and_releases_old_loading_lock(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        library = pages[pages.index("class LibraryPage"):pages.index("class ActivityPage")]
+        self.assertIn("self.tree.itemClicked.connect(self._item_clicked)", library)
+        self.assertNotIn("currentItemChanged.connect", library)
+        self.assertIn("self._selected_key", library)
+        self.assertIn("self._message_loading = False", library)
+        self.assertIn("сообщений в канале", library)
+
+    def test_055_health_has_media_lifecycle_bulk_actions(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
+        health = pages[pages.index("class HealthPage"):pages.index("class SettingsPage")]
+        self.assertIn('"Жизненный цикл медиа"', health)
+        self.assertIn('QPushButton("Игнорировать всё")', health)
+        self.assertIn('QPushButton("Очистить обработанные")', health)
+        self.assertIn("on_media_ignore_all", health)
+        self.assertIn("on_media_clear_processed", health)
+        self.assertIn("request_media_ignore_all", window)
+        self.assertIn("request_media_clear_processed", window)
 
 
 if __name__ == "__main__":
