@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from dds_companion.parser.validation import CAPTURE_SCHEMA_VERSION
 from dds_companion.services.discord_probe import probe_discord_process
 
 VALID_STATES = {
@@ -368,6 +369,8 @@ class HealthService:
             "manifest_version": manifest_version,
             "supports_heartbeat": supports_heartbeat,
             "required_version": ".".join(str(v) for v in PLUGIN_HEARTBEAT_MIN_VERSION),
+            "capture_schema_version": CAPTURE_SCHEMA_VERSION,
+            "heartbeat_schema_version": "plugin-heartbeat-v1",
         }
 
         if not dds_ok:

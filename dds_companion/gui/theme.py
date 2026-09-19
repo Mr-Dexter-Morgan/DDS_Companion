@@ -268,6 +268,8 @@ QTreeWidget, QTableWidget {{
 QTreeWidget::item {{ padding: 7px 5px; border-radius: 6px; }}
 QTreeWidget::item:hover {{ background: #171c27; }}
 QTreeWidget::item:selected {{ background: #242b40; }}
+QTreeWidget#LibraryTree::item:hover {{ background: transparent; }}
+QTreeWidget#LibraryTree::item:selected:hover {{ background: #242b40; }}
 QHeaderView::section {{
     color: {MUTED};
     background: #10141d;

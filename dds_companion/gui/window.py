@@ -431,7 +431,6 @@ class MainWindow(QMainWindow):
     def _change_export_rule(self, scope_kind: str, scope_id: str, mode: str) -> None:
         self.runtime.request_export_rule_change(scope_kind, scope_id, mode)
         label = {
-            "DEFAULT": "По умолчанию",
             "INCLUDE": "Выгружать",
             "EXCLUDE": "Не выгружать",
         }.get(str(mode).upper(), str(mode))

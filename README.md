@@ -1,9 +1,11 @@
 ## Current candidate
 
-**0.5.6** — live UX cleanup after 0.5.5: stable media-attention scrolling, branch-level media lifecycle in Library, formatted Discord Markdown, humanized Activity, heartbeat event dedup and layout/localization fixes.
+**0.5.7** — small Windows live-UX cleanup after 0.5.6: Library hover no longer looks like a click, export selection is binary, Activity layout is wider, diagnostics text is cleaned up and the capture contract is filled explicitly.
 
-# DDS Companion 0.5.6 — Candidate
+# DDS Companion 0.5.7 — Candidate
 
 Local archive viewer / media lifecycle surface for DDS — Discord Data Snatcher.
 
-Run on Windows with `run_companion.bat`.
+Run on Windows with `run_companion.bat` for this final BAT-era live check.
+
+The next planned productization milestone is 0.6.0: native Windows EXE / application identity, after 0.5.7 is confirmed clean on the live archive.

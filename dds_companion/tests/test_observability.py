@@ -220,6 +220,9 @@ class ObservabilityTests(unittest.TestCase):
         self.health.set_subsystem("importer", "RUNNING", "ok")
         running = self.health.snapshot(watcher_expected=True)
         self.assertEqual(running["subsystems"]["plugin"]["state"], "RUNNING")
+        details = running["subsystems"]["plugin"]["details"]
+        self.assertEqual(details["capture_schema_version"], 2)
+        self.assertEqual(details["heartbeat_schema_version"], "plugin-heartbeat-v1")
 
         stopped_payload = json.loads(heartbeat.read_text(encoding="utf-8"))
         stopped_payload["state"] = "STOPPED"

@@ -54,9 +54,9 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", normal)
         self.assertIn("run_companion.pyw", normal)
-        self.assertIn("DDS Companion 0.5.6", normal)
+        self.assertIn("DDS Companion 0.5.7", normal)
         self.assertIn("python -m dds_companion.gui.app", debug)
-        self.assertIn("DDS Companion 0.5.6", debug)
+        self.assertIn("DDS Companion 0.5.7", debug)
 
     def test_050_first_run_gui_dependency_bootstrap_is_automatic(self):
         normal = (self.root / "run_companion.bat").read_text(encoding="utf-8")
@@ -227,14 +227,19 @@ class LibraryUx054SourceContractTests(unittest.TestCase):
         self.assertNotIn('Копировать ID', library)
         self.assertNotIn('Последняя активность', library)
 
-    def test_054_library_has_three_state_future_export_rule(self):
+    def test_057_library_export_control_is_binary_and_stable(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         service = (self.root / "dds_companion/services/library_service.py").read_text(encoding="utf-8")
         migrations = (self.root / "dds_companion/storage/migrations.py").read_text(encoding="utf-8")
-        self.assertIn('"По умолчанию — выгружать"', pages)
-        self.assertIn('"По умолчанию — не выгружать"', pages)
-        self.assertIn('combo.addItem("Выгружать", "INCLUDE")', pages)
-        self.assertIn('combo.addItem("Не выгружать", "EXCLUDE")', pages)
+        theme = (self.root / "dds_companion/gui/theme.py").read_text(encoding="utf-8")
+        library = pages[pages.index("class LibraryPage"):pages.index("class ActivityPage")]
+        self.assertNotIn('"По умолчанию — выгружать"', library)
+        self.assertNotIn('"По умолчанию — не выгружать"', library)
+        self.assertIn('combo.addItem("Выгружать", "INCLUDE")', library)
+        self.assertIn('combo.addItem("Не выгружать", "EXCLUDE")', library)
+        self.assertIn('QHeaderView.Fixed', library)
+        self.assertIn('setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)', library)
+        self.assertIn('QTreeWidget#LibraryTree::item:hover', theme)
         self.assertIn('archive_export_rules', service)
         self.assertIn('archive_export_rules', migrations)
 
@@ -274,7 +279,7 @@ class LibraryUx054SourceContractTests(unittest.TestCase):
         self.assertIn("request_media_ignore_all", window)
         self.assertIn("request_media_clear_processed", window)
 
-    def test_056_live_review_fixes_are_present(self):
+    def test_057_live_review_polish_is_present(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         widgets = (self.root / "dds_companion/gui/widgets.py").read_text(encoding="utf-8")
         runtime = (self.root / "dds_companion/gui/runtime.py").read_text(encoding="utf-8")
@@ -283,6 +288,8 @@ class LibraryUx054SourceContractTests(unittest.TestCase):
         activity = pages[pages.index("class ActivityPage"):pages.index("class HealthPage")]
 
         self.assertIn("Qt.MarkdownText", library)
+        self.assertIn("_discord_markdown", library)
+        self.assertIn("<a?:([A-Za-z0-9_]+):\\d+>", library)
         self.assertIn("combo.setMinimumHeight(32)", library)
         self.assertIn("self.tree.setUniformRowHeights(False)", library)
         self.assertIn("media_unresolved", library)
@@ -291,6 +298,10 @@ class LibraryUx054SourceContractTests(unittest.TestCase):
         self.assertIn("QTimer.singleShot", health)
         self.assertIn("human_activity_summary(event)", activity)
         self.assertIn("human_activity_event(event.get", activity)
+        self.assertIn("self.table.setColumnWidth(3, 225)", activity)
+        self.assertIn("неразрешённых ошибок", pages)
+        self.assertIn("подключение только для чтения", pages)
+        self.assertIn("capture-v", pages)
         self.assertIn("def human_activity_summary", widgets)
         self.assertIn('str(item.get("code") or "unknown")', runtime)
         self.assertNotIn('str(item.get("message") or "")\n            for item in reasons', runtime)

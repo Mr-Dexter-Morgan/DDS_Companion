@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Callable
 
@@ -321,7 +322,7 @@ class LibraryPage(Page):
     """Human-facing archive browser with Discord-like message viewing.
 
     The tree is navigation. The right side is content, not a second inspector.
-    Future Drive selection is an explicit three-state user rule at every node.
+    Future Drive selection is exposed as a simple binary user choice: export or do not export.
     """
 
     PAGE_SIZE = 50
@@ -351,16 +352,21 @@ class LibraryPage(Page):
         tree_layout.addWidget(SectionHeader("Архив", "Сервер → канал → тема"))
 
         self.tree = QTreeWidget()
+        self.tree.setObjectName("LibraryTree")
         self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа: известно / всего", "Выгрузка"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setUniformRowHeights(False)
         self.tree.setSelectionMode(QAbstractItemView.SingleSelection)
+        # The archive tree is a click target, not a hover-driven menu.  Keep the
+        # geometry stable and never let a stale horizontal scroll offset make the
+        # first column look selected/cropped when the pointer returns from preview.
+        self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
         self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.tree.header().setSectionResizeMode(2, QHeaderView.Interactive)
-        self.tree.header().resizeSection(2, 230)
-        self.tree.header().setSectionResizeMode(3, QHeaderView.Interactive)
-        self.tree.header().resizeSection(3, 240)
+        self.tree.header().resizeSection(2, 225)
+        self.tree.header().setSectionResizeMode(3, QHeaderView.Fixed)
+        self.tree.header().resizeSection(3, 150)
         # Content navigation must be click-driven.  Binding the preview to
         # currentItemChanged made the right-hand pane follow transient Qt
         # "current index" changes while the pointer moved across embedded
@@ -574,18 +580,18 @@ class LibraryPage(Page):
 
     def _install_rule_combo(self, item: QTreeWidgetItem, detail: dict) -> None:
         combo = QComboBox()
-        combo.setMinimumWidth(190)
+        combo.setMinimumWidth(118)
         combo.setMinimumHeight(32)
-        default_effective = detail.get("default_export_rule") == "INCLUDE"
-        default_label = (
-            "По умолчанию — выгружать"
-            if default_effective
-            else "По умолчанию — не выгружать"
-        )
-        combo.addItem(default_label, "DEFAULT")
-        combo.addItem("Выгружать", "INCLUDE")
+        combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         combo.addItem("Не выгружать", "EXCLUDE")
-        wanted = str(detail.get("export_rule") or "DEFAULT")
+        combo.addItem("Выгружать", "INCLUDE")
+        # Older databases can still contain the internal DEFAULT/inheritance
+        # representation.  The user-facing control is intentionally binary: an
+        # inherited value is displayed as its already-resolved effective state.
+        stored = str(detail.get("export_rule") or "DEFAULT").upper()
+        wanted = stored if stored in {"INCLUDE", "EXCLUDE"} else str(
+            detail.get("effective_export_rule") or "EXCLUDE"
+        ).upper()
         index = combo.findData(wanted)
         combo.blockSignals(True)
         combo.setCurrentIndex(max(0, index))
@@ -597,7 +603,7 @@ class LibraryPage(Page):
         self.tree.setItemWidget(item, 3, combo)
 
     def _rule_changed(self, combo: QComboBox, detail: dict) -> None:
-        mode = str(combo.currentData() or "DEFAULT")
+        mode = str(combo.currentData() or "EXCLUDE")
         detail["export_rule"] = mode
         if self.on_export_rule_changed is not None:
             self.on_export_rule_changed(detail["kind"], detail["id"], mode)
@@ -732,6 +738,18 @@ class LibraryPage(Page):
             self.message_layout.addWidget(self._message_card(message))
         self.message_layout.addStretch(1)
 
+    @staticmethod
+    def _discord_markdown(content: str) -> str:
+        """Normalize Discord-only tokens before Qt Markdown renders the text.
+
+        Qt has no knowledge of Discord custom emoji tags such as
+        ``<:name:123>`` / ``<a:name:123>`` and can present them as an empty
+        object/glyph.  Keep the message readable without pretending that the
+        unavailable remote emoji image was cached locally.
+        """
+        value = re.sub(r"<a?:([A-Za-z0-9_]+):\d+>", r":\1:", str(content or ""))
+        return value.replace("\uFFFC", "•")
+
     def _message_card(self, message: dict) -> QWidget:
         card = Card()
         layout = QVBoxLayout(card)
@@ -752,7 +770,7 @@ class LibraryPage(Page):
         if content:
             text = QLabel()
             text.setTextFormat(Qt.MarkdownText)
-            text.setText(content)
+            text.setText(self._discord_markdown(content))
             text.setWordWrap(True)
             text.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse)
             text.setStyleSheet(f"color:{TEXT};")
@@ -894,7 +912,7 @@ class ActivityPage(Page):
         self.table.setColumnWidth(0, 150)
         self.table.setColumnWidth(1, 90)
         self.table.setColumnWidth(2, 110)
-        self.table.setColumnWidth(3, 150)
+        self.table.setColumnWidth(3, 225)
         self.table.horizontalHeader().setStretchLastSection(True)
         layout.addWidget(self.table)
         self.body.addWidget(card, 1)
@@ -1627,7 +1645,7 @@ class SettingsPage(Page):
         self.diag_status.setObjectName("SettingHint")
         diag_layout.addWidget(SettingRow(
             "Системный отчёт",
-            "Снимок версий, Статуса, путей, хранилища и unresolved failures.",
+            "Снимок версий, статуса, путей, хранилища и неразрешённых ошибок.",
             control=run_diag,
         ))
         diag_layout.addWidget(self.diag_status)
@@ -1639,7 +1657,7 @@ class SettingsPage(Page):
         self.db_check_status.setObjectName("SettingHint")
         diag_layout.addWidget(SettingRow(
             "Целостность SQLite",
-            "PRAGMA quick_check через отдельное read connection.",
+            "PRAGMA quick_check через отдельное подключение только для чтения.",
             control=db_check,
         ))
         diag_layout.addWidget(self.db_check_status)
@@ -1650,7 +1668,7 @@ class SettingsPage(Page):
         self.copy_report.clicked.connect(on_copy_report)
         diag_layout.addWidget(SettingRow(
             "Последний отчёт",
-            "Копирует последний diagnostics report в буфер обмена.",
+            "Копирует последний диагностический отчёт в буфер обмена.",
             control=self.copy_report,
         ))
         self.version_value = QLabel("—")
@@ -1658,8 +1676,8 @@ class SettingsPage(Page):
         self.contract_value = QLabel("—")
         for title, hint, label in [
             ("Версия Companion", "Текущая версия приложения", self.version_value),
-            ("Версия плагина", "Версия из heartbeat/manifest", self.plugin_value),
-            ("Контракт захвата", "Версия capture schema / heartbeat contract", self.contract_value),
+            ("Версия плагина", "Версия из heartbeat или manifest", self.plugin_value),
+            ("Контракт захвата", "Версии формата захвата и heartbeat-контракта", self.contract_value),
         ]:
             label.setStyleSheet(f"color:{TEXT};font-weight:650;")
             diag_layout.addWidget(SettingRow(title, hint, control=label))
@@ -1763,7 +1781,7 @@ class SettingsPage(Page):
         self.plugin_value.setText(str(plugin_version))
         capture_schema = details.get("capture_schema_version") or "—"
         heartbeat_schema = details.get("heartbeat_schema_version") or "plugin-heartbeat-v1"
-        self.contract_value.setText(f"capture {capture_schema} · {heartbeat_schema}")
+        self.contract_value.setText(f"capture-v{capture_schema} · {heartbeat_schema}")
 
     def set_diagnostic_status(self, text: str, *, report_available: bool = False) -> None:
         self.diag_status.setText(text)

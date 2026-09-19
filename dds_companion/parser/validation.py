@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 
+CAPTURE_SCHEMA_VERSION = 2
+
+
 class CaptureValidationError(ValueError):
     pass
 
@@ -28,9 +31,10 @@ def validate_capture(data: Any) -> dict[str, Any]:
     capture = _require_dict(data, "capture")
 
     schema_version = capture.get("schemaVersion")
-    if schema_version != 2:
+    if schema_version != CAPTURE_SCHEMA_VERSION:
         raise CaptureValidationError(
-            f"Unsupported capture schemaVersion={schema_version!r}; DDS Companion expects schemaVersion=2"
+            f"Unsupported capture schemaVersion={schema_version!r}; "
+            f"DDS Companion expects schemaVersion={CAPTURE_SCHEMA_VERSION}"
         )
 
     guild = _require_dict(capture.get("guild"), "guild")
