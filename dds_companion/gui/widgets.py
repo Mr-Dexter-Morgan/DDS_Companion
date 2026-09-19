@@ -74,6 +74,187 @@ def state_color(state: str) -> str:
     }.get((state or "").upper(), DIM)
 
 
+
+_ACTIVITY_SUBSYSTEMS = {
+    "runtime": "Companion",
+    "importer": "Импорт",
+    "watcher": "Наблюдение",
+    "health": "Состояние",
+    "media": "Медиа",
+    "database": "База данных",
+    "dds_data": "DDS_Data",
+    "discord": "Discord",
+    "plugin": "DDS Plugin",
+    "updates": "Обновления",
+}
+
+_ACTIVITY_EVENTS = {
+    "session_started": "Запуск",
+    "session_stopped": "Завершение",
+    "session_completed": "Завершение",
+    "startup_sync": "Начальная синхронизация",
+    "capture_imported": "Импорт данных",
+    "capture_failed": "Ошибка импорта",
+    "capture_removed": "Удаление capture",
+    "watcher_crashed": "Ошибка наблюдения",
+    "gui_runtime_crashed": "Ошибка Companion",
+    "media_backfill_enabled": "Автозагрузка включена",
+    "media_backfill_disabled": "Автозагрузка выключена",
+    "media_cached": "Медиа сохранено",
+    "media_cache_maintenance": "Обслуживание кэша",
+    "media_manual_clear_requeued": "Повторная постановка",
+    "media_user_retry": "Повтор загрузки",
+    "media_user_ignored": "Проблема обработана",
+    "media_user_ignored_all": "Проблемы обработаны",
+    "media_processed_cleared": "Обработанные очищены",
+    "media_registry_bootstrap": "Реестр медиа",
+    "media_worker_iteration_failed": "Ошибка загрузчика медиа",
+    "health_initial_state": "Состояние системы",
+    "health_state_changed": "Состояние изменилось",
+    "health_reason_changed": "Причина изменилась",
+    "health_recovered": "Система восстановилась",
+}
+
+
+def human_activity_subsystem(value: str | None) -> str:
+    key = str(value or "").strip().lower()
+    return _ACTIVITY_SUBSYSTEMS.get(key, value or "—")
+
+
+def human_activity_event(value: str | None) -> str:
+    key = str(value or "").strip()
+    return _ACTIVITY_EVENTS.get(key, key or "—")
+
+
+def human_activity_level(value: str | None) -> str:
+    return {"INFO": "Инфо", "WARNING": "Внимание", "ERROR": "Ошибка"}.get(
+        str(value or "INFO").upper(), str(value or "—")
+    )
+
+
+def _human_health_reasons(reasons: list[dict]) -> str:
+    labels = {
+        "database-error": "ошибка базы данных",
+        "unresolved-failures": "есть неразрешённые ошибки импорта",
+        "source-missing": "DDS_Data недоступна",
+        "importer-limited": "импорт требует внимания",
+        "watcher-limited": "наблюдение требует внимания",
+        "discord-not-running": "Discord не запущен",
+        "plugin-not-ready": "DDS Plugin не готов",
+    }
+    values = []
+    for item in reasons or []:
+        code = str(item.get("code") or "")
+        values.append(labels.get(code, human_activity_subsystem(item.get("subsystem"))))
+    return " · ".join(dict.fromkeys(values))
+
+
+def human_activity_summary(event: dict | None) -> str:
+    event = event or {}
+    event_type = str(event.get("event_type") or "")
+    details = event.get("details") if isinstance(event.get("details"), dict) else {}
+    if event_type == "startup_sync":
+        return (
+            f"Начальная синхронизация: +{int(event.get('messages_new') or 0)} новых, "
+            f"{int(event.get('messages_refreshed') or 0)} обновлено, "
+            f"{int(details.get('failed') or 0)} ошибок"
+        )
+    if event_type == "capture_imported":
+        return (
+            f"Импортировано: +{int(event.get('messages_new') or 0)} сообщений, "
+            f"{int(event.get('messages_refreshed') or 0)} обновлено"
+        )
+    if event_type == "session_started":
+        return "DDS Companion запущен"
+    if event_type in {"session_stopped", "session_completed"}:
+        return "DDS Companion завершил работу штатно"
+    if event_type == "media_backfill_enabled":
+        return "Автоматическая загрузка медиа включена"
+    if event_type == "media_backfill_disabled":
+        return "Автоматическая загрузка медиа выключена"
+    if event_type == "media_cached":
+        size = details.get("local_size")
+        if size is not None:
+            return f"Медиа сохранено в кэш: {human_size(int(size))}"
+        return "Медиа сохранено в кэш"
+    if event_type == "media_manual_clear_requeued":
+        return f"После очистки кэша повторно поставлено в очередь: {int(details.get('requeued') or 0)}"
+    if event_type == "media_user_ignored_all":
+        return f"Обработано проблемных медиа: {int(details.get('changed') or 0)}"
+    if event_type == "media_processed_cleared":
+        return (
+            f"Очищено обработанных медиа: {int(details.get('changed') or 0)}; "
+            "ожидают свежую ссылку Discord"
+        )
+    if event_type == "media_user_ignored":
+        return "Проблема медиа отмечена как обработанная"
+    if event_type == "media_user_retry":
+        return "Запущена ручная повторная загрузка медиа"
+    if event_type == "media_cache_maintenance":
+        removed = int(details.get("files_removed") or 0)
+        errors = int(details.get("errors") or 0)
+        return f"Обслуживание медиакэша: удалено {removed}, ошибок {errors}"
+    if event_type.startswith("health_"):
+        state = str(details.get("state") or "UNKNOWN")
+        previous = str(details.get("previous_state") or "")
+        reason_text = _human_health_reasons(details.get("reasons") or [])
+        if event_type == "health_recovered":
+            return f"Состояние: {previous or '—'} → RUNNING — все контролируемые компоненты восстановились"
+        prefix = f"Состояние: {previous} → {state}" if previous and previous != state else f"Состояние: {state}"
+        return prefix + (f" — {reason_text}" if reason_text else "")
+    if event_type == "capture_failed":
+        return "Не удалось импортировать capture"
+    if event_type == "capture_removed":
+        return "Capture удалён; архивные данные сохранены"
+    if event_type == "watcher_crashed":
+        return "Наблюдение за DDS_Data остановилось из-за ошибки"
+    if event_type == "gui_runtime_crashed":
+        return "Companion остановился из-за неожиданной ошибки"
+    if event_type == "media_worker_iteration_failed":
+        return "Ошибка загрузчика медиа; повтор будет выполнен позже"
+    return str(event.get("summary") or "—")
+
+
+def human_health_summary(subsystem: str, info: dict | None) -> str:
+    info = info or {}
+    state = str(info.get("state") or "UNKNOWN").upper()
+    details = info.get("details") if isinstance(info.get("details"), dict) else {}
+    key = str(subsystem or "").lower()
+    if key == "database":
+        return "SQLite: проверка целостности пройдена" if state == "RUNNING" else "База данных требует внимания"
+    if key == "dds_data":
+        return "DDS_Data доступна" if state == "RUNNING" else "DDS_Data недоступна"
+    if key == "importer":
+        return "Импорт работает штатно" if state == "RUNNING" else "Импорт требует внимания"
+    if key == "watcher":
+        if state == "RUNNING":
+            return "Наблюдение за DDS_Data активно"
+        if state == "WAITING":
+            return "Ожидание DDS_Data"
+        return "Наблюдение за DDS_Data не активно"
+    if key == "discord":
+        return "Discord запущен" if state == "RUNNING" else "Discord не запущен"
+    if key == "plugin":
+        version = details.get("plugin_version") or details.get("manifest_version")
+        if state == "RUNNING":
+            return f"DDS Plugin {version or ''} активен".strip()
+        if state == "UPDATE AVAILABLE":
+            return "Для DDS Plugin доступно необходимое обновление"
+        if state in {"NOT RUNNING", "STALE"}:
+            return "DDS Plugin не передаёт актуальный heartbeat"
+        return "DDS Plugin требует внимания"
+    if key == "media":
+        if state == "STOPPED":
+            return "Автоматическая загрузка медиа выключена"
+        if state == "RUNNING":
+            return "Загрузка медиа работает штатно"
+        return "Загрузка медиа требует внимания"
+    if key == "updates":
+        if state == "NEVER":
+            return "Проверок обновлений ещё не было"
+        return "Проверка обновлений работает" if state == "RUNNING" else "Проверка обновлений требует внимания"
+    return str(info.get("summary") or "—")
+
 def repolish(widget: QWidget) -> None:
     style = widget.style()
     style.unpolish(widget)

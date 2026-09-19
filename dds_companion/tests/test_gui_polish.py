@@ -54,9 +54,9 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", normal)
         self.assertIn("run_companion.pyw", normal)
-        self.assertIn("DDS Companion 0.5.5", normal)
+        self.assertIn("DDS Companion 0.5.6", normal)
         self.assertIn("python -m dds_companion.gui.app", debug)
-        self.assertIn("DDS Companion 0.5.5", debug)
+        self.assertIn("DDS Companion 0.5.6", debug)
 
     def test_050_first_run_gui_dependency_bootstrap_is_automatic(self):
         normal = (self.root / "run_companion.bat").read_text(encoding="utf-8")
@@ -87,13 +87,13 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         self.assertIn("self.sidebar.setFixedWidth(210)", window)
         self.assertIn('("discord", "Discord")', pages)
         self.assertIn('("plugin", "DDS Plugin")', pages)
-        self.assertIn('("updates", "Update check")', pages)
-        self.assertIn('("media", "Media Backfill")', pages)
+        self.assertIn('("updates", "Обновления")', pages)
+        self.assertIn('("media", "Загрузка медиа")', pages)
         health = pages[pages.index("class HealthPage"):pages.index("class SettingsPage")]
         self.assertIn('self.tabs.setObjectName("HealthTabs")', health)
         self.assertIn('self.tabs.addTab(status, "Статус")', health)
         self.assertIn('self.tabs.addTab(lifecycle, "Жизненный цикл медиа")', health)
-        self.assertIn('Last attempt:', pages)
+        self.assertIn('Последняя попытка:', pages)
 
     def test_045_startup_foreground_is_one_shot_and_not_persistent_topmost(self):
         window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
@@ -218,7 +218,7 @@ class LibraryUx054SourceContractTests(unittest.TestCase):
     def test_054_library_is_navigation_plus_message_viewer_without_search_or_ids(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         library = pages[pages.index("class LibraryPage"):pages.index("class ActivityPage")]
-        self.assertIn('self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа", "Выгрузка"])', library)
+        self.assertIn('self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа: известно / всего", "Выгрузка"])', library)
         self.assertIn('QSplitter(Qt.Horizontal)', library)
         self.assertIn('QPushButton("Показать ещё")', library)
         self.assertIn('PAGE_SIZE = 50', library)
@@ -273,6 +273,27 @@ class LibraryUx054SourceContractTests(unittest.TestCase):
         self.assertIn("on_media_clear_processed", health)
         self.assertIn("request_media_ignore_all", window)
         self.assertIn("request_media_clear_processed", window)
+
+    def test_056_live_review_fixes_are_present(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        widgets = (self.root / "dds_companion/gui/widgets.py").read_text(encoding="utf-8")
+        runtime = (self.root / "dds_companion/gui/runtime.py").read_text(encoding="utf-8")
+        library = pages[pages.index("class LibraryPage"):pages.index("class ActivityPage")]
+        health = pages[pages.index("class HealthPage"):pages.index("class SettingsPage")]
+        activity = pages[pages.index("class ActivityPage"):pages.index("class HealthPage")]
+
+        self.assertIn("Qt.MarkdownText", library)
+        self.assertIn("combo.setMinimumHeight(32)", library)
+        self.assertIn("self.tree.setUniformRowHeights(False)", library)
+        self.assertIn("media_unresolved", library)
+        self.assertIn("self._media_issue_fingerprint", health)
+        self.assertIn("verticalScrollBar().value()", health)
+        self.assertIn("QTimer.singleShot", health)
+        self.assertIn("human_activity_summary(event)", activity)
+        self.assertIn("human_activity_event(event.get", activity)
+        self.assertIn("def human_activity_summary", widgets)
+        self.assertIn('str(item.get("code") or "unknown")', runtime)
+        self.assertNotIn('str(item.get("message") or "")\n            for item in reasons', runtime)
 
 
 if __name__ == "__main__":

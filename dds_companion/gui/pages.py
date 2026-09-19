@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -40,6 +40,11 @@ from .widgets import (
     SettingRow,
     StorageDonut,
     StorageRow,
+    human_activity_event,
+    human_activity_level,
+    human_activity_subsystem,
+    human_activity_summary,
+    human_health_summary,
     human_size,
     local_time,
     set_state_property,
@@ -291,7 +296,7 @@ class DashboardPage(Page):
 
         if activity:
             latest = activity[0]
-            summary = latest.get("summary", "—")
+            summary = human_activity_summary(latest)
             event_type = str(latest.get("event_type") or "")
             if event_type == "media_backfill_enabled":
                 summary = "Автозагрузка медиа включена"
@@ -300,8 +305,8 @@ class DashboardPage(Page):
             self.current_activity.setText(summary)
             meta = [
                 local_time(latest.get("occurred_at"), seconds=True),
-                latest.get("subsystem", "runtime"),
-                latest.get("level", "INFO"),
+                human_activity_subsystem(latest.get("subsystem", "runtime")),
+                human_activity_level(latest.get("level", "INFO")),
             ]
             capture = latest.get("capture_path")
             if capture:
@@ -346,15 +351,16 @@ class LibraryPage(Page):
         tree_layout.addWidget(SectionHeader("Архив", "Сервер → канал → тема"))
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа", "Выгрузка"])
+        self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа: известно / всего", "Выгрузка"])
         self.tree.setAlternatingRowColors(True)
-        self.tree.setUniformRowHeights(True)
+        self.tree.setUniformRowHeights(False)
         self.tree.setSelectionMode(QAbstractItemView.SingleSelection)
         self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
         self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.tree.header().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.tree.header().setSectionResizeMode(2, QHeaderView.Interactive)
+        self.tree.header().resizeSection(2, 230)
         self.tree.header().setSectionResizeMode(3, QHeaderView.Interactive)
-        self.tree.header().resizeSection(3, 220)
+        self.tree.header().resizeSection(3, 240)
         # Content navigation must be click-driven.  Binding the preview to
         # currentItemChanged made the right-hand pane follow transient Qt
         # "current index" changes while the pointer moved across embedded
@@ -402,7 +408,7 @@ class LibraryPage(Page):
         self.splitter.addWidget(content_card)
         self.splitter.setStretchFactor(0, 2)
         self.splitter.setStretchFactor(1, 5)
-        self.splitter.setSizes([460, 900])
+        self.splitter.setSizes([620, 900])
         self.body.addWidget(self.splitter, 1)
 
         self._library: list[dict] = []
@@ -432,6 +438,7 @@ class LibraryPage(Page):
         for i in range(root.childCount()):
             self._collect_expanded(root.child(i), expanded_ids)
         selected_key = self._selected_key
+        tree_scroll = self.tree.verticalScrollBar().value()
 
         self.tree.setUpdatesEnabled(False)
         self.tree.blockSignals(True)
@@ -493,6 +500,9 @@ class LibraryPage(Page):
             self._show_empty_messages("Выберите канал или тему слева.")
         self.tree.blockSignals(False)
         self.tree.setUpdatesEnabled(True)
+        QTimer.singleShot(0, lambda value=tree_scroll: self.tree.verticalScrollBar().setValue(
+            min(value, self.tree.verticalScrollBar().maximum())
+        ))
 
     @staticmethod
     def _detail(kind: str, data: dict) -> dict:
@@ -505,19 +515,54 @@ class LibraryPage(Page):
             "direct_message_count": int(data.get("direct_message_count", data.get("message_count", 0))),
             "thread_count": len(data.get("threads", [])),
             "media_count": int(data.get("media_count", 0)),
+            "media_known": int(data.get("media_known", 0)),
+            "media_cached": int(data.get("media_cached", 0)),
+            "media_attention": int(data.get("media_attention", 0)),
+            "media_ignored": int(data.get("media_ignored", 0)),
+            "media_unresolved": int(data.get("media_unresolved", 0)),
             "export_rule": str(data.get("export_rule") or "DEFAULT"),
             "default_export_rule": str(data.get("default_export_rule") or "EXCLUDE"),
             "effective_export_rule": str(data.get("effective_export_rule") or "EXCLUDE"),
         }
 
+    @staticmethod
+    def _media_cell_text(data: dict) -> str:
+        total = int(data.get("media_count", 0) or 0)
+        known = int(data.get("media_known", 0) or 0)
+        cached = int(data.get("media_cached", 0) or 0)
+        attention = int(data.get("media_attention", 0) or 0)
+        unresolved = int(data.get("media_unresolved", 0) or 0)
+        ignored = int(data.get("media_ignored", 0) or 0)
+        parts = [f"{known}/{total} изв.", f"{cached} кэш"]
+        if attention:
+            parts.append(f"{attention} внимание")
+        if ignored:
+            parts.append(f"{ignored} обработано")
+        if unresolved:
+            parts.append(f"{unresolved} ждёт")
+        return " · ".join(parts)
+
+    @staticmethod
+    def _media_tooltip(data: dict) -> str:
+        return (
+            f"Всего вложений: {int(data.get('media_count', 0) or 0)}\n"
+            f"Известно сейчас: {int(data.get('media_known', 0) or 0)}\n"
+            f"Кэшировано: {int(data.get('media_cached', 0) or 0)}\n"
+            f"Требует внимания: {int(data.get('media_attention', 0) or 0)}\n"
+            f"Обработано: {int(data.get('media_ignored', 0) or 0)}\n"
+            f"Ждёт переобнаружения: {int(data.get('media_unresolved', 0) or 0)}"
+        )
+
     def _tree_item(self, label: str, data: dict, detail: dict, *, bold: bool = False) -> QTreeWidgetItem:
         prefix = {"guild": "g", "channel": "c", "thread": "t"}[detail["kind"]]
+        media_text = self._media_cell_text(data)
         item = QTreeWidgetItem([
             label,
             str(data.get("message_count", 0)),
-            str(data.get("media_count", 0)),
+            media_text,
             "",
         ])
+        item.setToolTip(2, self._media_tooltip(data))
         item.setData(0, Qt.UserRole, f"{prefix}:{detail['id']}")
         item.setData(0, Qt.UserRole + 1, detail)
         item.setForeground(0, QColor(TEXT))
@@ -529,7 +574,8 @@ class LibraryPage(Page):
 
     def _install_rule_combo(self, item: QTreeWidgetItem, detail: dict) -> None:
         combo = QComboBox()
-        combo.setMinimumWidth(176)
+        combo.setMinimumWidth(190)
+        combo.setMinimumHeight(32)
         default_effective = detail.get("default_export_rule") == "INCLUDE"
         default_label = (
             "По умолчанию — выгружать"
@@ -547,6 +593,7 @@ class LibraryPage(Page):
         combo.currentIndexChanged.connect(
             lambda _index, c=combo, d=detail: self._rule_changed(c, d)
         )
+        item.setSizeHint(3, combo.sizeHint())
         self.tree.setItemWidget(item, 3, combo)
 
     def _rule_changed(self, combo: QComboBox, detail: dict) -> None:
@@ -592,21 +639,23 @@ class LibraryPage(Page):
         if detail.get("kind") == "channel":
             title = f"# {title}"
         self.content_title.setText(title)
+        media = (
+            f"медиа: {detail.get('media_known', 0)}/{detail.get('media_count', 0)} известно"
+            f" · {detail.get('media_cached', 0)} кэш"
+        )
+        if int(detail.get("media_attention", 0)):
+            media += f" · {detail.get('media_attention', 0)} требуют внимания"
+        if int(detail.get("media_unresolved", 0)):
+            media += f" · {detail.get('media_unresolved', 0)} ждут ссылку"
         if detail.get("kind") == "channel":
             direct = int(detail.get("direct_message_count", 0))
             total = int(detail.get("message_count", 0))
             if total != direct:
-                self.content_hint.setText(
-                    f"{direct} сообщений в канале · {total} всего с темами · {detail.get('media_count', 0)} медиа"
-                )
+                self.content_hint.setText(f"{direct} сообщений в канале · {total} всего с темами · {media}")
             else:
-                self.content_hint.setText(
-                    f"{direct} сообщений · {detail.get('media_count', 0)} медиа"
-                )
+                self.content_hint.setText(f"{direct} сообщений · {media}")
         else:
-            self.content_hint.setText(
-                f"{detail.get('message_count', 0)} сообщений · {detail.get('media_count', 0)} медиа"
-            )
+            self.content_hint.setText(f"{detail.get('message_count', 0)} сообщений · {media}")
 
     def _request_messages(self, *, reset: bool) -> None:
         detail = self._selected_detail
@@ -701,9 +750,11 @@ class LibraryPage(Page):
 
         content = str(message.get("content") or "").strip()
         if content:
-            text = QLabel(content)
+            text = QLabel()
+            text.setTextFormat(Qt.MarkdownText)
+            text.setText(content)
             text.setWordWrap(True)
-            text.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            text.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.LinksAccessibleByMouse)
             text.setStyleSheet(f"color:{TEXT};")
             layout.addWidget(text)
 
@@ -849,8 +900,28 @@ class ActivityPage(Page):
         self.body.addWidget(card, 1)
         self._fingerprint = None
 
+    @staticmethod
+    def _presentation_events(events: list[dict]) -> list[dict]:
+        visible: list[dict] = []
+        last_health_signature = None
+        for event in events:
+            if str(event.get("event_type") or "") == "health_reason_changed":
+                details = event.get("details") if isinstance(event.get("details"), dict) else {}
+                state = str(details.get("state") or "UNKNOWN")
+                signature = tuple(
+                    (str(item.get("subsystem") or ""), str(item.get("code") or ""), state)
+                    for item in (details.get("reasons") or [])
+                )
+                if signature and signature == last_health_signature:
+                    continue
+                last_health_signature = signature
+            else:
+                last_health_signature = None
+            visible.append(event)
+        return visible
+
     def update_snapshot(self, snapshot: dict) -> None:
-        events = snapshot.get("activity", [])
+        events = self._presentation_events(list(snapshot.get("activity", [])))
         fingerprint = tuple((e.get("id"), e.get("occurred_at"), e.get("summary")) for e in events)
         if fingerprint == self._fingerprint:
             return
@@ -859,10 +930,10 @@ class ActivityPage(Page):
         for row, event in enumerate(events):
             values = [
                 local_time(event.get("occurred_at"), seconds=True),
-                event.get("level", "INFO"),
-                event.get("subsystem", "—"),
-                event.get("event_type", "—"),
-                event.get("summary", "—"),
+                human_activity_level(event.get("level", "INFO")),
+                human_activity_subsystem(event.get("subsystem", "—")),
+                human_activity_event(event.get("event_type", "—")),
+                human_activity_summary(event),
             ]
             color = {
                 "ERROR": DANGER,
@@ -877,7 +948,12 @@ class ActivityPage(Page):
                     item.setForeground(QColor(TEXT))
                 else:
                     item.setForeground(QColor("#aab3c4"))
-                item.setToolTip(str(value))
+                if col == 3:
+                    item.setToolTip(f"Техническое событие: {event.get('event_type', '—')}")
+                elif col == 4:
+                    item.setToolTip(str(event.get("summary") or value))
+                else:
+                    item.setToolTip(str(value))
                 self.table.setItem(row, col, item)
 
 
@@ -903,6 +979,7 @@ class HealthPage(Page):
         self._media_issue_by_key: dict[str, dict] = {}
         self._media_attention_count = 0
         self._media_ignored_count = 0
+        self._media_issue_fingerprint: tuple = ()
 
         self.tabs = QTabWidget()
         self.tabs.setObjectName("HealthTabs")
@@ -934,14 +1011,14 @@ class HealthPage(Page):
         grid.setSpacing(12)
         self.cards: dict[str, tuple[Card, QLabel, QLabel, QLabel]] = {}
         names = [
-            ("database", "Database"),
+            ("database", "База данных"),
             ("dds_data", "DDS_Data"),
-            ("importer", "Importer"),
-            ("watcher", "Watcher"),
+            ("importer", "Импорт"),
+            ("watcher", "Наблюдение"),
             ("discord", "Discord"),
             ("plugin", "DDS Plugin"),
-            ("media", "Media Backfill"),
-            ("updates", "Update check"),
+            ("media", "Загрузка медиа"),
+            ("updates", "Обновления"),
         ]
         for index, (key, label) in enumerate(names):
             card = Card()
@@ -1019,7 +1096,7 @@ class HealthPage(Page):
         runtime_layout.setContentsMargins(16, 14, 16, 14)
         runtime_layout.setSpacing(8)
         runtime_top = QHBoxLayout()
-        runtime_top.addWidget(QLabel("Media Backfill"))
+        runtime_top.addWidget(QLabel("Загрузка медиа"))
         runtime_top.addStretch(1)
         self.media_runtime_state = QLabel("UNKNOWN")
         self.media_runtime_state.setStyleSheet(f"color:{MUTED};font-weight:750;")
@@ -1216,11 +1293,13 @@ class HealthPage(Page):
         state = health.get("state", "UNKNOWN")
         self.overall_pill.setText(state)
         set_state_property(self.overall_pill, state)
-        self.overall_hint.setText(
-            health.get("summary")
-            or ("Все ключевые подсистемы работают штатно" if state == "RUNNING" else "Требуется внимание")
-        )
-        self.overall_pill.setToolTip(health.get("tooltip") or self.overall_hint.text())
+        overall_text = {
+            "RUNNING": "Все ключевые подсистемы работают штатно",
+            "ERROR": "Критическая ошибка локального архива",
+            "LIMITED": "Часть функций временно недоступна — подробности ниже",
+        }.get(str(state).upper(), "Состояние системы обновляется")
+        self.overall_hint.setText(overall_text)
+        self.overall_pill.setToolTip(str(health.get("tooltip") or overall_text))
         subs = health.get("subsystems", {})
         media_info = subs.get("media", {}) or {}
         media_details = media_info.get("details", {}) or {}
@@ -1244,7 +1323,10 @@ class HealthPage(Page):
         self.media_ignored_card.set_data(str(ignored_count), "осознанно обработаны пользователем")
         self.media_unresolved_card.set_data(str(unresolved_count), "ждут новой ссылки из Discord")
         media_state = str(media_info.get("state") or "UNKNOWN")
-        self.media_runtime_state.setText(media_state)
+        runtime_state_text = media_state
+        if unresolved_count:
+            runtime_state_text += f" · переобнаружение: {unresolved_count}"
+        self.media_runtime_state.setText(runtime_state_text)
         self.media_runtime_state.setStyleSheet(f"color:{state_color(media_state)};font-weight:750;")
         self.media_runtime_summary.setText(
             f"Известно: {known} из {total} · кэшировано: {cached} · очередь: {queued} · "
@@ -1253,23 +1335,47 @@ class HealthPage(Page):
         )
 
         issues = list(media_details.get("attention_items") or [])
-        selected_before = self._selected_media_issue()
-        selected_key = str(selected_before.get("media_key")) if selected_before else None
-        self._media_issue_by_key = {str(item.get("media_key")): item for item in issues if item.get("media_key")}
-        self.media_issue_table.setRowCount(0)
-        selected_row = -1
-        for issue in issues:
-            row = self.media_issue_table.rowCount()
-            self.media_issue_table.insertRow(row)
-            filename = str(issue.get("filename") or "Без имени")
-            name_item = QTableWidgetItem(filename)
-            name_item.setData(Qt.UserRole, str(issue.get("media_key") or ""))
-            self.media_issue_table.setItem(row, 0, name_item)
-            self.media_issue_table.setItem(row, 1, QTableWidgetItem(self._human_media_reason(issue)))
-            state_text = "Обработано" if issue.get("state") == "IGNORED" else "Требует внимания"
-            self.media_issue_table.setItem(row, 2, QTableWidgetItem(state_text))
-            if selected_key and str(issue.get("media_key") or "") == selected_key:
-                selected_row = row
+        issue_fingerprint = tuple(
+            (
+                str(item.get("media_key") or ""),
+                str(item.get("state") or ""),
+                str(item.get("failure_class") or ""),
+                str(item.get("error") or ""),
+                str(item.get("updated_at") or ""),
+            )
+            for item in issues
+        )
+        if issue_fingerprint != self._media_issue_fingerprint:
+            selected_before = self._selected_media_issue()
+            selected_key = str(selected_before.get("media_key")) if selected_before else None
+            scroll_before = self.media_issue_table.verticalScrollBar().value()
+            self._media_issue_by_key = {
+                str(item.get("media_key")): item for item in issues if item.get("media_key")
+            }
+            self.media_issue_table.setUpdatesEnabled(False)
+            self.media_issue_table.setRowCount(0)
+            selected_row = -1
+            for issue in issues:
+                row = self.media_issue_table.rowCount()
+                self.media_issue_table.insertRow(row)
+                filename = str(issue.get("filename") or "Без имени")
+                name_item = QTableWidgetItem(filename)
+                name_item.setData(Qt.UserRole, str(issue.get("media_key") or ""))
+                self.media_issue_table.setItem(row, 0, name_item)
+                self.media_issue_table.setItem(row, 1, QTableWidgetItem(self._human_media_reason(issue)))
+                state_text = "Обработано" if issue.get("state") == "IGNORED" else "Требует внимания"
+                self.media_issue_table.setItem(row, 2, QTableWidgetItem(state_text))
+                if selected_key and str(issue.get("media_key") or "") == selected_key:
+                    selected_row = row
+            if selected_row >= 0:
+                self.media_issue_table.selectRow(selected_row)
+            elif self.media_issue_table.rowCount() and self.media_issue_table.currentRow() < 0:
+                self.media_issue_table.selectRow(0)
+            self.media_issue_table.setUpdatesEnabled(True)
+            self._media_issue_fingerprint = issue_fingerprint
+            QTimer.singleShot(0, lambda value=scroll_before: self.media_issue_table.verticalScrollBar().setValue(
+                min(value, self.media_issue_table.verticalScrollBar().maximum())
+            ))
         parts = []
         if attention_count:
             parts.append(self._attention_count_text(attention_count))
@@ -1278,10 +1384,6 @@ class HealthPage(Page):
         if unresolved_count:
             parts.append(f"Ждёт переобнаружения: {unresolved_count}")
         self.media_attention_summary.setText(" · ".join(parts) or "Медиа-проблем нет")
-        if selected_row >= 0:
-            self.media_issue_table.selectRow(selected_row)
-        elif self.media_issue_table.rowCount() and self.media_issue_table.currentRow() < 0:
-            self.media_issue_table.selectRow(0)
         self._update_media_action_state()
 
         for key, (_, state_label, summary_label, updated_label) in self.cards.items():
@@ -1289,16 +1391,17 @@ class HealthPage(Page):
             sub_state = info.get("state", "UNKNOWN")
             state_label.setText(sub_state)
             state_label.setStyleSheet(f"color:{state_color(sub_state)};font-weight:750;")
-            summary = info.get("summary", "—")
-            state_label.setToolTip(summary)
+            raw_summary = info.get("summary", "—")
+            summary = human_health_summary(key, info)
+            state_label.setToolTip(str(raw_summary))
             summary_label.setText(summary)
             if key == "discord":
-                updated_label.setText(f"Checked: {local_time(info.get('updated_at'), seconds=True)}")
+                updated_label.setText(f"Проверено: {local_time(info.get('updated_at'), seconds=True)}")
             elif key == "plugin":
                 details = info.get("details", {})
                 version = details.get("plugin_version") or details.get("manifest_version") or "—"
                 updated_label.setText(
-                    f"Version: {version}  ·  Heartbeat: {local_time(info.get('updated_at'), seconds=True)}"
+                    f"Версия: {version}  ·  Heartbeat: {local_time(info.get('updated_at'), seconds=True)}"
                 )
             elif key == "updates":
                 details = info.get("details", {})
@@ -1306,14 +1409,14 @@ class HealthPage(Page):
                 attempt = local_time(details.get("last_attempt_at"), seconds=True)
                 next_check = local_time(details.get("next_check_at"), seconds=True)
                 updated_label.setText(
-                    f"Interval: {interval} h  ·  Last attempt: {attempt}  ·  Next: {next_check}"
+                    f"Интервал: {interval} ч  ·  Последняя попытка: {attempt}  ·  Следующая: {next_check}"
                 )
             elif key == "importer":
-                updated_label.setText(f"Last import: {local_time(info.get('updated_at'), seconds=True)}")
+                updated_label.setText(f"Последний импорт: {local_time(info.get('updated_at'), seconds=True)}")
             elif key == "watcher":
                 updated_label.setText(f"Heartbeat: {local_time(info.get('updated_at'), seconds=True)}")
             else:
-                updated_label.setText(f"Checked: {local_time(info.get('updated_at'), seconds=True)}")
+                updated_label.setText(f"Проверено: {local_time(info.get('updated_at'), seconds=True)}")
         last_error_info = health.get("last_error_info")
         if last_error_info:
             subsystem = last_error_info.get("subsystem", "unknown")

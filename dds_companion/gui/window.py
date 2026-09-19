@@ -30,7 +30,7 @@ from .layout_profile import choose_layout_profile
 from .pages import ActivityPage, DashboardPage, HealthPage, LibraryPage, SettingsPage
 from .runtime import GuiRuntime
 from .theme import MUTED, TEXT
-from .widgets import open_folder, set_state_property
+from .widgets import human_activity_summary, open_folder, set_state_property
 
 
 class SignalBus(QObject):
@@ -388,7 +388,7 @@ class MainWindow(QMainWindow):
                 update(snapshot)
 
     def _on_activity(self, event: dict) -> None:
-        summary = event.get("summary", "Activity event")
+        summary = human_activity_summary(event)
         self.live_label.setText(summary)
         level = event.get("level", "INFO").upper()
         color = {"ERROR": "#ff6b81", "WARNING": "#f0c36a"}.get(level, MUTED)
@@ -398,9 +398,9 @@ class MainWindow(QMainWindow):
         kind = event.get("kind", "event")
         path = Path(event.get("path", ""))
         if kind == "created":
-            self.live_label.setText(f"Новый capture · {path.name} · ожидаю settle window")
+            self.live_label.setText(f"Новый файл захвата · {path.name} · жду стабилизации")
         elif kind == "changed":
-            self.live_label.setText(f"Capture изменился · {path.name} · проверяю стабильность")
+            self.live_label.setText(f"Файл захвата изменился · {path.name} · проверяю стабильность")
         elif kind == "unchanged":
             self.live_label.setText(f"Без изменений · {path.name}")
         self.live_label.setStyleSheet(f"color:{MUTED};")

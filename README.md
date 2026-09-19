@@ -1,9 +1,9 @@
 ## Current candidate
 
-**0.5.5** — Library click-only preview + media lifecycle states/counters, bulk attention handling and rediscovery flow.
+**0.5.6** — live UX cleanup after 0.5.5: stable media-attention scrolling, branch-level media lifecycle in Library, formatted Discord Markdown, humanized Activity, heartbeat event dedup and layout/localization fixes.
 
-# DDS Companion 0.5.5 — Candidate
+# DDS Companion 0.5.6 — Candidate
 
-Library message viewer + explicit future-Drive selection rules.
+Local archive viewer / media lifecycle surface for DDS — Discord Data Snatcher.
 
 Run on Windows with `run_companion.bat`.

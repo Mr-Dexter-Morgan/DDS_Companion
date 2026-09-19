@@ -62,6 +62,39 @@ class LibraryServiceTests(unittest.TestCase):
         self.assertEqual(channel["threads"][0]["last_activity"], "2026-09-13T11:59:00.000Z")
 
 
+    def test_library_snapshot_exposes_media_lifecycle_per_branch(self):
+        channel_capture = sample_capture()
+        self.importer.import_file(self._write(channel_capture))
+
+        thread_capture = copy.deepcopy(sample_capture(thread=True))
+        thread_capture["messages"][0]["id"] = "777777777777777777"
+        thread_capture["messages"][0]["attachments"][0]["id"] = "888888888888888888"
+        thread_capture["messages"][0]["attachments"][0]["url"] = "https://cdn.example/thread.png"
+        self.importer.import_file(self._write(thread_capture, thread=True))
+
+        rows = self.conn.execute(
+            "SELECT media_key, attachment_id FROM media_objects ORDER BY attachment_id"
+        ).fetchall()
+        by_attachment = {str(row["attachment_id"]): str(row["media_key"]) for row in rows}
+        self.conn.execute(
+            "UPDATE media_objects SET state='UNRESOLVED', current_url=NULL WHERE media_key=?",
+            (by_attachment["666666666666666666"],),
+        )
+        self.conn.execute(
+            "UPDATE media_objects SET state='CACHED', local_relpath='aa/thread.png', local_size=123 WHERE media_key=?",
+            (by_attachment["888888888888888888"],),
+        )
+        self.conn.commit()
+
+        tree = LibraryService(self.conn).snapshot()
+        guild = tree[0]
+        channel = guild["channels"][0]
+        thread = channel["threads"][0]
+
+        self.assertEqual((guild["media_known"], guild["media_cached"], guild["media_unresolved"]), (1, 1, 1))
+        self.assertEqual((channel["media_known"], channel["media_cached"], channel["media_unresolved"]), (1, 1, 1))
+        self.assertEqual((thread["media_known"], thread["media_cached"], thread["media_unresolved"]), (1, 1, 0))
+
     def test_export_rules_default_and_nearest_explicit_override(self):
         self.importer.import_file(self._write(sample_capture()))
         thread_capture = copy.deepcopy(sample_capture(thread=True))
@@ -209,6 +242,46 @@ class GuiRuntimeTests(unittest.TestCase):
         self.assertEqual(first_running["stats"]["guilds"], 1)
         self.assertEqual(len(first_running["library"]), 1)
         self.assertTrue(any(a.get("event_type") == "startup_sync" for a in activities))
+
+    def test_health_transition_dedup_ignores_dynamic_reason_age(self):
+        runtime = GuiRuntime(dds_data=self.dds, app_data=self.app_data)
+
+        class Collector:
+            def __init__(self):
+                self.events = []
+
+            def publish(self, **kwargs):
+                self.events.append(kwargs)
+
+        activity = Collector()
+        first = {
+            "state": "LIMITED",
+            "summary": "DDS Plugin heartbeat stopped 100 s ago",
+            "reasons": [{
+                "subsystem": "plugin",
+                "code": "plugin-not-ready",
+                "message": "DDS Plugin heartbeat stopped 100 s ago",
+            }],
+            "subsystems": {"plugin": {"state": "NOT RUNNING"}},
+        }
+        second = copy.deepcopy(first)
+        second["summary"] = "DDS Plugin heartbeat stopped 102 s ago"
+        second["reasons"][0]["message"] = "DDS Plugin heartbeat stopped 102 s ago"
+
+        runtime._record_health_transition(activity, first)
+        runtime._record_health_transition(activity, second)
+        self.assertEqual(len(activity.events), 1)
+        self.assertEqual(activity.events[0]["event_type"], "health_initial_state")
+
+        recovered = {
+            "state": "RUNNING",
+            "summary": "All capture and archive subsystems are operational",
+            "reasons": [],
+            "subsystems": {"plugin": {"state": "RUNNING"}},
+        }
+        runtime._record_health_transition(activity, recovered)
+        self.assertEqual(len(activity.events), 2)
+        self.assertEqual(activity.events[-1]["event_type"], "health_recovered")
 
     def test_runtime_serves_library_pages_and_persists_export_rule(self):
         running = threading.Event()

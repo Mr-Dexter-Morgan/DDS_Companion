@@ -66,7 +66,7 @@ class GuiRuntime:
         self._last_library_refresh_at = 0.0
         self._library_cache: list[dict] = []
         self._last_health_state: str | None = None
-        self._last_health_reason_signature: tuple[tuple[str, str], ...] = ()
+        self._last_health_reason_signature: tuple[tuple[str, str, str], ...] = ()
 
     def request_refresh(self) -> None:
         self.refresh_event.set()
@@ -389,8 +389,13 @@ class GuiRuntime:
     def _record_health_transition(self, activity: ActivityService, health_snapshot: dict) -> None:
         state = str(health_snapshot.get("state") or "UNKNOWN").upper()
         reasons = health_snapshot.get("reasons") or []
+        subsystems = health_snapshot.get("subsystems") or {}
         reason_signature = tuple(
-            (str(item.get("subsystem") or "unknown"), str(item.get("message") or ""))
+            (
+                str(item.get("subsystem") or "unknown"),
+                str(item.get("code") or "unknown"),
+                str((subsystems.get(str(item.get("subsystem") or "")) or {}).get("state") or "UNKNOWN"),
+            )
             for item in reasons
         )
 

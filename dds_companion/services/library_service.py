@@ -22,6 +22,7 @@ class LibraryService:
 
     def snapshot(self) -> list[dict]:
         rules = self._export_rules()
+        media_lifecycle = self._media_lifecycle_by_scope()
         guild_rows = self.connection.execute(
             """
             SELECT g.id,
@@ -84,18 +85,21 @@ class LibraryService:
                 for row in thread_rows:
                     thread_rule = rules.get(("thread", row["id"]), "DEFAULT")
                     thread_effective = self._resolve_mode(thread_rule, channel_effective)
+                    lifecycle = media_lifecycle.get(("thread", str(row["id"])), {})
                     threads.append(
                         {
                             "id": row["id"],
                             "name": row["name"],
                             "message_count": int(row["message_count"]),
                             "media_count": int(row["media_count"]),
+                            **self._media_lifecycle_fields(lifecycle),
                             "last_activity": row["last_activity"],
                             "export_rule": thread_rule,
                             "default_export_rule": channel_effective,
                             "effective_export_rule": thread_effective,
                         }
                     )
+                lifecycle = media_lifecycle.get(("channel", str(channel["id"])), {})
                 channels.append(
                     {
                         "id": channel["id"],
@@ -104,6 +108,7 @@ class LibraryService:
                         "direct_message_count": int(channel["direct_message_count"]),
                         "message_count": int(channel["message_count"]),
                         "media_count": int(channel["media_count"]),
+                        **self._media_lifecycle_fields(lifecycle),
                         "last_activity": channel["last_activity"],
                         "export_rule": channel_rule,
                         "default_export_rule": guild_effective,
@@ -112,12 +117,14 @@ class LibraryService:
                     }
                 )
 
+            lifecycle = media_lifecycle.get(("guild", str(guild["id"])), {})
             result.append(
                 {
                     "id": guild["id"],
                     "name": guild["name"],
                     "message_count": int(guild["message_count"]),
                     "media_count": int(guild["media_count"]),
+                    **self._media_lifecycle_fields(lifecycle),
                     "last_activity": guild["last_activity"],
                     "export_rule": guild_rule,
                     "default_export_rule": self.DEFAULT_EFFECTIVE_MODE,
@@ -125,6 +132,71 @@ class LibraryService:
                     "channels": channels,
                 }
             )
+        return result
+
+
+    @staticmethod
+    def _media_lifecycle_fields(counts: dict) -> dict:
+        return {
+            "media_known": int(counts.get("known", 0)),
+            "media_cached": int(counts.get("cached", 0)),
+            "media_attention": int(counts.get("attention", 0)),
+            "media_ignored": int(counts.get("ignored", 0)),
+            "media_unresolved": int(counts.get("unresolved", 0)),
+        }
+
+    def _media_lifecycle_by_scope(self) -> dict[tuple[str, str], dict[str, int]]:
+        """Aggregate current media lifecycle state for each archive branch.
+
+        ``media_count`` remains the historical number of attachment rows. These
+        counters answer the more useful live question: how many attachments in
+        this guild/channel/thread are currently known, cached, actionable,
+        acknowledged, or waiting for a fresh Discord URL.
+        """
+        rows = self.connection.execute(
+            """
+            SELECT m.guild_id, m.parent_channel_id, m.thread_id,
+                   mo.state, mo.current_url
+            FROM media_refs mr
+            JOIN messages m ON m.id=mr.message_id
+            LEFT JOIN media_objects mo ON mo.media_key=mr.media_key
+            """
+        ).fetchall()
+
+        result: dict[tuple[str, str], dict[str, int]] = {}
+
+        def bump(scope: tuple[str, str], state: str, current_url: str | None) -> None:
+            counts = result.setdefault(
+                scope,
+                {"known": 0, "cached": 0, "attention": 0, "ignored": 0, "unresolved": 0},
+            )
+            normalized = str(state or "").upper()
+            has_url = bool(str(current_url or "").strip())
+            if normalized == "CACHED":
+                counts["cached"] += 1
+            if normalized == "CACHED" or (
+                has_url and normalized not in {"STALE_URL", "IGNORED", "UNRESOLVED"}
+            ):
+                counts["known"] += 1
+            if normalized in {"FAILED_PERMANENT", "STALE_URL"}:
+                counts["attention"] += 1
+            elif normalized == "IGNORED":
+                counts["ignored"] += 1
+            elif normalized == "UNRESOLVED":
+                counts["unresolved"] += 1
+
+        for row in rows:
+            guild_id = str(row["guild_id"] or "")
+            channel_id = str(row["parent_channel_id"] or "")
+            thread_id = str(row["thread_id"] or "")
+            state = row["state"] or ""
+            current_url = row["current_url"]
+            if guild_id:
+                bump(("guild", guild_id), state, current_url)
+            if channel_id:
+                bump(("channel", channel_id), state, current_url)
+            if thread_id:
+                bump(("thread", thread_id), state, current_url)
         return result
 
     def set_export_rule(self, scope_kind: str, scope_id: str, mode: str) -> None:
