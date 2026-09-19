@@ -54,9 +54,9 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", normal)
         self.assertIn("run_companion.pyw", normal)
-        self.assertIn("DDS Companion 0.5.7", normal)
+        self.assertIn("DDS Companion 0.5.8", normal)
         self.assertIn("python -m dds_companion.gui.app", debug)
-        self.assertIn("DDS Companion 0.5.7", debug)
+        self.assertIn("DDS Companion 0.5.8", debug)
 
     def test_050_first_run_gui_dependency_bootstrap_is_automatic(self):
         normal = (self.root / "run_companion.bat").read_text(encoding="utf-8")
@@ -242,6 +242,16 @@ class LibraryUx054SourceContractTests(unittest.TestCase):
         self.assertIn('QTreeWidget#LibraryTree::item:hover', theme)
         self.assertIn('archive_export_rules', service)
         self.assertIn('archive_export_rules', migrations)
+
+
+    def test_058_library_selection_is_explicit_click_only(self):
+        pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
+        library = pages[pages.index("class LibraryPage"):pages.index("class ActivityPage")]
+        self.assertIn("setSelectionMode(QAbstractItemView.NoSelection)", library)
+        self.assertIn("def _paint_explicit_selection", library)
+        self.assertIn("self._paint_explicit_selection(current)", library)
+        self.assertNotIn("self.tree.setCurrentItem(current)", library)
+        self.assertNotIn("current.setSelected(True)", library)
 
     def test_055_dashboard_uses_unambiguous_media_lifecycle_counts(self):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")

@@ -1,16 +1,6 @@
-DDS Companion 0.5.7 — Validation
+DDS Companion 0.5.8 — Validation
 
-- Full automated suite: 91/91 PASS x3.
-- compileall: PASS.
-- CLI --version: DDS Companion 0.5.7 PASS.
-- Library preview remains click-driven: PASS (source/regression contract).
-- Library hover no longer uses selection-like background: PASS (source contract).
-- Export UI is binary only: Не выгружать / Выгружать; legacy DEFAULT remains backend-compatible: PASS.
-- Library horizontal scroll disabled / export column fixed: PASS (source contract).
-- Discord custom emoji normalization before Qt Markdown: PASS (source contract).
-- Activity event column widened: PASS (source contract).
-- Plugin Health exposes capture_schema_version=2 and heartbeat_schema_version=plugin-heartbeat-v1: PASS.
-- Existing per-branch media lifecycle / scroll preservation / health dedup regressions: PASS.
-- Existing stale -> ignored -> unresolved -> fresh URL -> known lifecycle regression: PASS.
-- Schema compatibility: PASS; no database migration required.
-- Qt visual/live check: PENDING on Windows (PySide6 is not installed in the automation environment).
+- Focus: Windows Library visual selection must follow explicit clicks only.
+- Native QTreeWidget selection disabled; explicit clicked-row painting added.
+- Existing preview remains itemClicked-driven.
+- Full automated suite and compile/version/package checks are required before Windows promotion.

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtGui import QBrush, QColor, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -356,10 +356,14 @@ class LibraryPage(Page):
         self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа: известно / всего", "Выгрузка"])
         self.tree.setAlternatingRowColors(True)
         self.tree.setUniformRowHeights(False)
-        self.tree.setSelectionMode(QAbstractItemView.SingleSelection)
-        # The archive tree is a click target, not a hover-driven menu.  Keep the
-        # geometry stable and never let a stale horizontal scroll offset make the
-        # first column look selected/cropped when the pointer returns from preview.
+        self.tree.setSelectionMode(QAbstractItemView.NoSelection)
+        # The archive tree is a click target, not a hover-driven menu.  Native
+        # QTreeWidget selection/current-state painting can follow the mouse on
+        # Windows when rows contain embedded combo widgets, even though no content
+        # navigation signal is emitted.  Disable native selection entirely and
+        # paint only the last explicitly clicked row ourselves.
+        # Keep the geometry stable and never let a stale horizontal scroll offset
+        # make the first column look selected/cropped when the pointer returns.
         self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
         self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
@@ -482,8 +486,7 @@ class LibraryPage(Page):
         if selected_item is None and selected_key is not None:
             selected_item = self._find_item(selected_key)
         if selected_item is not None:
-            self.tree.setCurrentItem(selected_item)
-            selected_item.setSelected(True)
+            self._paint_explicit_selection(selected_item)
             detail = selected_item.data(0, Qt.UserRole + 1)
             if isinstance(detail, dict):
                 self._selected_detail = detail
@@ -501,8 +504,7 @@ class LibraryPage(Page):
         elif not self.tree.topLevelItemCount():
             self._show_empty_messages("Архив пока пуст.")
         else:
-            self.tree.clearSelection()
-            self.tree.setCurrentItem(None)
+            self._paint_explicit_selection(None)
             self._show_empty_messages("Выберите канал или тему слева.")
         self.tree.blockSignals(False)
         self.tree.setUpdatesEnabled(True)
@@ -608,14 +610,31 @@ class LibraryPage(Page):
         if self.on_export_rule_changed is not None:
             self.on_export_rule_changed(detail["kind"], detail["id"], mode)
 
+    def _paint_explicit_selection(self, selected: QTreeWidgetItem | None) -> None:
+        selected_brush = QBrush(QColor("#242b40"))
+        clear_brush = QBrush()
+
+        def walk(item: QTreeWidgetItem) -> None:
+            brush = selected_brush if item is selected else clear_brush
+            # The fourth column is occupied by a real QComboBox widget.  Paint the
+            # data columns only; this gives a stable explicit-click marker without
+            # fighting the embedded control's own palette.
+            for column in range(3):
+                item.setBackground(column, brush)
+            for child_index in range(item.childCount()):
+                walk(item.child(child_index))
+
+        root = self.tree.invisibleRootItem()
+        for top_index in range(root.childCount()):
+            walk(root.child(top_index))
+
     def _item_clicked(self, current: QTreeWidgetItem, column: int) -> None:
         del column
         detail = current.data(0, Qt.UserRole + 1)
         if not isinstance(detail, dict):
             return
         self._selected_key = str(current.data(0, Qt.UserRole) or "") or None
-        self.tree.setCurrentItem(current)
-        current.setSelected(True)
+        self._paint_explicit_selection(current)
         self._selected_detail = detail
         self._generation += 1
         self._messages = []
