@@ -1,6 +1,22 @@
-DDS Companion 0.5.8 — Validation
+DDS Companion 0.6.0 — Validation
+================================
 
-- Focus: Windows Library visual selection must follow explicit clicks only.
-- Native QTreeWidget selection disabled; explicit clicked-row painting added.
-- Existing preview remains itemClicked-driven.
-- Full automated suite and compile/version/package checks are required before Windows promotion.
+Status: AUTOMATED FOUNDATION PASS / WINDOWS BUILD + LIVE GATE PENDING
+
+Automated:
+- 101/101 tests PASS repeated three times
+- compileall PASS
+- CLI version reports DDS Companion 0.6.0
+- 0.5.8 behavior regression baseline preserved
+- DataRoot Installed/Portable/custom resolution tests PASS
+- approved branding asset contract PASS
+- PyInstaller DDS.exe/icon/version-resource source contract PASS
+
+Not yet claimable in this environment:
+- native Windows DDS.exe build execution
+- Windows Properties/Version resource visual check
+- taskbar / Alt+Tab / AppUserModelID live behavior
+- real %LOCALAPPDATA%\DDS_Companion archive live run via DDS.exe
+- Portable relocation test on Windows
+
+Promotion remains blocked until Windows live validation passes.

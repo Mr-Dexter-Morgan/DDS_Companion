@@ -74,11 +74,9 @@ QFrame[card="true"] {{
 QFrame[card="true"]:hover {{ border-color: #30394d; }}
 QLabel#BrandMark {{
     color: white;
-    background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {ACCENT}, stop:1 {ACCENT_2});
-    border-radius: 10px;
-    font-size: 11pt;
-    font-weight: 800;
-    padding: 4px;
+    background: transparent;
+    border: none;
+    padding: 0;
 }}
 QLabel#BrandTitle {{ font-size: 13pt; font-weight: 700; color: {TEXT}; }}
 QLabel#BrandSub {{ font-size: 9pt; color: {MUTED}; }}

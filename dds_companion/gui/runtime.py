@@ -39,6 +39,7 @@ class GuiRuntime:
         *,
         dds_data: str | Path | None = None,
         app_data: str | Path | None = None,
+        portable: bool = False,
         poll_ms: int = 750,
         settle_ms: int = 500,
         snapshot_sink: SnapshotSink | None = None,
@@ -48,7 +49,7 @@ class GuiRuntime:
         stopped_sink: StoppedSink | None = None,
         library_message_sink: LibraryMessageSink | None = None,
     ):
-        self.paths: RuntimePaths = build_runtime_paths(dds_data, app_data)
+        self.paths: RuntimePaths = build_runtime_paths(dds_data, app_data, portable=portable)
         self.poll_ms = max(100, int(poll_ms))
         self.settle_ms = max(50, int(settle_ms))
         self.snapshot_sink = snapshot_sink
@@ -377,6 +378,8 @@ class GuiRuntime:
                 "backups": str(self.paths.backups),
                 "config": str(self.paths.config),
                 "settings": str(self.paths.settings),
+                "deployment_profile": self.paths.deployment_profile,
+                "application_dir": str(self.paths.application_dir or ""),
             },
             "watcher": {"poll_ms": self.poll_ms, "settle_ms": self.settle_ms},
             "stats": stats.snapshot(force_storage=force).to_dict(),

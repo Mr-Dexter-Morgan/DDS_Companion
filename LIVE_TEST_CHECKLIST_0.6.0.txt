@@ -1,0 +1,48 @@
+DDS Companion 0.6.0 — Windows EXE Live Gate
+============================================
+
+Required baseline:
+- DDS Plugin 0.5.3 current
+- real existing DDS Companion 0.5.8 archive/data preserved
+
+0. BUILD
+[ ] Run build_windows.bat successfully.
+[ ] dist\DDS\DDS.exe exists.
+[ ] Product starts by double-clicking DDS.exe; BAT/pythonw is not used for the live gate.
+
+1. WINDOWS IDENTITY
+[ ] Explorer shows the approved hooded-snatcher DDS icon.
+[ ] Taskbar shows the same DDS icon.
+[ ] Alt+Tab shows the same DDS identity.
+[ ] File Properties -> Details reports DDS — Discord Data Snatcher and version 0.6.0.
+[ ] No duplicate/anonymous Python taskbar identity appears.
+
+2. INSTALLED DATAROOT — NON-DESTRUCTIVE
+[ ] Normal DDS.exe resolves DataRoot to %LOCALAPPDATA%\DDS_Companion.
+[ ] Existing settings.json is preserved and loaded.
+[ ] Existing dds.sqlite3 is preserved and opened in place.
+[ ] Existing media cache remains visible.
+[ ] No empty parallel archive/data tree is created elsewhere.
+
+3. FUNCTIONAL REGRESSION
+[ ] Library servers/channels/threads and message preview are intact.
+[ ] Existing cached images render in archived message context.
+[ ] Media Lifecycle counters remain coherent.
+[ ] Watcher/import reacts to fresh DDS_Data changes.
+[ ] Activity, Status and Diagnostics remain responsive.
+[ ] Normal close exits cleanly with no traceback/hung background worker.
+
+4. BRANDING / DIAGNOSTICS
+[ ] Sidebar uses the approved DDS icon.
+[ ] Diagnostics shows the DDS — Discord Data Snatcher identity/logo card.
+[ ] Diagnostics report shows Companion 0.6.0.
+[ ] Diagnostics report shows deployment profile = installed and correct application directory.
+
+5. PORTABLE FOUNDATION
+[ ] Launch DDS.exe with --portable in an isolated copy/test folder.
+[ ] Portable DataRoot resolves to <app dir>\Data.
+[ ] config/database/media/cache/logs/backups are created only below that Data directory.
+[ ] Installed %LOCALAPPDATA% archive is not modified by the isolated portable test.
+
+PROMOTION GATE
+Only after all applicable items PASS may 0.6.0 be marked VERIFIED / LIVE TESTED and prepared for GitHub Release v0.6.0.

@@ -7,7 +7,7 @@ import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
-from PySide6.QtGui import QCloseEvent, QGuiApplication, QResizeEvent, QShowEvent
+from PySide6.QtGui import QCloseEvent, QGuiApplication, QPixmap, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from dds_companion import __version__
+from dds_companion.core.identity import APPLICATION_DISPLAY_NAME, resource_path
 from dds_companion.core.paths import build_runtime_paths
 from dds_companion.core.settings import SettingsStore
 from dds_companion.services.media_cache_service import MediaCacheService
@@ -47,9 +48,9 @@ class MainWindow(QMainWindow):
     PAGE_NAMES = ("Dashboard", "Library", "Activity", "Health", "Settings")
     PAGE_LABELS = ("Главная", "Библиотека", "Активность", "Статус", "Настройки")
 
-    def __init__(self, *, dds_data: str | None = None, app_data: str | None = None, poll_ms: int = 750, settle_ms: int = 500):
+    def __init__(self, *, dds_data: str | None = None, app_data: str | None = None, portable: bool = False, poll_ms: int = 750, settle_ms: int = 500):
         super().__init__()
-        self.setWindowTitle(f"DDS Companion {__version__}")
+        self.setWindowTitle(f"{APPLICATION_DISPLAY_NAME} · v{__version__}")
         self.setMinimumSize(960, 600)
         self._layout_profile: str | None = None
         self._screen_signals_connected = False
@@ -57,13 +58,14 @@ class MainWindow(QMainWindow):
         self._startup_foreground_attempted = False
 
         self.bus = SignalBus()
-        self.paths = build_runtime_paths(dds_data, app_data)
+        self.paths = build_runtime_paths(dds_data, app_data, portable=portable)
         self.settings_store = SettingsStore(self.paths.settings)
         self.media_cache = MediaCacheService(self.paths.media, self.paths.database)
         self._last_diagnostics_report = ""
         self.runtime = GuiRuntime(
             dds_data=dds_data,
             app_data=app_data,
+            portable=portable,
             poll_ms=poll_ms,
             settle_ms=settle_ms,
             snapshot_sink=self.bus.snapshot.emit,
@@ -89,6 +91,8 @@ class MainWindow(QMainWindow):
                 "backups": str(self.paths.backups),
                 "config": str(self.paths.config),
                 "settings": str(self.paths.settings),
+                "deployment_profile": self.paths.deployment_profile,
+                "application_dir": str(self.paths.application_dir or ""),
             },
             "settings": self.settings_store.snapshot(),
         }
@@ -118,10 +122,15 @@ class MainWindow(QMainWindow):
 
         brand = QHBoxLayout()
         brand.setSpacing(10)
-        mark = QLabel("DDS")
+        mark = QLabel()
         mark.setObjectName("BrandMark")
-        mark.setFixedSize(44, 36)
+        mark.setFixedSize(44, 44)
         mark.setAlignment(Qt.AlignCenter)
+        brand_pixmap = QPixmap(str(resource_path("assets/DDS_app_icon_master.png")))
+        if not brand_pixmap.isNull():
+            mark.setPixmap(brand_pixmap.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            mark.setText("DDS")
         brand_text = QVBoxLayout()
         brand_text.setSpacing(0)
         title = QLabel("DDS")
@@ -603,6 +612,8 @@ class MainWindow(QMainWindow):
             f"DDS_Data path: {paths.get('dds_data', '—')}",
             f"App data path: {paths.get('app_data', '—')}",
             f"Settings path: {self.paths.settings}",
+            f"Deployment profile: {paths.get('deployment_profile', self.paths.deployment_profile)}",
+            f"Application dir: {paths.get('application_dir', str(self.paths.application_dir or '—'))}",
         ]
         settings_error = self.settings_store.last_load_error
         if settings_error:

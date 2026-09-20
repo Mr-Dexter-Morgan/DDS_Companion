@@ -37,6 +37,7 @@ def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="DDS Companion — local DDS archive processor")
     parser.add_argument("--dds-data", help="Path to DDS_Data. Defaults to BetterDiscord/DDS_Data.")
     parser.add_argument("--app-data", help="DDS Companion runtime data root.")
+    parser.add_argument("--portable", action="store_true", help="Use Data next to DDS.exe as the Companion data root.")
     parser.add_argument(
         "--once",
         action="store_true",
@@ -200,7 +201,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.settle_ms < 50:
         raise SystemExit("--settle-ms must be at least 50")
 
-    paths = build_runtime_paths(args.dds_data, args.app_data)
+    paths = build_runtime_paths(args.dds_data, args.app_data, portable=args.portable)
     ensure_runtime_dirs(paths)
 
     connection = connect_database(paths.database)

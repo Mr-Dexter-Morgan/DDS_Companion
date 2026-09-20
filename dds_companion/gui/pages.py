@@ -31,6 +31,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dds_companion.core.identity import APPLICATION_DISPLAY_NAME, resource_path
+
 from .theme import ACCENT, BORDER, DANGER, INFO, MUTED, SUCCESS, TEXT, WARNING
 from .widgets import (
     Card,
@@ -1647,6 +1649,27 @@ class SettingsPage(Page):
         archive_layout.addStretch(1)
 
         diagnostics, diag_layout = self._make_scroll_page()
+        identity_card = Card()
+        identity_layout = QHBoxLayout(identity_card)
+        identity_layout.setContentsMargins(16, 14, 16, 14)
+        identity_layout.setSpacing(14)
+        identity_logo = QLabel()
+        identity_logo.setFixedSize(72, 72)
+        identity_logo.setAlignment(Qt.AlignCenter)
+        identity_pixmap = QPixmap(str(resource_path("assets/DDS_app_icon_master.png")))
+        if not identity_pixmap.isNull():
+            identity_logo.setPixmap(identity_pixmap.scaled(68, 68, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        identity_text = QVBoxLayout()
+        identity_text.setSpacing(3)
+        identity_title = QLabel(APPLICATION_DISPLAY_NAME)
+        identity_title.setStyleSheet(f"color:{TEXT};font-size:15pt;font-weight:750;")
+        identity_subtitle = QLabel("Companion · локальный архив и медиаслой DDS")
+        identity_subtitle.setObjectName("SectionHint")
+        identity_text.addWidget(identity_title)
+        identity_text.addWidget(identity_subtitle)
+        identity_layout.addWidget(identity_logo)
+        identity_layout.addLayout(identity_text, 1)
+        diag_layout.addWidget(identity_card)
         diag_layout.addWidget(SectionHeader("Диагностика", "Логи, отчёт и безопасные проверки"))
         self.diag_rows: dict[str, PathRow] = {}
         for key, label in [
