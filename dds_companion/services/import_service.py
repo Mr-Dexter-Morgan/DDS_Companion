@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,6 +14,20 @@ from dds_companion.services.media_registry_service import MediaRegistryService
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _canonical_failure_target(target: str | Path) -> str:
+    """Return one stable path key for durable failure matching.
+
+    Windows can expose the same file through short (8.3), long, relative, or
+    differently-cased spellings. Normalizing both the failure record and the
+    later successful import keeps recovery bookkeeping independent of spelling.
+    """
+    raw = str(target)
+    try:
+        return os.path.normcase(os.path.realpath(os.path.abspath(raw)))
+    except (OSError, TypeError, ValueError):
+        return raw
 
 
 @dataclass
@@ -362,9 +377,10 @@ class ImportService:
 
     def _resolve_failures_for_target(self, target: str, resolved_at: str | None = None) -> None:
         stamp = resolved_at or utc_now()
+        target_key = _canonical_failure_target(target)
         self.connection.execute(
             "UPDATE failed_jobs SET resolved_at=? WHERE target=? AND resolved_at IS NULL",
-            (stamp, target),
+            (stamp, target_key),
         )
         unresolved = self.connection.execute(
             "SELECT COUNT(*) FROM failed_jobs WHERE resolved_at IS NULL"
@@ -377,6 +393,7 @@ class ImportService:
     def record_failure(self, job_kind: str, target: str, exc: Exception) -> None:
         error_type = type(exc).__name__
         error_message = str(exc)
+        target_key = _canonical_failure_target(target)
         with self.connection:
             duplicate = self.connection.execute(
                 """
@@ -385,7 +402,7 @@ class ImportService:
                   AND resolved_at IS NULL
                 LIMIT 1
                 """,
-                (job_kind, target, error_type, error_message),
+                (job_kind, target_key, error_type, error_message),
             ).fetchone()
             if duplicate is None:
                 self.connection.execute(
@@ -393,6 +410,6 @@ class ImportService:
                     INSERT INTO failed_jobs(job_kind, target, error_type, error_message, created_at)
                     VALUES(?, ?, ?, ?, ?)
                     """,
-                    (job_kind, target, error_type, error_message, utc_now()),
+                    (job_kind, target_key, error_type, error_message, utc_now()),
                 )
             self._set_state("last_error", f"{error_type}: {error_message}")
