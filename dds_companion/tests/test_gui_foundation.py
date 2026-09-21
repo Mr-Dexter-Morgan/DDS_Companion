@@ -6,10 +6,12 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timezone
 from pathlib import Path
 
 from dds_companion.gui.runtime import GuiRuntime
+from dds_companion.services.discord_probe import DiscordProbeResult
 from dds_companion.services.import_service import ImportService
 from dds_companion.services.library_service import LibraryService
 from dds_companion.storage.database import connect_database
@@ -19,6 +21,18 @@ from dds_companion.tests.test_imports import sample_capture
 class LibraryServiceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.discord_probe = patch(
+            "dds_companion.services.health_service.probe_discord_process",
+            return_value=DiscordProbeResult(
+                state="UNKNOWN",
+                summary="Discord process probe isolated for tests",
+                checked_at="2026-09-21T00:00:00+00:00",
+            ),
+        )
+        self.discord_probe.start()
+        self.addCleanup(self.discord_probe.stop)
+
         self.root = Path(self.tmp.name)
         self.conn = connect_database(self.root / "archive.sqlite3")
         self.importer = ImportService(self.conn)
@@ -206,8 +220,12 @@ class GuiRuntimeTests(unittest.TestCase):
         self.capture_path = capture_dir / "capture.json"
         self.capture_path.write_text(json.dumps(sample_capture()), encoding="utf-8")
 
-    def tearDown(self):
-        self.tmp.cleanup()
+    def _start_runtime(self, runtime: GuiRuntime) -> threading.Thread:
+        thread = self._start_runtime(runtime)
+        # unittest cleanups run LIFO: stop first, then join, then temp-dir cleanup.
+        self.addCleanup(thread.join, 5.0)
+        self.addCleanup(runtime.stop)
+        return thread
 
     def test_runtime_emits_real_snapshot_and_stops_cleanly(self):
         snapshots: list[dict] = []
@@ -229,8 +247,7 @@ class GuiRuntimeTests(unittest.TestCase):
             activity_sink=activities.append,
             stopped_sink=stopped.set,
         )
-        thread = threading.Thread(target=runtime.run)
-        thread.start()
+        thread = self._start_runtime(runtime)
         self.assertTrue(ready.wait(3.0), "GUI runtime did not reach RUNNING")
         runtime.stop()
         thread.join(3.0)
@@ -308,8 +325,7 @@ class GuiRuntimeTests(unittest.TestCase):
             snapshot_sink=on_snapshot,
             library_message_sink=on_page,
         )
-        thread = threading.Thread(target=runtime.run)
-        thread.start()
+        thread = self._start_runtime(runtime)
         self.assertTrue(running.wait(3.0), "runtime did not start")
 
         runtime.request_library_messages({
@@ -345,8 +361,7 @@ class GuiRuntimeTests(unittest.TestCase):
             settle_ms=50,
             activity_sink=on_activity,
         )
-        thread = threading.Thread(target=runtime.run)
-        thread.start()
+        thread = self._start_runtime(runtime)
 
         # Wait until the initial import is complete before publishing a changed
         # snapshot with one additional Discord message.
