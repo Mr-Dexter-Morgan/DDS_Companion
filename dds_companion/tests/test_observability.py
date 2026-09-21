@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dds_companion.services.activity_service import ActivityService
+from dds_companion.services.discord_probe import DiscordProbeResult
 from dds_companion.services.health_service import HealthService
 from dds_companion.services.import_service import ImportService
 from dds_companion.services.runtime_monitor import RuntimeMonitor
@@ -20,6 +23,17 @@ from dds_companion.watcher.file_events import WatcherEvent
 
 class ObservabilityTests(unittest.TestCase):
     def setUp(self):
+        self.discord_probe = patch(
+            "dds_companion.services.health_service.probe_discord_process",
+            return_value=DiscordProbeResult(
+                state="UNKNOWN",
+                summary="Discord process probe isolated for tests",
+                checked_at="2026-09-21T00:00:00+00:00",
+            ),
+        )
+        self.discord_probe.start()
+        self.addCleanup(self.discord_probe.stop)
+
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.dds = self.root / "DDS_Data"
@@ -152,7 +166,8 @@ class ObservabilityTests(unittest.TestCase):
 
     def test_last_error_info_has_subsystem_and_clears_after_recovery(self):
         path = self.write_capture("bad then good")
-        self.importer.record_failure("watcher_import", str(path), ValueError("broken capture"))
+        relative_target = os.path.relpath(path, Path.cwd())
+        self.importer.record_failure("watcher_import", relative_target, ValueError("broken capture"))
         failed = self.health.snapshot(watcher_expected=False)
         self.assertEqual(failed["last_error_info"]["subsystem"], "watcher_import")
         self.assertIn("broken capture", failed["last_error_info"]["message"])
