@@ -25,8 +25,8 @@ This Git history was reconstructed from preserved DDS Companion source snapshots
 | `v0.5.8` | 2026-09-19 | Explicit Library selection hotfix; live-tested prototype |
 | `v0.6.0` | 2026-09-20 | Application foundation + native Windows EXE |
 | `v0.6.1` | 2026-09-21 | Archive reset boundary + passive media rediscovery |
-| `v0.6.2` | 2026-09-21 | Manual ZIP export + branch management + branding + redirected Documents fix |
+| `v0.6.2` | 2026-09-21 | Manual ZIP export + branch management + branding + redirected Documents + Windows recovery hardening |
 
 The archived `CHANGELOG.txt`, validation files, live-test checklists and contracts inside each tagged tree provide the detailed record for that milestone.
 
-`v0.6.2` is intentionally tagged on the release-preparation commit immediately after the preserved candidate-r2 snapshot so the published source also contains the public README, history note, CI workflow and release notes.
+`v0.6.2` is tagged on the validated Public Preview release commit. That commit layers release documentation, Windows CI hardening and packaging metadata on top of the preserved candidate-r2 source snapshot.

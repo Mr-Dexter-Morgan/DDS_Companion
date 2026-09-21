@@ -114,3 +114,58 @@ jobs:
             DDS-0.6.2-windows-x64.zip.sha256
           if-no-files-found: error
           retention-days: 14
+
+  publish-0-6-2:
+    name: Publish v0.6.2 public preview
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Publish v0.6.2 public preview'
+    needs: test-build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout validated release commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download validated Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DDS-0.6.2-windows-x64
+          path: release-artifacts
+
+      - name: Move v0.6.2 tag to validated release commit
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --tags --force
+          git tag -fa v0.6.2 "$env:GITHUB_SHA" -m "DDS Companion v0.6.2 — Public Preview"
+          git push --force origin refs/tags/v0.6.2
+
+      - name: Publish GitHub pre-release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = (Resolve-Path "release-artifacts/DDS-0.6.2-windows-x64.zip").Path
+          $sha = (Resolve-Path "release-artifacts/DDS-0.6.2-windows-x64.zip.sha256").Path
+
+          gh release view v0.6.2 --json tagName *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "GitHub Release v0.6.2 already exists; refusing to replace it automatically"
+          }
+
+          gh release create v0.6.2 $zip $sha `
+            --title "DDS Companion v0.6.2 — Public Preview" `
+            --notes-file "RELEASE_NOTES_0.6.2.md" `
+            --prerelease `
+            --verify-tag
+
+          $release = gh release view v0.6.2 --json tagName,name,isDraft,isPrerelease,url,assets | ConvertFrom-Json
+          if ($release.tagName -ne "v0.6.2") { throw "Release tag verification failed" }
+          if ($release.isDraft) { throw "Release unexpectedly remained a draft" }
+          if (-not $release.isPrerelease) { throw "Release is not marked as a pre-release" }
+          if (($release.assets | Measure-Object).Count -lt 2) { throw "Expected ZIP and SHA256 release assets" }
+          Write-Host "Published $($release.url)"
