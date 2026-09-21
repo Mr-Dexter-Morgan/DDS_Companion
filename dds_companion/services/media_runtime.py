@@ -49,12 +49,20 @@ class MediaBackfillRuntime:
             cache_maintenance = MediaCacheService(self.media_root, self.database_path)
             health.set_subsystem("media", "STARTING", "media backfill worker starting")
             projected = service.registry.bootstrap_from_archive()
+            normalized_expired = service.registry.normalize_expired_urls()
             if projected:
                 activity.publish(
                     subsystem="media",
                     event_type="media_registry_bootstrap",
                     summary=f"Media registry projected {projected} existing attachment(s)",
                     details={"attachments_projected": projected},
+                )
+            if normalized_expired:
+                activity.publish(
+                    subsystem="media",
+                    event_type="media_expired_urls_normalized",
+                    summary=f"Moved {normalized_expired} expired Discord URL(s) to rediscovery wait",
+                    details={"changed": normalized_expired},
                 )
             last_enabled: bool | None = None
             last_maintenance = 0.0
@@ -165,6 +173,7 @@ class MediaBackfillRuntime:
                             details={
                                 **counts,
                                 "attention_items": service.issue_items(limit=500),
+                                "rediscovery_items": service.registry.rediscovery_items(limit=500),
                                 "attention_count": counts["attention"],
                             },
                         )
@@ -201,7 +210,7 @@ class MediaBackfillRuntime:
                     counts = service.counts()
                     attention_items = service.issue_items(limit=500)
                     attention_count = counts["attention"]
-                    limited = counts["retryable_failed"] + counts["permanent_failed"] + counts["stale_url"]
+                    limited = counts["retryable_failed"] + counts["permanent_failed"]
                     state = "LIMITED" if limited else "RUNNING"
                     summary = (
                         f"Всего: {counts['total']} · известно: {counts['known']} · кэшировано: {counts['cached']}"
@@ -221,6 +230,7 @@ class MediaBackfillRuntime:
                             **counts,
                             "attention_count": attention_count,
                             "attention_items": attention_items,
+                            "rediscovery_items": service.registry.rediscovery_items(limit=500),
                             "last_cycle": cycle.to_dict(),
                         },
                     )

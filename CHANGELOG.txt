@@ -1,54 +1,63 @@
-DDS Companion 0.6.0 — Application Foundation / Native Windows EXE candidate
-=========================================================================
+DDS Companion 0.6.1 — Polish / Archive Reset / Media Recovery candidate
+=======================================================================
 
-Status: FOUNDATION SOURCE READY / WINDOWS EXE BUILD + LIVE GATE PENDING
-Base: DDS Companion 0.5.8 VERIFIED / LIVE TESTED / FULLY WORKING PROTOTYPE
+Status: SOURCE CANDIDATE / WINDOWS BUILD + LIVE GATE PENDING
+Base: DDS Companion 0.6.0 native-EXE/Application Foundation
+Public GitHub release: DEFERRED until explicitly reopened by the user
 
-Branding / Windows identity
----------------------------
-- Approved DDS hooded-snatcher artwork is now the canonical application icon.
-- Added packaged assets/DDS.ico and DDS_app_icon_master.png.
-- Product identity fixed as: DDS — Discord Data Snatcher.
-- Windows executable name fixed as: DDS.exe.
-- Stable AppUserModelID: DDS.DiscordDataSnatcher.Companion.
-- GUI loads the approved asset instead of generating the old DDS text icon at runtime.
-- Sidebar branding now uses the approved artwork.
-- Diagnostics now includes a product identity/logo card.
-
-Application foundation / DataRoot
----------------------------------
-- Added one deployment-neutral DataRoot/path-provider boundary.
-- Installed profile preserves the existing data root exactly:
-  %LOCALAPPDATA%\DDS_Companion
-- Portable profile resolves durable data relative to the application directory:
-  <DDS app dir>\Data\...
-- Explicit --app-data remains a development/diagnostic override.
-- All logical config/database/media/cache/logs/backups paths derive from the same resolved root.
-- Runtime snapshots/diagnostics expose deployment profile and application directory.
-- Added --portable to GUI and CLI launch paths.
-
-Native EXE build contract
--------------------------
-- Added DDS.spec for an inspectable PyInstaller onedir build.
-- Added Windows version resource with ProductName/FileDescription/FileVersion/ProductVersion.
-- Added build_windows.bat and isolated build requirements.
-- EXE build includes the approved DDS.ico and packaged UI master artwork.
-- BAT/pythonw remains only as source/development compatibility while the packaged product path moves to DDS.exe.
-
-Compatibility
+Archive reset
 -------------
-- Archive/database/media semantics from 0.5.8 are intentionally unchanged.
-- Existing Installed data is not moved, reset or copied.
-- Plugin 0.5.3 contract is unchanged.
-- SQLite schema remains unchanged.
+- Added a separate destructive action: «Сбросить локальный архив».
+- Cache clear and archive reset are now explicitly different operations.
+- Full reset removes SQLite + WAL/SHM sidecars and local media cache while preserving settings.
+- Reset stops the runtime first, waits for SQLite/watcher/media workers to release files, recreates a clean current-schema DB, then restarts the runtime.
+- Added a reset-boundary marker outside SQLite so pre-reset DDS_Data captures are NOT immediately re-imported after a clean-slate reset.
+- When Plugin later rewrites/touches a capture after the boundary, it becomes eligible for import again.
+
+Expired Discord media URLs
+--------------------------
+- HTTP 401/403/404 from Discord media are now treated as expired-link rediscovery, not as a fake manual decision.
+- Confirmed expired links move directly to UNRESOLVED / «ожидает переобнаружения».
+- Dead signed URLs are cleared from the active row so the downloader cannot loop on the same URL.
+- Expired-link rows no longer appear in the normal action-required issue queue.
+- Legacy STALE_URL / stale-url IGNORED rows are normalized to the passive rediscovery state at media-runtime startup.
+- Fresh Plugin observation of the same stable attachment can promote it back to KNOWN and then CACHED.
+- Retry remains available for genuinely transient failures such as network errors / temporary server failures.
+- Diagnostics snapshot keeps passive rediscovery items with filename, state, HTTP status, failure class, timestamp, media key and last error.
+
+UI / product polish
+-------------------
+- Removed the secondary «Companion» label from sidebar branding; public identity is DDS — Discord Data Snatcher.
+- Qt application display name is now DDS, while the explicit main-window title remains the full product name + version. This avoids the duplicate Windows title observed in the 0.6.0 live build.
+- Public GUI dialog titles use DDS rather than competing DDS Companion branding.
+- Storage session delta is now semantic:
+  - decrease -> «Освобождено за сессию: …»
+  - increase -> «Добавлено за сессию: …»
+  - tiny/no change -> «Без изменений за сессию».
+
+Safety / regression hardening
+-----------------------------
+- Runtime/media UI actions tolerate the runtime being temporarily unavailable during archive reset/restart.
+- Installed DataRoot, Portable foundation, approved DDS icon, DDS.exe identity, archive schema and existing Library/Activity/Status/Diagnostics contracts remain unchanged.
+
+Open 0.6.1 scope item requiring one product decision
+----------------------------------------------------
+- The earlier note «только кэш / только текст / как выбрано в Библиотеке» is intentionally NOT wired into importer code yet.
+- The current Library «Выгрузка» column is an export-selection contract (archive_export_rules), not an import contract.
+- Reusing those export rules to suppress local archive import would mix two different data boundaries and could silently omit archive data.
+- Before this item is implemented, confirm whether those three modes belong to EXPORT/Cloud Export rather than local import.
 
 Automated validation
 --------------------
-- Existing 92-test 0.5.8 regression baseline preserved.
-- Added 9 tests for 0.6.0 version, DataRoot profiles, branding identity/assets and PyInstaller contract.
-- Total automated suite: 101 tests.
+- 106/106 tests PASS repeated three times.
+- Packaged ZIP extracted and 106/106 tests PASS repeated three times.
+- compileall PASS in source and extracted package.
+- CLI version: DDS Companion 0.6.1 PASS.
+- Existing media recovery, archive, GUI-source, DataRoot and packaging regressions remain green.
 
 Remaining gate
 --------------
-Build dist\DDS\DDS.exe on Windows, then run the real existing archive/live UX gate.
-Do not publish GitHub Release v0.6.0 before the EXE passes that gate.
+- Resolve the one import-vs-export mode decision above.
+- Build dist\DDS\DDS.exe on Windows.
+- Run the 0.6.1 live checklist against real data.
+- After user approval, freeze a LOCAL validated 0.6.1 baseline only. GitHub publication remains deferred.

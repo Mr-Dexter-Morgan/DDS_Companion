@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     set_windows_app_user_model_id()
     app = QApplication(sys.argv[:1])
     app.setApplicationName(APPLICATION_NAME)
-    app.setApplicationDisplayName(APPLICATION_DISPLAY_NAME)
+    app.setApplicationDisplayName(APPLICATION_NAME)
     app.setOrganizationName("DDS")
     app.setStyle("Fusion")
     app.setStyleSheet(APP_STYLESHEET)

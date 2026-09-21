@@ -17,23 +17,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from dds_companion.core.formatting import human_size, human_storage_delta
+
 from .theme import ACCENT, DANGER, DIM, INFO, MUTED, SUCCESS, TEXT, WARNING
-
-
-def human_size(value: int | float | None) -> str:
-    if value is None:
-        return "—"
-    number = float(value)
-    sign = "-" if number < 0 else ""
-    number = abs(number)
-    units = ("B", "KB", "MB", "GB", "TB")
-    for unit in units:
-        if number < 1024 or unit == units[-1]:
-            if unit == "B":
-                return f"{sign}{int(number)} B"
-            return f"{sign}{number:.2f} {unit}"
-        number /= 1024
-    return f"{sign}{number:.2f} TB"
 
 
 def signed_size(value: int | float | None) -> str:
@@ -165,9 +151,9 @@ def human_activity_summary(event: dict | None) -> str:
             f"{int(event.get('messages_refreshed') or 0)} обновлено"
         )
     if event_type == "session_started":
-        return "DDS Companion запущен"
+        return "DDS запущен"
     if event_type in {"session_stopped", "session_completed"}:
-        return "DDS Companion завершил работу штатно"
+        return "DDS завершил работу штатно"
     if event_type == "media_backfill_enabled":
         return "Автоматическая загрузка медиа включена"
     if event_type == "media_backfill_disabled":
@@ -437,7 +423,7 @@ class PathRow(Card):
     def open_path(self) -> None:
         ok, detail = open_folder(self.path)
         if not ok:
-            QMessageBox.warning(self, "DDS Companion", detail)
+            QMessageBox.warning(self, "DDS", detail)
 
 
 class StorageDonut(QWidget):

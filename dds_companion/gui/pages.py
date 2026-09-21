@@ -49,6 +49,7 @@ from .widgets import (
     human_activity_summary,
     human_health_summary,
     human_size,
+    human_storage_delta,
     local_time,
     set_state_property,
     signed_size,
@@ -259,7 +260,7 @@ class DashboardPage(Page):
 
         self.storage_card.set_data(
             human_size(stats.get("total_known_storage_bytes", 0)),
-            f"за сессию {signed_size(stats.get('session_storage_delta_bytes', 0))}",
+            human_storage_delta(stats.get("session_storage_delta_bytes", 0), sentence_case=False),
         )
         self.messages_card.set_data(
             f"{int(stats.get('messages', 0)):,}".replace(",", " "),
@@ -292,7 +293,7 @@ class DashboardPage(Page):
             ("Прочее", int(stats.get("other_bytes", 0)), WARNING),
             ("Логи", int(stats.get("logs_bytes", 0)), MUTED),
         ])
-        self.session_storage.setText(f"За сессию: {signed_size(stats.get('session_storage_delta_bytes', 0))}")
+        self.session_storage.setText(human_storage_delta(stats.get("session_storage_delta_bytes", 0)))
         self.session_messages.setText(f"+{stats.get('session_messages_added', 0)} сообщений")
         self.session_imports.setText(f"+{stats.get('session_imports_added', 0)} импортов")
         self.session_events.setText(f"+{stats.get('session_activity_events_added', 0)} событий активности")
@@ -1269,7 +1270,7 @@ class HealthPage(Page):
             return
         answer = QMessageBox.question(
             self,
-            "DDS Companion — Игнорировать медиафайл",
+            "DDS — Игнорировать медиафайл",
             "Игнорировать эту проблему?\n\n"
             "Запись останется в архиве. Затем её можно либо повторить вручную, либо убрать из списка "
             "кнопкой «Очистить обработанные» и ждать свежую ссылку Discord.",
@@ -1284,7 +1285,7 @@ class HealthPage(Page):
             return
         answer = QMessageBox.question(
             self,
-            "DDS Companion — Игнорировать все проблемы",
+            "DDS — Игнорировать все проблемы",
             f"Игнорировать все текущие проблемы ({self._media_attention_count})?\n\n"
             "Они останутся как обработанные, пока ты не нажмёшь «Очистить обработанные».",
             QMessageBox.Yes | QMessageBox.No,
@@ -1298,7 +1299,7 @@ class HealthPage(Page):
             return
         answer = QMessageBox.question(
             self,
-            "DDS Companion — Очистить обработанные",
+            "DDS — Очистить обработанные",
             f"Очистить обработанные записи ({self._media_ignored_count})?\n\n"
             "Старые ссылки будут забыты, а сами вложения останутся в архиве в состоянии "
             "«Ждёт переобнаружения». Они снова станут известными только после получения свежей ссылки Discord.",
@@ -1325,7 +1326,7 @@ class HealthPage(Page):
             f"Последняя ошибка: {issue.get('error') or '—'}",
             f"Media key: {issue.get('media_key') or '—'}",
         ])
-        QMessageBox.information(self, "DDS Companion — Медиафайл", text)
+        QMessageBox.information(self, "DDS — Медиафайл", text)
 
     def update_snapshot(self, snapshot: dict) -> None:
         health = snapshot.get("health", {})
@@ -1498,6 +1499,7 @@ class SettingsPage(Page):
         *,
         on_setting_changed,
         on_clear_media_cache,
+        on_reset_local_archive,
         on_run_diagnostics,
         on_database_check,
         on_copy_report,
@@ -1629,7 +1631,10 @@ class SettingsPage(Page):
         storage_layout.addStretch(1)
 
         archive, archive_layout = self._make_scroll_page()
-        archive_layout.addWidget(SectionHeader("Архив", "Информационный экран без опасных действий"))
+        archive_layout.addWidget(SectionHeader(
+            "Архив",
+            "Архив можно оставить как есть или полностью начать заново; настройки DDS сохраняются.",
+        ))
         self.archive_messages = QLabel("—")
         self.archive_context = QLabel("—")
         self.archive_db = QLabel("—")
@@ -1642,7 +1647,17 @@ class SettingsPage(Page):
         ]:
             label.setStyleSheet(f"color:{TEXT};font-weight:650;")
             archive_layout.addWidget(SettingRow(title, hint, control=label))
-        archive_note = QLabel("Удаление и retention архива намеренно не реализованы: данные архива не являются кэшем.")
+        self.reset_archive_button = QPushButton("Сбросить локальный архив")
+        self.reset_archive_button.setProperty("danger", True)
+        self.reset_archive_button.clicked.connect(on_reset_local_archive)
+        archive_layout.addWidget(SettingRow(
+            "Начать с чистого листа",
+            "Удаляет SQLite-архив и локальный медиакэш, но сохраняет настройки DDS и исходные DDS_Data. Уже существующие capture не импортируются повторно, пока Plugin не обновит их после сброса.",
+            control=self.reset_archive_button,
+        ))
+        archive_note = QLabel(
+            "Это отдельное действие от очистки медиакэша: обычная очистка кэша сохраняет сообщения, ссылки и структуру архива."
+        )
         archive_note.setObjectName("SectionHint")
         archive_note.setWordWrap(True)
         archive_layout.addWidget(archive_note)
@@ -1792,6 +1807,12 @@ class SettingsPage(Page):
             if key in {"other_bytes", "logs_bytes"}:
                 row.setVisible(value > 0)
         self.clear_media_button.setEnabled(int(stats.get("media_bytes", 0)) > 0)
+        if hasattr(self, "reset_archive_button") and self.reset_archive_button.isEnabled():
+            self.reset_archive_button.setEnabled(
+                int(stats.get("messages", 0)) > 0
+                or int(stats.get("sqlite_bytes", 0)) > 0
+                or int(stats.get("media_bytes", 0)) > 0
+            )
 
         settings = snapshot.get("settings", {})
         self._set_combo_value(self.cache_limit_combo, settings.get("media_cache_limit_bytes"))

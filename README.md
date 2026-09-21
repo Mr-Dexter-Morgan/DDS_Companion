@@ -1,35 +1,38 @@
 # DDS — Discord Data Snatcher
-## DDS Companion 0.6.0 candidate
+## DDS Companion 0.6.1 candidate
 
-0.6.0 is the first Application Foundation milestone after the verified 0.5.8 prototype.
+0.6.1 is the polish/UX follow-up to the 0.6.0 native Windows EXE and DataRoot foundation.
 
 ### Product identity
 - Product: **DDS — Discord Data Snatcher**
 - Executable: **DDS.exe**
-- Approved application artwork: `assets/DDS.ico`
-- Windows AppUserModelID: `DDS.DiscordDataSnatcher.Companion`
+- Internal component: DDS Companion
+- AppUserModelID: `DDS.DiscordDataSnatcher.Companion`
 
-### DataRoot profiles
-Installed mode preserves the existing data root:
+### Main 0.6.1 changes
+- full local archive reset with settings preserved;
+- reset boundary preventing old untouched DDS_Data captures from instantly rebuilding a deliberately cleared archive;
+- expired Discord signed URLs automatically move to passive rediscovery instead of requiring routine Ignore All;
+- fresh observation of the same stable attachment restores it automatically;
+- semantic storage delta wording after cache cleanup;
+- public GUI naming/title cleanup;
+- additional reset/recovery regression coverage.
 
-`%LOCALAPPDATA%\DDS_Companion`
+### One intentionally unresolved product decision
+The earlier note `только кэш / только текст / как выбрано в Библиотеке` has not been wired to local import yet. The current Library `Выгрузка` switches are explicitly future-export rules. Reusing them as import filters would couple export policy to local archive retention. Confirm the intended boundary before implementation.
 
-Portable foundation:
-
-`DDS.exe` + `Data\config`, `Data\database`, `Data\media`, `Data\cache`, `Data\logs`, `Data\backups`
-
-The archive schema and application services are shared between both profiles. Only the resolved DataRoot changes.
-
-### Build Windows onedir candidate
+### Windows build
 Run:
 
 `build_windows.bat`
 
-Expected output:
+Expected product:
 
 `dist\DDS\DDS.exe`
 
-The build is intentionally **onedir** for the 0.6.0 inspection/live gate. Onefile packaging is not the target of this milestone.
+The build stays **onedir** for inspection and live validation.
 
 ### Validation
-Automated source gate: **101/101 PASS**. Native Windows EXE and real archive live validation are still required before promotion/release.
+Automated gate: **106/106 PASS ×3** in source and extracted package, `compileall` PASS, CLI version PASS.
+Windows 0.6.1 live validation is still required before local acceptance.
+GitHub publication is deliberately deferred.

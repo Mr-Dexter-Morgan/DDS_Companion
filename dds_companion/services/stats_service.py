@@ -208,7 +208,8 @@ class StatsService:
                 """
             ).fetchone()[0]
         )
-        media_attention = media_states.get("FAILED_PERMANENT", 0) + media_states.get("STALE_URL", 0)
+        media_attention = media_states.get("FAILED_PERMANENT", 0)
+        media_unresolved = media_states.get("UNRESOLVED", 0) + media_states.get("STALE_URL", 0)
 
         return {
             "messages": _count(self.connection, "messages"),
@@ -234,7 +235,7 @@ class StatsService:
             "media_skipped": media_states.get("SKIPPED", 0),
             "media_evicted": media_states.get("EVICTED", 0),
             "media_ignored": media_states.get("IGNORED", 0),
-            "media_unresolved": media_states.get("UNRESOLVED", 0),
+            "media_unresolved": media_unresolved,
             "media_attention": media_attention,
             "last_successful_import": last_import_row[0] if last_import_row else None,
             **storage,

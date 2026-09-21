@@ -178,11 +178,11 @@ class LibraryService:
                 has_url and normalized not in {"STALE_URL", "IGNORED", "UNRESOLVED"}
             ):
                 counts["known"] += 1
-            if normalized in {"FAILED_PERMANENT", "STALE_URL"}:
+            if normalized == "FAILED_PERMANENT":
                 counts["attention"] += 1
             elif normalized == "IGNORED":
                 counts["ignored"] += 1
-            elif normalized == "UNRESOLVED":
+            elif normalized in {"UNRESOLVED", "STALE_URL"}:
                 counts["unresolved"] += 1
 
         for row in rows:

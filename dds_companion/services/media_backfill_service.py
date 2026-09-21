@@ -117,6 +117,7 @@ class MediaCycleResult:
     retryable_failed: int = 0
     permanent_failed: int = 0
     stale_url: int = 0
+    unresolved: int = 0
     too_large: int = 0
     skipped: int = 0
 
@@ -307,6 +308,7 @@ class MediaBackfillService:
             "retryable_failed": 0,
             "permanent_failed": 0,
             "stale_url": 0,
+            "unresolved": 0,
             "too_large": 0,
             "skipped": 0,
         }
@@ -320,6 +322,8 @@ class MediaBackfillService:
                 counters["permanent_failed"] += 1
             elif outcome.state == "STALE_URL":
                 counters["stale_url"] += 1
+            elif outcome.state == "UNRESOLVED":
+                counters["unresolved"] += 1
             elif outcome.state == "TOO_LARGE":
                 counters["too_large"] += 1
             elif outcome.state == "SKIPPED":
@@ -329,7 +333,8 @@ class MediaBackfillService:
 
     def counts(self) -> dict[str, int]:
         counts = self.registry.state_counts()
-        attention = counts.get("FAILED_PERMANENT", 0) + counts.get("STALE_URL", 0)
+        attention = counts.get("FAILED_PERMANENT", 0)
+        unresolved = counts.get("UNRESOLVED", 0) + counts.get("STALE_URL", 0)
         return {
             "total": self.registry.referenced_count(),
             "known": self.registry.known_count(),
@@ -343,7 +348,7 @@ class MediaBackfillService:
             "skipped": counts.get("SKIPPED", 0),
             "evicted": counts.get("EVICTED", 0),
             "ignored": counts.get("IGNORED", 0),
-            "unresolved": counts.get("UNRESOLVED", 0),
+            "unresolved": unresolved,
             "attention": attention,
         }
 
@@ -521,10 +526,10 @@ class MediaBackfillService:
                 if exc.code in {401, 403, 404}:
                     return DownloadOutcome(
                         media_key=spec.media_key,
-                        state="STALE_URL",
+                        state="UNRESOLVED",
                         http_status=int(exc.code),
-                        error=f"HTTP {exc.code}: signed/media URL unavailable",
-                        failure_class="stale_url",
+                        error=f"HTTP {exc.code}: ссылка Discord протухла; ожидается свежая ссылка",
+                        failure_class="awaiting_rediscovery",
                     )
                 if exc.code == 429 or 500 <= exc.code <= 599:
                     retry_after = None
@@ -650,6 +655,27 @@ class MediaBackfillService:
                         outcome.media_key,
                     ),
                 )
+            elif state == "UNRESOLVED":
+                # A confirmed expired Discord URL is not a user decision. Drop the
+                # dead URL so the planner cannot retry it; stable attachment identity
+                # stays intact until Plugin observation supplies a fresh URL.
+                self.connection.execute(
+                    """
+                    UPDATE media_objects
+                    SET state='UNRESOLVED', current_url=NULL, proxy_url=NULL,
+                        url_observed_at=NULL, updated_at=?, next_retry_at=NULL,
+                        last_http_status=?, last_error=?, failure_class=?,
+                        local_relpath=NULL, local_size=NULL, sha256=NULL, cached_at=NULL
+                    WHERE media_key=?
+                    """,
+                    (
+                        stamp,
+                        outcome.http_status,
+                        outcome.error,
+                        outcome.failure_class or "awaiting_rediscovery",
+                        outcome.media_key,
+                    ),
+                )
             else:
                 self.connection.execute(
                     """
@@ -694,6 +720,7 @@ class MediaBackfillService:
             level = "ERROR"
         event_type = {
             "STALE_URL": "media_url_stale",
+            "UNRESOLVED": "media_awaiting_rediscovery",
             "FAILED_RETRYABLE": "media_retry_scheduled",
             "FAILED_PERMANENT": "media_failed_permanent",
             "TOO_LARGE": "media_skipped_too_large",

@@ -20,6 +20,7 @@ class ImportResult:
     files_seen: int = 0
     imported: int = 0
     skipped_unchanged: int = 0
+    skipped_before_boundary: int = 0
     failed: int = 0
     messages_inserted: int = 0
     messages_updated: int = 0
@@ -32,9 +33,20 @@ class ImportResult:
 
 
 class ImportService:
-    def __init__(self, connection: sqlite3.Connection):
+    def __init__(self, connection: sqlite3.Connection, *, capture_not_before_ns: int | None = None):
         self.connection = connection
         self.media_registry = MediaRegistryService(connection)
+        self.capture_not_before_ns = (
+            int(capture_not_before_ns) if capture_not_before_ns is not None else None
+        )
+
+    def _before_reset_boundary(self, path: str | Path) -> bool:
+        if self.capture_not_before_ns is None:
+            return False
+        try:
+            return int(Path(path).stat().st_mtime_ns) <= self.capture_not_before_ns
+        except OSError:
+            return False
 
     def discover_capture_files(self, dds_data_root: str | Path) -> Iterable[Path]:
         root = Path(dds_data_root)
@@ -55,6 +67,8 @@ class ImportService:
         return result
 
     def import_file(self, path: str | Path) -> ImportResult:
+        if self._before_reset_boundary(path):
+            return ImportResult(skipped_before_boundary=1)
         parsed = parse_capture(path)
         if self._already_imported(parsed):
             return ImportResult(skipped_unchanged=1)

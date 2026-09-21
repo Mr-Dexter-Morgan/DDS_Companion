@@ -25,6 +25,7 @@ from dds_companion import __version__
 from dds_companion.core.identity import APPLICATION_DISPLAY_NAME, resource_path
 from dds_companion.core.paths import build_runtime_paths
 from dds_companion.core.settings import SettingsStore
+from dds_companion.services.archive_reset_service import reset_local_archive
 from dds_companion.services.media_cache_service import MediaCacheService
 
 from .layout_profile import choose_layout_profile
@@ -62,24 +63,17 @@ class MainWindow(QMainWindow):
         self.settings_store = SettingsStore(self.paths.settings)
         self.media_cache = MediaCacheService(self.paths.media, self.paths.database)
         self._last_diagnostics_report = ""
-        self.runtime = GuiRuntime(
-            dds_data=dds_data,
-            app_data=app_data,
-            portable=portable,
-            poll_ms=poll_ms,
-            settle_ms=settle_ms,
-            snapshot_sink=self.bus.snapshot.emit,
-            activity_sink=self.bus.activity.emit,
-            watch_sink=self.bus.watch_event.emit,
-            error_sink=self.bus.runtime_error.emit,
-            stopped_sink=self.bus.stopped.emit,
-            library_message_sink=self.bus.library_messages.emit,
-        )
-        self.runtime_thread = threading.Thread(
-            target=self.runtime.run,
-            name="dds-companion-runtime",
-            daemon=True,
-        )
+        self._runtime_kwargs = {
+            "dds_data": dds_data,
+            "app_data": app_data,
+            "portable": portable,
+            "poll_ms": poll_ms,
+            "settle_ms": settle_ms,
+        }
+        self.runtime: GuiRuntime | None = None
+        self.runtime_thread: threading.Thread | None = None
+        self._archive_reset_in_progress = False
+        self.clear_cache_worker_active = False
         self.latest_snapshot: dict = {
             "paths": {
                 "dds_data": str(self.paths.dds_data),
@@ -102,7 +96,7 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._size_for_primary_screen()
         self._apply_layout_profile(force=True)
-        self.runtime_thread.start()
+        self._start_runtime()
         self._run_cache_policy_async("startup")
 
     def _build_ui(self) -> None:
@@ -135,12 +129,9 @@ class MainWindow(QMainWindow):
         brand_text.setSpacing(0)
         title = QLabel("DDS")
         title.setObjectName("BrandTitle")
-        title2 = QLabel("Companion")
-        title2.setObjectName("BrandTitle")
-        subtitle = QLabel(f"v{__version__}")
+        subtitle = QLabel(f"Discord Data Snatcher · v{__version__}")
         subtitle.setObjectName("BrandSub")
         brand_text.addWidget(title)
-        brand_text.addWidget(title2)
         brand_text.addWidget(subtitle)
         brand.addWidget(mark)
         brand.addLayout(brand_text, 1)
@@ -201,6 +192,7 @@ class MainWindow(QMainWindow):
         self.settings = SettingsPage(
             on_setting_changed=self._on_setting_changed,
             on_clear_media_cache=self._clear_media_cache,
+            on_reset_local_archive=self._reset_local_archive,
             on_run_diagnostics=self._run_diagnostics,
             on_database_check=self._database_quick_check,
             on_copy_report=self._copy_diagnostics_report,
@@ -356,10 +348,36 @@ class MainWindow(QMainWindow):
         self.bus.maintenance_done.connect(self._on_maintenance_done)
         self.bus.library_messages.connect(self.library.set_message_page)
 
+    def _new_runtime(self) -> GuiRuntime:
+        return GuiRuntime(
+            **self._runtime_kwargs,
+            snapshot_sink=self.bus.snapshot.emit,
+            activity_sink=self.bus.activity.emit,
+            watch_sink=self.bus.watch_event.emit,
+            error_sink=self.bus.runtime_error.emit,
+            stopped_sink=self.bus.stopped.emit,
+            library_message_sink=self.bus.library_messages.emit,
+        )
+
+    def _start_runtime(self) -> None:
+        if self._closing:
+            return
+        if self.runtime_thread is not None and self.runtime_thread.is_alive():
+            return
+        self.runtime = self._new_runtime()
+        self.runtime_thread = threading.Thread(
+            target=self.runtime.run,
+            name="dds-companion-runtime",
+            daemon=True,
+        )
+        self.status_text.setText("Инициализация локального архива…")
+        self.runtime_thread.start()
+
     def _select_page(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
         if index == self.PAGE_NAMES.index("Dashboard"):
-            self.runtime.request_refresh()
+            if self.runtime is not None:
+                self.runtime.request_refresh()
         for i, button in enumerate(self.nav_buttons):
             button.setChecked(i == index)
         on_health = index == self.PAGE_NAMES.index("Health")
@@ -422,22 +440,25 @@ class MainWindow(QMainWindow):
         self.status_text.setText("Runtime error — архиватор остановлен")
         QMessageBox.critical(
             self,
-            "DDS Companion — Runtime error",
+            "DDS — Runtime error",
             "Архиватор остановился из-за неожиданной ошибки.\n\n"
             f"{message}\n\n"
             "Существующий архив не удалён. Проверь Health/Logs и перезапусти Companion.",
         )
 
     def _on_runtime_stopped(self) -> None:
-        if self._closing:
+        if self._closing or self._archive_reset_in_progress:
             return
         self.status_text.setText("Runtime остановлен")
 
 
     def _request_library_messages(self, request: dict) -> None:
-        self.runtime.request_library_messages(request)
+        if self.runtime is not None:
+            self.runtime.request_library_messages(request)
 
     def _change_export_rule(self, scope_kind: str, scope_id: str, mode: str) -> None:
+        if self.runtime is None:
+            return
         self.runtime.request_export_rule_change(scope_kind, scope_id, mode)
         label = {
             "INCLUDE": "Выгружать",
@@ -446,40 +467,48 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Правило выгрузки: {label}", 2500)
 
     def _retry_media_issue(self, media_key: str) -> None:
-        if not media_key:
+        runtime = self.runtime
+        if not media_key or runtime is None:
             return
-        self.runtime.request_media_retry(media_key)
+        runtime.request_media_retry(media_key)
         self.statusBar().showMessage("Повторная загрузка медиа запущена…", 3500)
-        self.runtime.request_refresh()
+        runtime.request_refresh()
 
     def _ignore_media_issue(self, media_key: str) -> None:
-        if not media_key:
+        runtime = self.runtime
+        if not media_key or runtime is None:
             return
-        self.runtime.request_media_ignore(media_key)
+        runtime.request_media_ignore(media_key)
         self.statusBar().showMessage("Проблема медиа помечена как игнорируемая", 3500)
-        self.runtime.request_refresh()
+        runtime.request_refresh()
 
     def _ignore_all_media_issues(self) -> None:
-        self.runtime.request_media_ignore_all()
+        runtime = self.runtime
+        if runtime is None:
+            return
+        runtime.request_media_ignore_all()
         self.statusBar().showMessage("Все текущие проблемы медиа помечены как обработанные", 3500)
-        self.runtime.request_refresh()
+        runtime.request_refresh()
 
     def _clear_processed_media_issues(self) -> None:
-        self.runtime.request_media_clear_processed()
+        runtime = self.runtime
+        if runtime is None:
+            return
+        runtime.request_media_clear_processed()
         self.statusBar().showMessage(
             "Обработанные медиа переведены в ожидание переобнаружения", 4000
         )
-        self.runtime.request_refresh()
+        runtime.request_refresh()
 
     def _on_setting_changed(self, key: str, value) -> None:
         try:
             self.settings_store.update(**{key: value})
         except Exception as exc:
-            QMessageBox.warning(self, "DDS Companion", f"Не удалось сохранить настройку:\n{exc}")
+            QMessageBox.warning(self, "DDS", f"Не удалось сохранить настройку:\n{exc}")
             return
         self.statusBar().showMessage("Настройка сохранена", 2500)
         self._refresh_settings_surface()
-        if key == "media_autodownload_enabled":
+        if key == "media_autodownload_enabled" and self.runtime is not None:
             self.runtime.request_media_autodownload_change(bool(value))
         if key in {"media_cache_limit_bytes", "media_max_file_bytes", "media_retention_days"}:
             self._run_cache_policy_async("settings")
@@ -514,6 +543,51 @@ class MainWindow(QMainWindow):
 
         threading.Thread(target=worker, name="dds-cache-policy", daemon=True).start()
 
+    def _reset_local_archive(self) -> None:
+        if self._archive_reset_in_progress:
+            return
+        answer = QMessageBox.warning(
+            self,
+            "DDS — Сброс локального архива",
+            "Будут безвозвратно удалены все сохранённые сообщения, ссылки и локально загруженные медиа.\n\n"
+            "Настройки DDS и исходные DDS_Data сохранятся. Уже существующие capture-файлы не будут импортированы заново, пока Plugin не обновит их после сброса.\n\n"
+            "Начать с чистого локального архива?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+
+        self._archive_reset_in_progress = True
+        self.settings.reset_archive_button.setEnabled(False)
+        self.status_text.setText("Останавливаю DDS для безопасного сброса архива…")
+        runtime = self.runtime
+        thread = self.runtime_thread
+        if runtime is not None:
+            runtime.stop()
+            runtime.request_media_wake()
+
+        def worker() -> None:
+            try:
+                if thread is not None and thread.is_alive():
+                    thread.join(timeout=10.0)
+                if thread is not None and thread.is_alive():
+                    raise RuntimeError("runtime did not stop within 10 seconds; archive was not touched")
+                result = reset_local_archive(self.paths)
+                self.bus.maintenance_done.emit({
+                    "kind": "archive_reset",
+                    "ok": True,
+                    "result": result.to_dict(),
+                })
+            except Exception as exc:
+                self.bus.maintenance_done.emit({
+                    "kind": "archive_reset",
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+
+        threading.Thread(target=worker, name="dds-archive-reset", daemon=True).start()
+
     def _clear_media_cache(self) -> None:
         if int(self.latest_snapshot.get("stats", {}).get("media_bytes", 0)) <= 0:
             self.statusBar().showMessage("Media cache уже пуст", 2500)
@@ -521,7 +595,7 @@ class MainWindow(QMainWindow):
         if self.settings_store.settings.confirm_media_cache_clear:
             answer = QMessageBox.question(
                 self,
-                "DDS Companion — Clear media cache",
+                "DDS — Очистка медиакэша",
                 "Удалить только локальные media-файлы из cache?\n\n"
                 "SQLite, DDS JSON, сообщения и attachment metadata останутся нетронутыми.",
                 QMessageBox.Yes | QMessageBox.No,
@@ -557,7 +631,26 @@ class MainWindow(QMainWindow):
         result = payload.get("result") or {}
         error = payload.get("error")
 
-        if kind == "cache_clear":
+        if kind == "archive_reset":
+            self._archive_reset_in_progress = False
+            if ok:
+                self.latest_snapshot = {
+                    "paths": self.latest_snapshot.get("paths", {}),
+                    "settings": self.settings_store.snapshot(),
+                }
+                self.library._library = []
+                self.library.rebuild()
+                self._start_runtime()
+                self.statusBar().showMessage("Локальный архив сброшен. DDS начал новую чистую историю.", 6500)
+            else:
+                self.settings.reset_archive_button.setEnabled(True)
+                QMessageBox.critical(
+                    self,
+                    "DDS — Сброс архива",
+                    f"Сброс архива отменён из-за ошибки. Исходные данные не удаляются принудительно.\n\n{error or result}",
+                )
+                self._start_runtime()
+        elif kind == "cache_clear":
             self.clear_cache_worker_active = False
             if ok:
                 removed = result.get("files_removed", 0)
@@ -565,9 +658,10 @@ class MainWindow(QMainWindow):
                 self.statusBar().showMessage(
                     f"Media cache очищен: {removed} файлов, {bytes_removed} bytes", 5000
                 )
-                self.runtime.request_media_wake()
+                if self.runtime is not None:
+                    self.runtime.request_media_wake()
             else:
-                QMessageBox.warning(self, "DDS Companion", f"Очистка cache завершилась с ошибкой:\n{error or result}")
+                QMessageBox.warning(self, "DDS", f"Очистка cache завершилась с ошибкой:\n{error or result}")
         elif kind == "cache_policy" and payload.get("reason") != "startup":
             removed = result.get("files_removed", 0)
             if removed:
@@ -581,7 +675,8 @@ class MainWindow(QMainWindow):
             self.settings.set_database_check_status(text)
             self.statusBar().showMessage(f"Database quick check: {text}", 4000)
 
-        self.runtime.request_refresh()
+        if self.runtime is not None:
+            self.runtime.request_refresh()
 
     def _run_diagnostics(self) -> None:
         snapshot = self.latest_snapshot or {}
@@ -590,7 +685,7 @@ class MainWindow(QMainWindow):
         paths = snapshot.get("paths", {})
         subs = health.get("subsystems", {})
         lines = [
-            "DDS Companion — System report",
+            "DDS — System report",
             f"Companion: {snapshot.get('version', __version__)}",
             f"Overall Health: {health.get('state', 'UNKNOWN')}",
             f"Plugin: {subs.get('plugin', {}).get('state', 'UNKNOWN')}",
@@ -615,6 +710,23 @@ class MainWindow(QMainWindow):
             f"Deployment profile: {paths.get('deployment_profile', self.paths.deployment_profile)}",
             f"Application dir: {paths.get('application_dir', str(self.paths.application_dir or '—'))}",
         ]
+        media_details = (subs.get("media", {}) or {}).get("details", {}) or {}
+        rediscovery_items = list(media_details.get("rediscovery_items") or [])
+        if rediscovery_items:
+            lines.append("")
+            lines.append(f"Awaiting media rediscovery: {len(rediscovery_items)} item(s) shown")
+            for item in rediscovery_items[:50]:
+                lines.append(
+                    "  - "
+                    f"{item.get('filename') or 'без имени'} | "
+                    f"state={item.get('state') or 'UNRESOLVED'} | "
+                    f"HTTP={item.get('http_status') if item.get('http_status') is not None else '—'} | "
+                    f"class={item.get('failure_class') or '—'} | "
+                    f"updated={item.get('updated_at') or '—'} | "
+                    f"media_key={item.get('media_key') or '—'} | "
+                    f"error={item.get('error') or '—'}"
+                )
+
         settings_error = self.settings_store.last_load_error
         if settings_error:
             lines.append(f"Settings load fallback: {settings_error}")
@@ -669,7 +781,7 @@ class MainWindow(QMainWindow):
         if ok:
             self.statusBar().showMessage(f"{label}: {detail}", 3500)
         else:
-            QMessageBox.warning(self, "DDS Companion", detail)
+            QMessageBox.warning(self, "DDS", detail)
 
     def open_dds(self) -> None:
         self._open("dds_data", "DDS_Data")
@@ -680,7 +792,8 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event: QCloseEvent) -> None:
         self._closing = True
         self.status_text.setText("Останавливаю watcher…")
-        self.runtime.stop()
-        if self.runtime_thread.is_alive():
+        if self.runtime is not None:
+            self.runtime.stop()
+        if self.runtime_thread is not None and self.runtime_thread.is_alive():
             self.runtime_thread.join(timeout=1.8)
         event.accept()

@@ -1,22 +1,28 @@
-DDS Companion 0.6.0 — Validation
+DDS Companion 0.6.1 — Validation
 ================================
 
-Status: AUTOMATED FOUNDATION PASS / WINDOWS BUILD + LIVE GATE PENDING
+Status: AUTOMATED POLISH PASS / ONE PRODUCT-SEMANTICS DECISION + WINDOWS LIVE GATE PENDING
 
 Automated:
-- 101/101 tests PASS repeated three times
-- compileall PASS
-- CLI version reports DDS Companion 0.6.0
-- 0.5.8 behavior regression baseline preserved
-- DataRoot Installed/Portable/custom resolution tests PASS
-- approved branding asset contract PASS
-- PyInstaller DDS.exe/icon/version-resource source contract PASS
+- 106/106 tests PASS repeated three times
+- packaged ZIP extracted + 106/106 tests PASS repeated three times
+- compileall PASS in source tree and extracted package
+- CLI version reports DDS Companion 0.6.1
+- full local archive reset tests PASS
+- reset-boundary / clean-slate re-import guard PASS
+- cache-only clear preserves SQLite archive PASS
+- expired Discord signed URL -> passive UNRESOLVED rediscovery PASS
+- legacy stale URL normalization + fresh rediscovery PASS
+- transient network failure remains retryable PASS
+- product branding/title source contract PASS
+- semantic storage delta PASS
+- 0.6.0 DataRoot/branding/PyInstaller contracts remain green
 
-Not yet claimable in this environment:
-- native Windows DDS.exe build execution
-- Windows Properties/Version resource visual check
-- taskbar / Alt+Tab / AppUserModelID live behavior
-- real %LOCALAPPDATA%\DDS_Companion archive live run via DDS.exe
-- Portable relocation test on Windows
+Deliberately not claimed yet:
+- the earlier «только кэш / только текст / как выбрано в Библиотеке» item, because current Library rules are explicitly export rules and must not silently be repurposed as import filters without confirmation
+- native Windows DDS.exe build execution for this 0.6.1 source candidate
+- live destructive reset against the user's real Windows data
+- taskbar / Alt+Tab / title behavior after the 0.6.1 polish changes
 
-Promotion remains blocked until Windows live validation passes.
+Promotion remains blocked until the product-semantics question is resolved and Windows live validation passes.
+GitHub publication remains deferred independently of local acceptance.

@@ -214,7 +214,7 @@ class MediaBackfillTests(unittest.TestCase):
         self.assertEqual(row["state"], "SKIPPED")
         self.assertEqual(row["failure_class"], "unsupported_url")
 
-    def test_403_marks_stale_url_without_poisoning_archive(self):
+    def test_403_moves_expired_url_to_passive_rediscovery_without_poisoning_archive(self):
         self.importer.import_file(self._capture(size=4))
 
         def transport(spec, temp_path, max_bytes, timeout_seconds):
@@ -222,10 +222,15 @@ class MediaBackfillTests(unittest.TestCase):
 
         service = MediaBackfillService(self.conn, self.media, transport=transport)
         result = service.process_once(CompanionSettings(media_autodownload_enabled=True))
-        self.assertEqual(result.stale_url, 1)
-        row = self.conn.execute("SELECT state, failure_class FROM media_objects").fetchone()
-        self.assertEqual(row["state"], "STALE_URL")
-        self.assertEqual(row["failure_class"], "stale_url")
+        self.assertEqual(result.unresolved, 1)
+        row = self.conn.execute(
+            "SELECT state, current_url, last_http_status, failure_class FROM media_objects"
+        ).fetchone()
+        self.assertEqual(row["state"], "UNRESOLVED")
+        self.assertIsNone(row["current_url"])
+        self.assertEqual(row["last_http_status"], 403)
+        self.assertEqual(row["failure_class"], "awaiting_rediscovery")
+        self.assertEqual(service.issue_items(), [])
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0], 1)
 
     def test_network_failure_schedules_bounded_retry(self):
@@ -473,7 +478,7 @@ class MediaAttention052Tests(unittest.TestCase):
         self.assertEqual(self.registry.referenced_count(), 1)
         self.assertEqual(self.registry.known_count(), 0)
 
-    def test_ignore_all_then_clear_processed_waits_for_fresh_rediscovery(self):
+    def test_legacy_stale_url_normalizes_and_waits_for_fresh_rediscovery(self):
         key = self._register(size=100)
         with self.connection:
             self.connection.execute(
@@ -481,14 +486,7 @@ class MediaAttention052Tests(unittest.TestCase):
                 (key,),
             )
         service = MediaBackfillService(self.connection, self.media, max_workers=1)
-        self.assertEqual(service.ignore_all_issues(), 1)
-        ignored = self.registry.get(key)
-        self.assertEqual(ignored.state, 'IGNORED')
-        self.assertEqual(ignored.failure_class, 'stale_url')
-        self.assertEqual(service.counts()['ignored'], 1)
-        self.assertEqual(service.counts()['known'], 0)
-
-        self.assertEqual(service.clear_processed_issues(), 1)
+        self.assertEqual(self.registry.normalize_expired_urls(), 1)
         unresolved = self.registry.get(key)
         self.assertEqual(unresolved.state, 'UNRESOLVED')
         self.assertIsNone(unresolved.current_url)

@@ -325,7 +325,7 @@ class MediaRegistryService:
 
     def issue_items(self, *, limit: int = 50, include_ignored: bool = True) -> list[dict[str, Any]]:
         """Return bounded user-actionable media issues for the Status surface."""
-        states = ["FAILED_PERMANENT", "STALE_URL"]
+        states = ["FAILED_PERMANENT"]
         if include_ignored:
             states.append("IGNORED")
         placeholders = ",".join("?" for _ in states)
@@ -367,7 +367,7 @@ class MediaRegistryService:
                 SET state='QUEUED', updated_at=?, attempt_count=0, next_retry_at=NULL,
                     last_attempt_at=NULL, last_http_status=NULL, last_error=NULL, failure_class=NULL
                 WHERE media_key=?
-                  AND state IN ('FAILED_PERMANENT', 'STALE_URL', 'FAILED_RETRYABLE', 'IGNORED')
+                  AND state IN ('FAILED_PERMANENT', 'FAILED_RETRYABLE', 'IGNORED', 'STALE_URL')
                   AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
                 """,
                 (stamp, str(media_key)),
@@ -383,7 +383,7 @@ class MediaRegistryService:
                 UPDATE media_objects
                 SET state='IGNORED', updated_at=?, next_retry_at=NULL
                 WHERE media_key=?
-                  AND state IN ('FAILED_PERMANENT', 'STALE_URL', 'FAILED_RETRYABLE')
+                  AND state IN ('FAILED_PERMANENT', 'FAILED_RETRYABLE')
                   AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
                 """,
                 (stamp, str(media_key)),
@@ -398,7 +398,7 @@ class MediaRegistryService:
                 """
                 UPDATE media_objects
                 SET state='IGNORED', updated_at=?, next_retry_at=NULL
-                WHERE state IN ('FAILED_PERMANENT', 'STALE_URL')
+                WHERE state='FAILED_PERMANENT'
                   AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
                 """,
                 (stamp,),
@@ -430,6 +430,57 @@ class MediaRegistryService:
                 (stamp,),
             )
         return int(cursor.rowcount or 0)
+
+
+    def normalize_expired_urls(self) -> int:
+        """Convert legacy stale/ignored signed URLs to passive rediscovery state.
+
+        0.6.1 removes the fake user decision around expired Discord CDN URLs.
+        Existing databases may still contain STALE_URL rows (or IGNORED rows that
+        were created from stale_url failures), so normalize them once at runtime.
+        """
+        stamp = utc_now()
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE media_objects
+                SET state='UNRESOLVED', current_url=NULL, proxy_url=NULL,
+                    url_observed_at=NULL, updated_at=?, next_retry_at=NULL,
+                    last_error=COALESCE(last_error, 'ожидает повторного обнаружения ссылки Discord'),
+                    failure_class='awaiting_rediscovery'
+                WHERE state='STALE_URL'
+                   OR (state='IGNORED' AND failure_class IN ('stale_url', 'awaiting_rediscovery'))
+                """,
+                (stamp,),
+            )
+        return int(cursor.rowcount or 0)
+
+    def rediscovery_items(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        """Return passive expired-link diagnostics without making them actionable."""
+        rows = self.connection.execute(
+            """
+            SELECT media_key, filename, state, last_http_status, last_error,
+                   failure_class, updated_at
+            FROM media_objects
+            WHERE state IN ('UNRESOLVED', 'STALE_URL')
+              AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
+            ORDER BY updated_at DESC, media_key
+            LIMIT ?
+            """,
+            (max(1, min(int(limit), 1000)),),
+        ).fetchall()
+        return [
+            {
+                "media_key": str(row["media_key"]),
+                "filename": row["filename"],
+                "state": str(row["state"]),
+                "http_status": row["last_http_status"],
+                "error": row["last_error"],
+                "failure_class": row["failure_class"],
+                "updated_at": row["updated_at"],
+            }
+            for row in rows
+        ]
 
     def reset_removed_cache_paths(
         self,

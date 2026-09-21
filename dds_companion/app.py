@@ -8,6 +8,7 @@ from pathlib import Path
 from dds_companion import __version__
 from dds_companion.core.paths import build_runtime_paths, ensure_runtime_dirs
 from dds_companion.services.activity_service import ActivityRecord, ActivityService
+from dds_companion.services.archive_reset_service import load_capture_not_before_ns
 from dds_companion.services.health_service import HealthService
 from dds_companion.services.import_service import ImportResult, ImportService
 from dds_companion.services.runtime_monitor import RuntimeMonitor
@@ -208,7 +209,8 @@ def main(argv: list[str] | None = None) -> int:
     activity: ActivityService | None = None
     health: HealthService | None = None
     try:
-        importer = ImportService(connection)
+        capture_not_before_ns = load_capture_not_before_ns(paths)
+        importer = ImportService(connection, capture_not_before_ns=capture_not_before_ns)
         # Baseline is captured before this session writes Activity or imports data.
         stats_service = StatsService(
             connection,
@@ -230,7 +232,10 @@ def main(argv: list[str] | None = None) -> int:
             subsystem="runtime",
             event_type="session_started",
             summary=f"DDS Companion {__version__} session started",
-            details={"mode": "watch" if watching else "once"},
+            details={
+                "mode": "watch" if watching else "once",
+                "capture_not_before_ns": capture_not_before_ns,
+            },
         )
 
         if watching:

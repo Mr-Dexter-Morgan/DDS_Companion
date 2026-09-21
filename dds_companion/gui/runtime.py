@@ -9,6 +9,7 @@ from typing import Callable
 from dds_companion import __version__
 from dds_companion.core.paths import RuntimePaths, build_runtime_paths, ensure_runtime_dirs
 from dds_companion.services.activity_service import ActivityRecord, ActivityService
+from dds_companion.services.archive_reset_service import load_capture_not_before_ns
 from dds_companion.services.health_service import HealthService
 from dds_companion.services.import_service import ImportService
 from dds_companion.services.library_service import LibraryService
@@ -119,7 +120,8 @@ class GuiRuntime:
         media_thread = None
         try:
             connection = connect_database(self.paths.database)
-            importer = ImportService(connection)
+            capture_not_before_ns = load_capture_not_before_ns(self.paths)
+            importer = ImportService(connection, capture_not_before_ns=capture_not_before_ns)
             stats = StatsService(
                 connection,
                 self.paths.database,
@@ -144,7 +146,10 @@ class GuiRuntime:
                 subsystem="runtime",
                 event_type="session_started",
                 summary=f"DDS Companion {__version__} GUI session started",
-                details={"mode": "gui"},
+                details={
+                    "mode": "gui",
+                    "capture_not_before_ns": capture_not_before_ns,
+                },
             )
 
             watcher = CaptureWatcher(
@@ -182,6 +187,7 @@ class GuiRuntime:
                     "imported": import_result.imported,
                     "unchanged": import_result.skipped_unchanged,
                     "failed": import_result.failed,
+                    "skipped_before_boundary": import_result.skipped_before_boundary,
                 },
                 messages_new=import_result.messages_inserted,
                 messages_refreshed=import_result.messages_updated,
