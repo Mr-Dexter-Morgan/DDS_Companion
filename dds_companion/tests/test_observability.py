@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import tempfile
 import unittest
@@ -166,8 +165,8 @@ class ObservabilityTests(unittest.TestCase):
 
     def test_last_error_info_has_subsystem_and_clears_after_recovery(self):
         path = self.write_capture("bad then good")
-        relative_target = os.path.relpath(path, Path.cwd())
-        self.importer.record_failure("watcher_import", relative_target, ValueError("broken capture"))
+        alternate_target = path.parent / ".." / path.parent.name / path.name
+        self.importer.record_failure("watcher_import", str(alternate_target), ValueError("broken capture"))
         failed = self.health.snapshot(watcher_expected=False)
         self.assertEqual(failed["last_error_info"]["subsystem"], "watcher_import")
         self.assertIn("broken capture", failed["last_error_info"]["message"])
