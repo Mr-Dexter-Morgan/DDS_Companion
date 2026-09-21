@@ -43,3 +43,7 @@ candidate-r2 delta validation
 - 121/121 PASS x3 after the correction.
 - compileall PASS.
 - CLI version: DDS Companion 0.6.2 PASS.
+
+Public GitHub release gate
+- Windows CI/release automation repeats the 121-test suite x3, compileall, version smoke, native onedir build, file-version validation, ZIP integrity validation and SHA-256 generation before publishing assets.
+- Release remains Public Preview / pre-1.0; interactive Discord/GUI live validation remains separate.

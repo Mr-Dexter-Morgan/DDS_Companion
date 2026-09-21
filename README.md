@@ -1,39 +1,42 @@
 # DDS — Discord Data Snatcher
 
-## DDS Companion 0.6.2 candidate-r1
+**DDS Companion** is the local-first desktop side of DDS. It imports captures produced by the BetterDiscord DDS plugin, stores a durable SQLite archive, keeps a recoverable media cache, lets you browse Discord knowledge locally, and can package selected branches into portable ZIP archives for AI analysis or normal storage.
 
-0.6.2 is the first DDS build with a provider-independent manual export layer. It builds on the Windows-live-tested 0.6.1 local baseline and keeps the local archive as source-of-truth.
+> **Release line:** 0.x / Public Preview. The archive core and 0.6.2 export workflow are usable, but the updater, tray/autostart and installer layers are still planned before 1.0.
 
-### Main changes
+## What 0.6.2 adds
 
-- Window title is now exactly `DDS — Discord Data Snatcher`.
-- Sidebar branding is simplified: stronger centered `DDS`, then `Discord / Data / Snatcher` on separate lines; version moved out of normal chrome.
-- Library context menu adds:
-  - `Упаковать -> Только текст`;
-  - `Упаковать -> Текст + кэш`;
-  - `Очистить медиакэш этой ветки`;
-  - `Удалить данные ветки`;
-  - `Полностью удалить ветку`.
-- Manual export creates validated ZIP packages with:
-  - `manifest.json`;
-  - `content.md`;
-  - `messages.json`;
-  - `media_index.json`;
-  - optional `media/`.
-- Missing media is declared explicitly instead of being silently omitted.
-- Manual packaging is independent from Library `Выгружать / Не выгружать` rules and does not mutate them.
-- Settings adds a persistent manual-export folder.
-- Branch destructive operations are separated by meaning and protected by confirmation/runtime stop where necessary.
-- ZIP creation uses staging, archive verification and atomic promotion.
-- No Google OAuth/API integration is included. Future automatic external sync will target a normal filesystem folder.
+- Manual branch packaging: **Text Only** or **Text + Cache**.
+- Canonical package contents: `manifest.json`, `content.md`, `messages.json`, `media_index.json`, and optional `media/`.
+- Honest incomplete-package reporting when media is unavailable.
+- Branch-scoped cache clear, data deletion, and full local branch deletion.
+- Persistent export destination.
+- Windows Known Folder support, so a redirected **Documents** folder is respected instead of assuming `C:\Users\<user>\Documents`.
+- Branding cleanup for the public `DDS — Discord Data Snatcher` application.
+- Repository/runtime icon master normalized to 512 px; displayed app identity is unchanged.
 
-### Reliability contract
+## Architecture
 
-SQLite/local archive remains source-of-truth. ZIP and future sync-folder output are derived layers. Export failure must not damage capture/import/archive/media operation. Deleting an exported copy must never delete SQLite archive data.
+DDS is deliberately layered:
 
-### Build
+`Discord Desktop -> BetterDiscord -> DDS Plugin -> local capture files -> DDS Companion -> SQLite archive -> media cache / ZIP export`
 
-Windows onedir build:
+The local SQLite archive is the durable source of truth. Media cache and exported ZIP files are derived layers. Export or network failures must not damage the archive.
+
+The BetterDiscord plugin lives in the companion repository: [DDS_BD_Plugin](https://github.com/Mr-Dexter-Morgan/DDS_BD_Plugin).
+
+## Windows quick start
+
+1. Install and configure the DDS BetterDiscord plugin.
+2. Download the Windows ZIP from the latest GitHub Release.
+3. Extract the whole ZIP to a folder.
+4. Run `DDS.exe`.
+
+DDS is currently distributed as a **PyInstaller onedir** build, so keep the extracted folder together. A proper Setup/Repair installer is planned later.
+
+## Build from source
+
+Requirements: Python 3.11+; Windows is required for the native release executable.
 
 ```bat
 build_windows.bat
@@ -45,10 +48,14 @@ Expected output:
 dist\DDS\DDS.exe
 ```
 
-### Validation state
+## Validation
 
-- Automated regression suite: source gate required.
-- `compileall`: required.
-- CLI version smoke: required.
-- Windows native build/live validation: still required before 0.6.2 is frozen or published.
-- Intended first public GitHub binary Release: `v0.6.2`, only after the live gate passes.
+The 0.6.2 release gate runs the full test suite three times, `compileall`, the CLI version smoke, a native Windows PyInstaller build, Windows file-version verification, ZIP integrity verification and SHA-256 generation. Real interactive Discord/GUI behavior remains a separate live-validation layer.
+
+## History
+
+Development snapshots from **0.1.0 through 0.6.2** were reconstructed into chronological Git history from preserved project archives. See [HISTORY.md](HISTORY.md). Every historical version has a Git tag pointing to the corresponding archived source snapshot; `v0.6.2` points to the public-release preparation commit built from candidate-r2.
+
+## License
+
+No open-source license has been granted yet. The repository is public for distribution, inspection and project history.
