@@ -117,6 +117,73 @@ def build_runtime_paths(
     )
 
 
+
+def _windows_documents_path() -> Path | None:
+    """Resolve the real Windows Documents known folder, including redirection.
+
+    ``Path.home() / "Documents"`` is not reliable on Windows because users may
+    move Documents to another drive through Explorer. SHGetKnownFolderPath
+    follows that shell redirection and therefore returns the same Documents
+    location the user sees in Windows.
+    """
+    if not sys.platform.startswith("win"):
+        return None
+
+    try:
+        import ctypes
+
+        class GUID(ctypes.Structure):
+            _fields_ = [
+                ("Data1", ctypes.c_ulong),
+                ("Data2", ctypes.c_ushort),
+                ("Data3", ctypes.c_ushort),
+                ("Data4", ctypes.c_ubyte * 8),
+            ]
+
+        # FOLDERID_Documents = {FDD39AD0-238F-46AF-ADB4-6C85480369C7}
+        folder_id = GUID(
+            0xFDD39AD0,
+            0x238F,
+            0x46AF,
+            (ctypes.c_ubyte * 8)(0xAD, 0xB4, 0x6C, 0x85, 0x48, 0x03, 0x69, 0xC7),
+        )
+        path_ptr = ctypes.c_wchar_p()
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        ole32 = ctypes.WinDLL("ole32", use_last_error=True)
+        get_known_folder = shell32.SHGetKnownFolderPath
+        get_known_folder.argtypes = [
+            ctypes.POINTER(GUID),
+            ctypes.c_uint32,
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_wchar_p),
+        ]
+        get_known_folder.restype = ctypes.c_long
+        ole32.CoTaskMemFree.argtypes = [ctypes.c_void_p]
+        ole32.CoTaskMemFree.restype = None
+
+        result = get_known_folder(ctypes.byref(folder_id), 0, None, ctypes.byref(path_ptr))
+        if result != 0 or not path_ptr.value:
+            return None
+        try:
+            return Path(path_ptr.value)
+        finally:
+            ole32.CoTaskMemFree(ctypes.cast(path_ptr, ctypes.c_void_p))
+    except Exception:
+        # Path resolution must never prevent DDS from starting. The caller has
+        # a conservative fallback for older/unusual Windows environments.
+        return None
+
+
+def default_manual_export_path(paths: RuntimePaths) -> Path:
+    """Return the human-facing default directory for manually packaged exports."""
+    if paths.deployment_profile == "portable":
+        return paths.app_data / "exports"
+    if sys.platform.startswith("win"):
+        documents = _windows_documents_path() or (Path.home() / "Documents")
+    else:
+        documents = Path.home() / "Documents"
+    return documents / "DDS Exports"
+
 def ensure_runtime_dirs(paths: RuntimePaths) -> None:
     for directory in (
         paths.app_data,

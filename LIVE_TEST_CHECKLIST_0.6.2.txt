@@ -1,0 +1,57 @@
+DDS Companion 0.6.2 — Windows Live Gate
+
+Build / identity
+[ ] Build with build_windows.bat from this exact candidate.
+[ ] dist\DDS\DDS.exe exists and starts normally.
+[ ] File Properties reports version 0.6.2.
+[ ] Approved DDS icon appears in EXE/window/taskbar.
+[ ] Window title is exactly: DDS — Discord Data Snatcher.
+[ ] Sidebar shows a stronger centered DDS and Discord / Data / Snatcher below; no version is repeated there.
+
+Manual export — Text Only
+[ ] In Library, right-click a real thread and choose Упаковать -> Только текст.
+[ ] ZIP appears in configured export folder.
+[ ] ZIP opens without error.
+[ ] manifest.json, content.md, messages.json, media_index.json are present.
+[ ] No binary files exist under media/.
+[ ] Content is readable and preserves authors/timestamps/message text/attachment references.
+[ ] Existing Выгружать / Не выгружать marker did not change.
+
+Manual export — Text + Cache
+[ ] Package the same real thread as Текст + кэш.
+[ ] Cached images/files are present under media/.
+[ ] content.md uses valid relative media paths.
+[ ] media_index.json maps packaged files to archived messages/attachments.
+[ ] If any media is not cached, manifest/index explicitly reports it and ZIP still completes.
+[ ] Duplicate original filenames do not overwrite each other.
+
+Export folder
+[ ] Change manual export folder in Settings.
+[ ] Restart DDS.
+[ ] Selected folder is remembered and next ZIP is created there.
+
+Branch maintenance
+[ ] Очистить медиакэш этой ветки removes only that branch's removable cached binaries.
+[ ] Messages/structure/export rule survive branch cache clear.
+[ ] Удалить данные ветки removes messages/dependent data but keeps the structural node and export rule.
+[ ] Полностью удалить ветку removes selected node/content/cache/rules and descendants where applicable.
+[ ] Every destructive action shows a clear confirmation before mutation.
+[ ] DDS stops/restarts cleanly around destructive branch maintenance.
+[ ] Untouched old DDS_Data does not instantly recreate a deliberately deleted branch.
+[ ] A genuinely fresh Plugin update/revisit can populate the branch again later.
+
+Regression
+[ ] 0.6.1 full local archive reset still leaves archive empty until fresh Plugin observation.
+[ ] Media autodownload/cache lifecycle still works.
+[ ] Library read-only preview still works without hover-selection regression.
+[ ] Activity and Status remain truthful and no critical import errors appear.
+[ ] Clean shutdown PASS.
+
+Release decision
+Only after all applicable checks PASS may 0.6.2 be frozen as the validated baseline and considered for the first public GitHub binary Release.
+
+candidate-r2 — redirected Documents live check
+[ ] On a Windows account whose Documents folder is relocated, leave Manual Export path unconfigured.
+[ ] Open Settings > Storage and confirm the effective default resolves to the real redirected Documents\DDS Exports location, not C:\Users\<user>\Documents.
+[ ] Package one branch and confirm the ZIP is created in that redirected location.
+[ ] Confirm DDS does not create a stray C:\Users\<user>\Documents\DDS Exports directory solely because of the default-path calculation.

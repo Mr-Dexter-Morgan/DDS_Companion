@@ -113,7 +113,7 @@ class ArchiveReset061Tests(unittest.TestCase):
 
 class UiPolish061Tests(unittest.TestCase):
     def test_version_and_semantic_storage_delta(self):
-        self.assertEqual(__version__, "0.6.1")
+        self.assertEqual(__version__, "0.6.2")
         self.assertEqual(human_storage_delta(-(496 * 1024**2)), "Освобождено за сессию: 496.00 MB")
         self.assertEqual(human_storage_delta(24 * 1024**2), "Добавлено за сессию: 24.00 MB")
         self.assertEqual(human_storage_delta(0), "Без изменений за сессию")
@@ -131,7 +131,8 @@ class UiPolish061Tests(unittest.TestCase):
         window = (root / "dds_companion" / "gui" / "window.py").read_text(encoding="utf-8")
         brand = window[window.index("brand_text = QVBoxLayout()"):window.index("side.addLayout(brand)")]
         self.assertNotIn('QLabel("Companion")', brand)
-        self.assertIn('Discord Data Snatcher · v', brand)
+        self.assertIn('subtitle = QLabel("Discord\\nData\\nSnatcher")', brand)
+        self.assertNotIn('v{__version__}', brand)
         app = (root / "dds_companion" / "gui" / "app.py").read_text(encoding="utf-8")
         self.assertIn("app.setApplicationDisplayName(APPLICATION_NAME)", app)
 

@@ -78,8 +78,8 @@ QLabel#BrandMark {{
     border: none;
     padding: 0;
 }}
-QLabel#BrandTitle {{ font-size: 13pt; font-weight: 700; color: {TEXT}; }}
-QLabel#BrandSub {{ font-size: 9pt; color: {MUTED}; }}
+QLabel#BrandTitle {{ font-size: 16pt; font-weight: 800; color: {TEXT}; }}
+QLabel#BrandSub {{ font-size: 10.5pt; font-weight: 600; color: {MUTED}; }}
 QPushButton[nav="true"] {{
     text-align: left;
     padding: 10px 12px;

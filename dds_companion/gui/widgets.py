@@ -72,6 +72,8 @@ _ACTIVITY_SUBSYSTEMS = {
     "discord": "Discord",
     "plugin": "DDS Plugin",
     "updates": "Обновления",
+    "export": "Экспорт",
+    "archive": "Архив",
 }
 
 _ACTIVITY_EVENTS = {
@@ -99,6 +101,11 @@ _ACTIVITY_EVENTS = {
     "health_state_changed": "Состояние изменилось",
     "health_reason_changed": "Причина изменилась",
     "health_recovered": "Система восстановилась",
+    "manual_export_created": "Ручной экспорт",
+    "manual_export_failed": "Ошибка экспорта",
+    "branch_media_cache_cleared": "Кэш ветки очищен",
+    "branch_data_deleted": "Данные ветки удалены",
+    "branch_deleted": "Ветка удалена",
 }
 
 
@@ -158,6 +165,17 @@ def human_activity_summary(event: dict | None) -> str:
         return "Автоматическая загрузка медиа включена"
     if event_type == "media_backfill_disabled":
         return "Автоматическая загрузка медиа выключена"
+    if event_type == "manual_export_created":
+        path = Path(str(details.get("output_path") or ""))
+        return f"Создан ZIP: {path.name or 'экспорт'} · {int(details.get('message_count') or 0)} сообщений"
+    if event_type == "manual_export_failed":
+        return "Не удалось создать ручной ZIP-экспорт"
+    if event_type == "branch_media_cache_cleared":
+        return f"Кэш ветки очищен: {int(details.get('media_files_removed') or 0)} файлов"
+    if event_type == "branch_data_deleted":
+        return f"Данные ветки удалены: {int(details.get('messages_removed') or 0)} сообщений"
+    if event_type == "branch_deleted":
+        return f"Ветка удалена: {int(details.get('messages_removed') or 0)} сообщений"
     if event_type == "media_cached":
         size = details.get("local_size")
         if size is not None:

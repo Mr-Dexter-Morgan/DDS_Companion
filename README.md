@@ -1,38 +1,54 @@
 # DDS — Discord Data Snatcher
-## DDS Companion 0.6.1 candidate
 
-0.6.1 is the polish/UX follow-up to the 0.6.0 native Windows EXE and DataRoot foundation.
+## DDS Companion 0.6.2 candidate-r1
 
-### Product identity
-- Product: **DDS — Discord Data Snatcher**
-- Executable: **DDS.exe**
-- Internal component: DDS Companion
-- AppUserModelID: `DDS.DiscordDataSnatcher.Companion`
+0.6.2 is the first DDS build with a provider-independent manual export layer. It builds on the Windows-live-tested 0.6.1 local baseline and keeps the local archive as source-of-truth.
 
-### Main 0.6.1 changes
-- full local archive reset with settings preserved;
-- reset boundary preventing old untouched DDS_Data captures from instantly rebuilding a deliberately cleared archive;
-- expired Discord signed URLs automatically move to passive rediscovery instead of requiring routine Ignore All;
-- fresh observation of the same stable attachment restores it automatically;
-- semantic storage delta wording after cache cleanup;
-- public GUI naming/title cleanup;
-- additional reset/recovery regression coverage.
+### Main changes
 
-### One intentionally unresolved product decision
-The earlier note `только кэш / только текст / как выбрано в Библиотеке` has not been wired to local import yet. The current Library `Выгрузка` switches are explicitly future-export rules. Reusing them as import filters would couple export policy to local archive retention. Confirm the intended boundary before implementation.
+- Window title is now exactly `DDS — Discord Data Snatcher`.
+- Sidebar branding is simplified: stronger centered `DDS`, then `Discord / Data / Snatcher` on separate lines; version moved out of normal chrome.
+- Library context menu adds:
+  - `Упаковать -> Только текст`;
+  - `Упаковать -> Текст + кэш`;
+  - `Очистить медиакэш этой ветки`;
+  - `Удалить данные ветки`;
+  - `Полностью удалить ветку`.
+- Manual export creates validated ZIP packages with:
+  - `manifest.json`;
+  - `content.md`;
+  - `messages.json`;
+  - `media_index.json`;
+  - optional `media/`.
+- Missing media is declared explicitly instead of being silently omitted.
+- Manual packaging is independent from Library `Выгружать / Не выгружать` rules and does not mutate them.
+- Settings adds a persistent manual-export folder.
+- Branch destructive operations are separated by meaning and protected by confirmation/runtime stop where necessary.
+- ZIP creation uses staging, archive verification and atomic promotion.
+- No Google OAuth/API integration is included. Future automatic external sync will target a normal filesystem folder.
 
-### Windows build
-Run:
+### Reliability contract
 
-`build_windows.bat`
+SQLite/local archive remains source-of-truth. ZIP and future sync-folder output are derived layers. Export failure must not damage capture/import/archive/media operation. Deleting an exported copy must never delete SQLite archive data.
 
-Expected product:
+### Build
 
-`dist\DDS\DDS.exe`
+Windows onedir build:
 
-The build stays **onedir** for inspection and live validation.
+```bat
+build_windows.bat
+```
 
-### Validation
-Automated gate: **106/106 PASS ×3** in source and extracted package, `compileall` PASS, CLI version PASS.
-Windows 0.6.1 live validation is still required before local acceptance.
-GitHub publication is deliberately deferred.
+Expected output:
+
+```text
+dist\DDS\DDS.exe
+```
+
+### Validation state
+
+- Automated regression suite: source gate required.
+- `compileall`: required.
+- CLI version smoke: required.
+- Windows native build/live validation: still required before 0.6.2 is frozen or published.
+- Intended first public GitHub binary Release: `v0.6.2`, only after the live gate passes.

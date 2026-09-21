@@ -23,6 +23,7 @@ class CompanionSettings:
     media_retention_days: int | None = 30
     media_autodownload_enabled: bool = False
     confirm_media_cache_clear: bool = True
+    manual_export_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -113,6 +114,13 @@ class SettingsStore:
         for key in ("media_autodownload_enabled", "confirm_media_cache_clear"):
             if not isinstance(values[key], bool):
                 raise ValueError(f"{key} must be boolean")
+
+        export_path = values.get("manual_export_path")
+        if export_path is not None:
+            if not isinstance(export_path, str):
+                raise ValueError("manual_export_path must be a string or null")
+            export_path = export_path.strip()
+            values["manual_export_path"] = export_path or None
 
         return CompanionSettings(**values)
 

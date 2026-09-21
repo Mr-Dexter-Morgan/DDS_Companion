@@ -9,6 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QPixmap, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
+    QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -23,10 +24,14 @@ from PySide6.QtWidgets import (
 
 from dds_companion import __version__
 from dds_companion.core.identity import APPLICATION_DISPLAY_NAME, resource_path
-from dds_companion.core.paths import build_runtime_paths
+from dds_companion.core.paths import build_runtime_paths, default_manual_export_path
 from dds_companion.core.settings import SettingsStore
 from dds_companion.services.archive_reset_service import reset_local_archive
+from dds_companion.services.activity_service import ActivityService
+from dds_companion.services.branch_maintenance_service import BranchMaintenanceService
+from dds_companion.services.export_package_service import ExportPackageService
 from dds_companion.services.media_cache_service import MediaCacheService
+from dds_companion.storage.database import connect_database
 
 from .layout_profile import choose_layout_profile
 from .pages import ActivityPage, DashboardPage, HealthPage, LibraryPage, SettingsPage
@@ -51,7 +56,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, *, dds_data: str | None = None, app_data: str | None = None, portable: bool = False, poll_ms: int = 750, settle_ms: int = 500):
         super().__init__()
-        self.setWindowTitle(f"{APPLICATION_DISPLAY_NAME} · v{__version__}")
+        self.setWindowTitle(APPLICATION_DISPLAY_NAME)
         self.setMinimumSize(960, 600)
         self._layout_profile: str | None = None
         self._screen_signals_connected = False
@@ -73,6 +78,8 @@ class MainWindow(QMainWindow):
         self.runtime: GuiRuntime | None = None
         self.runtime_thread: threading.Thread | None = None
         self._archive_reset_in_progress = False
+        self._branch_maintenance_in_progress = False
+        self._manual_export_in_progress = False
         self.clear_cache_worker_active = False
         self.latest_snapshot: dict = {
             "paths": {
@@ -115,28 +122,31 @@ class MainWindow(QMainWindow):
         side.setSpacing(6)
 
         brand = QHBoxLayout()
-        brand.setSpacing(10)
+        brand.setSpacing(12)
         mark = QLabel()
         mark.setObjectName("BrandMark")
-        mark.setFixedSize(44, 44)
+        mark.setFixedSize(48, 48)
         mark.setAlignment(Qt.AlignCenter)
         brand_pixmap = QPixmap(str(resource_path("assets/DDS_app_icon_master.png")))
         if not brand_pixmap.isNull():
-            mark.setPixmap(brand_pixmap.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            mark.setPixmap(brand_pixmap.scaled(44, 44, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
             mark.setText("DDS")
         brand_text = QVBoxLayout()
-        brand_text.setSpacing(0)
+        brand_text.setSpacing(2)
         title = QLabel("DDS")
         title.setObjectName("BrandTitle")
-        subtitle = QLabel(f"Discord Data Snatcher · v{__version__}")
+        title.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
+        subtitle = QLabel("Discord\nData\nSnatcher")
         subtitle.setObjectName("BrandSub")
+        subtitle.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         brand_text.addWidget(title)
+        brand_text.addSpacing(3)
         brand_text.addWidget(subtitle)
-        brand.addWidget(mark)
+        brand.addWidget(mark, 0, Qt.AlignTop)
         brand.addLayout(brand_text, 1)
         side.addLayout(brand)
-        side.addSpacing(16)
+        side.addSpacing(22)
 
         self.nav_buttons: list[QPushButton] = []
         for index, name in enumerate(self.PAGE_LABELS):
@@ -181,6 +191,7 @@ class MainWindow(QMainWindow):
         self.library = LibraryPage(
             on_messages_requested=self._request_library_messages,
             on_export_rule_changed=self._change_export_rule,
+            on_scope_action=self._library_scope_action,
         )
         self.activity = ActivityPage()
         self.health = HealthPage(
@@ -193,6 +204,7 @@ class MainWindow(QMainWindow):
             on_setting_changed=self._on_setting_changed,
             on_clear_media_cache=self._clear_media_cache,
             on_reset_local_archive=self._reset_local_archive,
+            on_choose_export_folder=self._choose_export_folder,
             on_run_diagnostics=self._run_diagnostics,
             on_database_check=self._database_quick_check,
             on_copy_report=self._copy_diagnostics_report,
@@ -393,7 +405,9 @@ class MainWindow(QMainWindow):
 
     def _on_snapshot(self, snapshot: dict) -> None:
         snapshot = dict(snapshot)
-        snapshot["settings"] = self.settings_store.snapshot()
+        settings_snapshot = self.settings_store.snapshot()
+        settings_snapshot["effective_manual_export_path"] = str(self._effective_manual_export_path())
+        snapshot["settings"] = settings_snapshot
         self.latest_snapshot = snapshot
         health = snapshot.get("health", {})
         state = health.get("state", "UNKNOWN")
@@ -466,6 +480,172 @@ class MainWindow(QMainWindow):
         }.get(str(mode).upper(), str(mode))
         self.statusBar().showMessage(f"Правило выгрузки: {label}", 2500)
 
+    def _effective_manual_export_path(self) -> Path:
+        configured = self.settings_store.settings.manual_export_path
+        if configured:
+            return Path(configured).expanduser().resolve()
+        return default_manual_export_path(self.paths).expanduser().resolve()
+
+    def _choose_export_folder(self) -> None:
+        initial = self._effective_manual_export_path()
+        initial.mkdir(parents=True, exist_ok=True)
+        selected = QFileDialog.getExistingDirectory(
+            self,
+            "DDS — Папка ручного экспорта",
+            str(initial),
+        )
+        if not selected:
+            return
+        try:
+            self.settings_store.update(manual_export_path=str(Path(selected).expanduser().resolve()))
+        except Exception as exc:
+            QMessageBox.warning(self, "DDS", f"Не удалось сохранить папку экспорта:\n{exc}")
+            return
+        self._refresh_settings_surface()
+        self.statusBar().showMessage("Папка ручного экспорта сохранена", 3000)
+
+    def _library_scope_action(self, action: str, detail: dict) -> None:
+        kind = str(detail.get("kind") or "")
+        scope_id = str(detail.get("id") or "")
+        name = str(detail.get("name") or scope_id or "раздел")
+        if not kind or not scope_id:
+            return
+        if action in {"package_text", "package_text_cache"}:
+            mode = "TEXT_ONLY" if action == "package_text" else "TEXT_AND_CACHE"
+            self._package_scope(kind, scope_id, name, mode)
+            return
+
+        if self._branch_maintenance_in_progress or self._archive_reset_in_progress:
+            self.statusBar().showMessage("Сначала дождись завершения текущего обслуживания DDS", 4000)
+            return
+
+        if action == "clear_branch_media":
+            prompt = (
+                f"Очистить локальный медиакэш раздела «{name}»?\n\n"
+                "Сообщения, ссылки, структура и правила выгрузки останутся."
+            )
+            title = "DDS — Очистка медиакэша ветки"
+        elif action == "delete_branch_data":
+            prompt = (
+                f"Удалить архивные данные раздела «{name}»?\n\n"
+                "Сообщения и связанные вложения будут удалены. Сам узел Библиотеки "
+                "и его правило выгрузки сохранятся."
+            )
+            title = "DDS — Удаление данных ветки"
+        elif action == "delete_branch":
+            prompt = (
+                f"ПОЛНОСТЬЮ удалить раздел «{name}» из локального архива?\n\n"
+                "Будут удалены данные, медиакэш, структурный узел и правила выгрузки. "
+                "Для канала/сервера удаляются и дочерние разделы.\n\nОтменить это действие нельзя."
+            )
+            title = "DDS — Полное удаление ветки"
+        else:
+            return
+        answer = QMessageBox.warning(
+            self, title, prompt, QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if answer != QMessageBox.Yes:
+            return
+        self._run_branch_maintenance(action, kind, scope_id, name)
+
+    def _package_scope(self, kind: str, scope_id: str, name: str, mode: str) -> None:
+        if self._manual_export_in_progress:
+            self.statusBar().showMessage("Уже создаётся другой ZIP-пакет", 3500)
+            return
+        self._manual_export_in_progress = True
+        output_dir = self._effective_manual_export_path()
+        self.statusBar().showMessage(f"Упаковываю «{name}»…", 0)
+
+        def worker() -> None:
+            connection = None
+            try:
+                connection = connect_database(self.paths.database)
+                result = ExportPackageService(connection, self.paths.media).package(
+                    kind, scope_id, mode=mode, output_dir=output_dir, app_version=__version__
+                )
+                ActivityService(connection).publish(
+                    subsystem="export",
+                    event_type="manual_export_created",
+                    summary=f"Manual export created: {result.scope_name}",
+                    details=result.to_dict(),
+                    guild_id=scope_id if kind == "guild" else None,
+                    parent_channel_id=scope_id if kind == "channel" else None,
+                    thread_id=scope_id if kind == "thread" else None,
+                )
+                self.bus.maintenance_done.emit({"kind": "manual_export", "ok": True, "result": result.to_dict()})
+            except Exception as exc:
+                if connection is not None:
+                    try:
+                        ActivityService(connection).publish(
+                            level="ERROR", subsystem="export", event_type="manual_export_failed",
+                            summary=f"Manual export failed: {name}",
+                            details={"scope_kind": kind, "scope_id": scope_id, "error": f"{type(exc).__name__}: {exc}"},
+                        )
+                    except Exception:
+                        pass
+                self.bus.maintenance_done.emit({
+                    "kind": "manual_export", "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+            finally:
+                if connection is not None:
+                    try:
+                        connection.close()
+                    except Exception:
+                        pass
+
+        threading.Thread(target=worker, name="dds-manual-export", daemon=True).start()
+
+    def _run_branch_maintenance(self, action: str, kind: str, scope_id: str, name: str) -> None:
+        self._branch_maintenance_in_progress = True
+        runtime = self.runtime
+        thread = self.runtime_thread
+        self.status_text.setText(f"Останавливаю DDS для безопасного обслуживания «{name}»…")
+        if runtime is not None:
+            runtime.stop()
+            runtime.request_media_wake()
+
+        def worker() -> None:
+            connection = None
+            try:
+                if thread is not None and thread.is_alive():
+                    thread.join(timeout=10.0)
+                if thread is not None and thread.is_alive():
+                    raise RuntimeError("runtime did not stop within 10 seconds; branch was not touched")
+                connection = connect_database(self.paths.database)
+                service = BranchMaintenanceService(connection, self.paths.media)
+                if action == "clear_branch_media":
+                    result = service.clear_media_cache(kind, scope_id)
+                    event_type = "branch_media_cache_cleared"
+                elif action == "delete_branch_data":
+                    result = service.delete_data(kind, scope_id)
+                    event_type = "branch_data_deleted"
+                else:
+                    result = service.delete_branch(kind, scope_id)
+                    event_type = "branch_deleted"
+                ActivityService(connection).publish(
+                    subsystem="archive", event_type=event_type,
+                    summary=f"{event_type}: {name}", details=result.to_dict(),
+                )
+                self.bus.maintenance_done.emit({
+                    "kind": "branch_maintenance", "ok": result.errors == 0,
+                    "action": action, "name": name, "result": result.to_dict(),
+                })
+            except Exception as exc:
+                self.bus.maintenance_done.emit({
+                    "kind": "branch_maintenance", "ok": False,
+                    "action": action, "name": name,
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+            finally:
+                if connection is not None:
+                    try:
+                        connection.close()
+                    except Exception:
+                        pass
+
+        threading.Thread(target=worker, name="dds-branch-maintenance", daemon=True).start()
+
     def _retry_media_issue(self, media_key: str) -> None:
         runtime = self.runtime
         if not media_key or runtime is None:
@@ -517,7 +697,9 @@ class MainWindow(QMainWindow):
         if not self.latest_snapshot:
             return
         snapshot = dict(self.latest_snapshot)
-        snapshot["settings"] = self.settings_store.snapshot()
+        settings_snapshot = self.settings_store.snapshot()
+        settings_snapshot["effective_manual_export_path"] = str(self._effective_manual_export_path())
+        snapshot["settings"] = settings_snapshot
         self.latest_snapshot = snapshot
         self.settings.update_snapshot(snapshot)
 
@@ -650,6 +832,47 @@ class MainWindow(QMainWindow):
                     f"Сброс архива отменён из-за ошибки. Исходные данные не удаляются принудительно.\n\n{error or result}",
                 )
                 self._start_runtime()
+        elif kind == "manual_export":
+            self._manual_export_in_progress = False
+            if ok:
+                output = Path(str(result.get("output_path") or ""))
+                missing = int(result.get("media_missing", 0) or 0)
+                self.statusBar().showMessage(
+                    f"ZIP готов: {output.name} · {result.get('message_count', 0)} сообщений"
+                    + (f" · {missing} медиа не включено" if missing else ""),
+                    7000,
+                )
+                box = QMessageBox(self)
+                box.setIcon(QMessageBox.Information)
+                box.setWindowTitle("DDS — Экспорт готов")
+                box.setText(f"Пакет создан:\n{output}")
+                box.setInformativeText(
+                    f"Сообщений: {result.get('message_count', 0)} · "
+                    f"медиа: {result.get('media_included', 0)}/{result.get('media_total', 0)} включено"
+                )
+                open_button = box.addButton("Открыть папку", QMessageBox.ActionRole)
+                box.addButton(QMessageBox.Ok)
+                box.exec()
+                if box.clickedButton() is open_button:
+                    open_folder(output.parent)
+            else:
+                QMessageBox.warning(self, "DDS — Экспорт", f"Не удалось создать ZIP:\n{error or result}")
+        elif kind == "branch_maintenance":
+            self._branch_maintenance_in_progress = False
+            self._start_runtime()
+            if ok:
+                action = payload.get("action")
+                labels = {
+                    "clear_branch_media": "Медиакэш ветки очищен",
+                    "delete_branch_data": "Данные ветки удалены",
+                    "delete_branch": "Ветка полностью удалена",
+                }
+                self.statusBar().showMessage(labels.get(action, "Операция завершена"), 6000)
+            else:
+                QMessageBox.warning(
+                    self, "DDS — Обслуживание ветки",
+                    f"Операция завершилась с ошибкой. DDS будет перезапущен.\n\n{error or result}",
+                )
         elif kind == "cache_clear":
             self.clear_cache_worker_active = False
             if ok:

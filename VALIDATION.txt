@@ -1,28 +1,45 @@
-DDS Companion 0.6.1 — Validation
-================================
+DDS Companion 0.6.2 — Validation
 
-Status: AUTOMATED POLISH PASS / ONE PRODUCT-SEMANTICS DECISION + WINDOWS LIVE GATE PENDING
+Automated source gate
+- Run complete unittest discovery three consecutive times.
+- Run compileall.
+- Run CLI --version and require DDS Companion 0.6.2.
+- Exercise manual export service against real SQLite fixture data:
+  - Text Only package contains no media bytes;
+  - Text + Cache package contains cached media and relative Markdown references;
+  - missing media is declared;
+  - duplicate original filenames cannot collide;
+  - failed package leaves no false-success ZIP.
+- Exercise branch maintenance:
+  - branch cache clear preserves archive/rules;
+  - delete data preserves structural node/rule;
+  - full delete removes node/content/rule/cache;
+  - channel full delete removes child threads.
+- Validate persistent manual export path.
+- Validate source-level branding/context-menu contracts.
 
-Automated:
-- 106/106 tests PASS repeated three times
-- packaged ZIP extracted + 106/106 tests PASS repeated three times
-- compileall PASS in source tree and extracted package
-- CLI version reports DDS Companion 0.6.1
-- full local archive reset tests PASS
-- reset-boundary / clean-slate re-import guard PASS
-- cache-only clear preserves SQLite archive PASS
-- expired Discord signed URL -> passive UNRESOLVED rediscovery PASS
-- legacy stale URL normalization + fresh rediscovery PASS
-- transient network failure remains retryable PASS
-- product branding/title source contract PASS
-- semantic storage delta PASS
-- 0.6.0 DataRoot/branding/PyInstaller contracts remain green
+Environment note
+- This source-validation environment does not currently have PySide6 installed, so a native GUI smoke cannot be executed here.
+- Global `pip check` is not a DDS gate in this environment because the host image currently has an unrelated moviepy/Pillow dependency conflict.
+- Native Windows PyInstaller build and real GUI/live interaction remain the release gate.
 
-Deliberately not claimed yet:
-- the earlier «только кэш / только текст / как выбрано в Библиотеке» item, because current Library rules are explicitly export rules and must not silently be repurposed as import filters without confirmation
-- native Windows DDS.exe build execution for this 0.6.1 source candidate
-- live destructive reset against the user's real Windows data
-- taskbar / Alt+Tab / title behavior after the 0.6.1 polish changes
+Windows live gate required before freeze/release
+- Build onedir DDS.exe from this exact source candidate.
+- Verify File Properties version 0.6.2 and approved icon/taskbar identity.
+- Verify title/sidebar branding visually.
+- On real archive data, package one thread as Text Only and Text + Cache.
+- Open both ZIPs and inspect Markdown/JSON/media completeness.
+- Test configured export folder persistence.
+- Test branch cache clear, delete-data and full-delete confirmation/behavior.
+- Restart DDS and verify archive consistency after each destructive operation.
+- Revisit Discord after deliberate deletion and verify new capture can repopulate normally when Plugin produces fresh data.
+- Confirm existing 0.6.1 archive/media/reset behavior remains intact.
 
-Promotion remains blocked until the product-semantics question is resolved and Windows live validation passes.
-GitHub publication remains deferred independently of local acceptance.
+candidate-r2 delta validation
+- Live finding from Windows: the r1 default used C:\Users\<user>\Documents\DDS Exports even when Documents had been relocated by Windows to another drive.
+- Root cause: default_manual_export_path() used Path.home() / "Documents" instead of the Windows Known Folder API.
+- Fix: installed profile now resolves FOLDERID_Documents via SHGetKnownFolderPath; fallback remains non-fatal.
+- Regression suite increased to 121 tests.
+- 121/121 PASS x3 after the correction.
+- compileall PASS.
+- CLI version: DDS Companion 0.6.2 PASS.

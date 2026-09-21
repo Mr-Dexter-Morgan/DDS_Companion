@@ -1,63 +1,54 @@
-DDS Companion 0.6.1 — Polish / Archive Reset / Media Recovery candidate
-=======================================================================
+DDS Companion 0.6.2 — Unified Manual Export / Branch Management / Branding
 
-Status: SOURCE CANDIDATE / WINDOWS BUILD + LIVE GATE PENDING
-Base: DDS Companion 0.6.0 native-EXE/Application Foundation
-Public GitHub release: DEFERRED until explicitly reopened by the user
+Base
+- Starts from accepted Windows-live-tested DDS Companion 0.6.1 candidate-r1.
+- Keeps 0.6.1 archive reset boundary, passive expired-media rediscovery and storage wording behavior.
 
-Archive reset
--------------
-- Added a separate destructive action: «Сбросить локальный архив».
-- Cache clear and archive reset are now explicitly different operations.
-- Full reset removes SQLite + WAL/SHM sidecars and local media cache while preserving settings.
-- Reset stops the runtime first, waits for SQLite/watcher/media workers to release files, recreates a clean current-schema DB, then restarts the runtime.
-- Added a reset-boundary marker outside SQLite so pre-reset DDS_Data captures are NOT immediately re-imported after a clean-slate reset.
-- When Plugin later rewrites/touches a capture after the boundary, it becomes eligible for import again.
+Branding
+- Window title: DDS — Discord Data Snatcher.
+- Removed version and duplicate DDS suffix from normal title chrome.
+- Sidebar brand: larger/stronger centered DDS; Discord / Data / Snatcher below on separate lines.
+- Version remains available in Diagnostics.
 
-Expired Discord media URLs
---------------------------
-- HTTP 401/403/404 from Discord media are now treated as expired-link rediscovery, not as a fake manual decision.
-- Confirmed expired links move directly to UNRESOLVED / «ожидает переобнаружения».
-- Dead signed URLs are cleared from the active row so the downloader cannot loop on the same URL.
-- Expired-link rows no longer appear in the normal action-required issue queue.
-- Legacy STALE_URL / stale-url IGNORED rows are normalized to the passive rediscovery state at media-runtime startup.
-- Fresh Plugin observation of the same stable attachment can promote it back to KNOWN and then CACHED.
-- Retry remains available for genuinely transient failures such as network errors / temporary server failures.
-- Diagnostics snapshot keeps passive rediscovery items with filename, state, HTTP status, failure class, timestamp, media key and last error.
+Unified manual export
+- Added provider-independent ExportPackageService.
+- Library context menu: Упаковать -> Только текст / Текст + кэш.
+- Canonical output format: ZIP.
+- Package contract:
+  manifest.json
+  content.md
+  messages.json
+  media_index.json
+  media/ (Text + Cache only)
+- Package media filenames use stable SHA-256-derived collision-safe prefixes.
+- Missing/not-cached/awaiting-rediscovery media remains visible in manifest/index.
+- Text-only export contains no media bytes.
+- Manual export never changes persistent Library export rules.
+- Added persistent manual_export_path setting and folder picker.
+- Packaging uses staging, validates the ZIP by reopening/testzip/manifest read, then atomically promotes the final file.
+- Failure cleanup prevents false-success ZIP artifacts.
+- Activity gets human-readable manual-export events.
 
-UI / product polish
--------------------
-- Removed the secondary «Companion» label from sidebar branding; public identity is DDS — Discord Data Snatcher.
-- Qt application display name is now DDS, while the explicit main-window title remains the full product name + version. This avoids the duplicate Windows title observed in the 0.6.0 live build.
-- Public GUI dialog titles use DDS rather than competing DDS Companion branding.
-- Storage session delta is now semantic:
-  - decrease -> «Освобождено за сессию: …»
-  - increase -> «Добавлено за сессию: …»
-  - tiny/no change -> «Без изменений за сессию».
+Branch management
+- Added branch-scoped media cache clear.
+- Added branch data deletion while preserving structural node and export rule.
+- Added full branch deletion including descendants and export rules.
+- Destructive branch maintenance stops archive/media runtime before mutation and restarts DDS afterwards.
+- Historical capture_imports are intentionally preserved as a dedup boundary so untouched old DDS_Data does not immediately repopulate a deliberately deleted branch; a genuinely updated capture can reappear later.
+- Orphan media registry rows/cache files are removed after data deletion; still-referenced media is preserved.
+- Activity gets human-readable branch-maintenance events.
 
-Safety / regression hardening
------------------------------
-- Runtime/media UI actions tolerate the runtime being temporarily unavailable during archive reset/restart.
-- Installed DataRoot, Portable foundation, approved DDS icon, DDS.exe identity, archive schema and existing Library/Activity/Status/Diagnostics contracts remain unchanged.
+Cloud/sync decision
+- Direct Google Drive OAuth/API integration is not part of DDS.
+- Future automatic sync will write to a user-selected ordinary filesystem folder; external clients such as Google Drive for Desktop/OneDrive/Dropbox/Yandex Disk/etc. may sync it.
+- 0.6.2 itself implements manual ZIP export only; background folder sync is a later layer.
 
-Open 0.6.1 scope item requiring one product decision
-----------------------------------------------------
-- The earlier note «только кэш / только текст / как выбрано в Библиотеке» is intentionally NOT wired into importer code yet.
-- The current Library «Выгрузка» column is an export-selection contract (archive_export_rules), not an import contract.
-- Reusing those export rules to suppress local archive import would mix two different data boundaries and could silently omit archive data.
-- Before this item is implemented, confirm whether those three modes belong to EXPORT/Cloud Export rather than local import.
+Release direction
+- If automated + real Windows live gates pass, 0.6.2 is the intended first public binary GitHub Release.
+- Planned post-0.6.2 order: Updater -> Tray/Autostart -> Setup/Repair/Installer -> 1.0.
 
-Automated validation
---------------------
-- 106/106 tests PASS repeated three times.
-- Packaged ZIP extracted and 106/106 tests PASS repeated three times.
-- compileall PASS in source and extracted package.
-- CLI version: DDS Companion 0.6.1 PASS.
-- Existing media recovery, archive, GUI-source, DataRoot and packaging regressions remain green.
-
-Remaining gate
---------------
-- Resolve the one import-vs-export mode decision above.
-- Build dist\DDS\DDS.exe on Windows.
-- Run the 0.6.1 live checklist against real data.
-- After user approval, freeze a LOCAL validated 0.6.1 baseline only. GitHub publication remains deferred.
+0.6.2 candidate-r2 — Windows Known Folder correction
+- Fixed the default manual-export directory on Windows when the user's Documents folder has been moved or redirected to another drive.
+- Replaced the naive Path.home()/Documents assumption with the Windows FOLDERID_Documents Known Folder lookup (SHGetKnownFolderPath), with a safe fallback.
+- Portable export behavior remains Data/exports.
+- Added regression coverage for redirected Windows Documents and the Portable default.

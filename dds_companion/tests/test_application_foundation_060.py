@@ -19,7 +19,7 @@ from dds_companion.core.identity import (
 
 class DataRoot060Tests(unittest.TestCase):
     def test_061_version_is_bumped(self):
-        self.assertEqual(__version__, "0.6.1")
+        self.assertEqual(__version__, "0.6.2")
 
     def test_installed_profile_preserves_localappdata_contract(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -106,7 +106,7 @@ class Branding060Tests(unittest.TestCase):
         self.assertIn('version=str(ROOT / "build" / "windows_version_info.txt")', spec)
         self.assertIn("DDS.exe", version)
         self.assertIn("DDS — Discord Data Snatcher", version)
-        self.assertIn("0.6.1", version)
+        self.assertIn("0.6.2", version)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QMenu,
     QPushButton,
     QScrollArea,
     QSplitter,
@@ -336,6 +337,7 @@ class LibraryPage(Page):
         *,
         on_messages_requested: Callable[[dict], None] | None = None,
         on_export_rule_changed: Callable[[str, str, str], None] | None = None,
+        on_scope_action: Callable[[str, dict], None] | None = None,
     ):
         super().__init__(
             "Библиотека",
@@ -344,6 +346,7 @@ class LibraryPage(Page):
         )
         self.on_messages_requested = on_messages_requested
         self.on_export_rule_changed = on_export_rule_changed
+        self.on_scope_action = on_scope_action
 
         self.splitter = QSplitter(Qt.Horizontal)
         self.splitter.setChildrenCollapsible(False)
@@ -380,6 +383,8 @@ class LibraryPage(Page):
         # widgets.  Keep hover/current/selection presentation separate from the
         # explicit user action that opens a channel/thread.
         self.tree.itemClicked.connect(self._item_clicked)
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._show_context_menu)
         tree_layout.addWidget(self.tree, 1)
 
         content_card = Card()
@@ -657,6 +662,44 @@ class LibraryPage(Page):
             self._show_empty_messages("Сообщения сервера не смешиваются в одну ленту.")
             return
         self._request_messages(reset=True)
+
+    def _show_context_menu(self, position) -> None:
+        item = self.tree.itemAt(position)
+        if item is None:
+            return
+        detail = item.data(0, Qt.UserRole + 1)
+        if not isinstance(detail, dict):
+            return
+        self._selected_key = str(item.data(0, Qt.UserRole) or "") or None
+        self._paint_explicit_selection(item)
+        self._selected_detail = detail
+        self._update_content_heading(detail)
+
+        menu = QMenu(self.tree)
+        package = menu.addMenu("Упаковать")
+        text_only = package.addAction("Только текст")
+        text_cache = package.addAction("Текст + кэш")
+        menu.addSeparator()
+        clear_cache = menu.addAction("Очистить медиакэш этой ветки")
+        delete_data = menu.addAction("Удалить данные ветки")
+        delete_branch = menu.addAction("Полностью удалить ветку")
+
+        chosen = menu.exec(self.tree.viewport().mapToGlobal(position))
+        if chosen is None or self.on_scope_action is None:
+            return
+        action = None
+        if chosen is text_only:
+            action = "package_text"
+        elif chosen is text_cache:
+            action = "package_text_cache"
+        elif chosen is clear_cache:
+            action = "clear_branch_media"
+        elif chosen is delete_data:
+            action = "delete_branch_data"
+        elif chosen is delete_branch:
+            action = "delete_branch"
+        if action:
+            self.on_scope_action(action, dict(detail))
 
     def _update_content_heading(self, detail: dict) -> None:
         if detail.get("kind") == "guild":
@@ -1500,6 +1543,7 @@ class SettingsPage(Page):
         on_setting_changed,
         on_clear_media_cache,
         on_reset_local_archive,
+        on_choose_export_folder,
         on_run_diagnostics,
         on_database_check,
         on_copy_report,
@@ -1511,6 +1555,7 @@ class SettingsPage(Page):
             parent,
         )
         self._on_setting_changed = on_setting_changed
+        self._on_choose_export_folder = on_choose_export_folder
         self._last_report_available = False
 
         self.tabs = QTabWidget()
@@ -1595,6 +1640,29 @@ class SettingsPage(Page):
             "Очистка медиакэша",
             "Удаляет только бинарники из media; SQLite, DDS JSON и attachment metadata не трогаются.",
             control=self.clear_media_button,
+        ))
+
+        storage_layout.addWidget(SectionHeader(
+            "Ручной экспорт",
+            "ZIP-пакеты создаются локально и не требуют облачной авторизации.",
+        ))
+        export_control = QWidget()
+        export_control_layout = QHBoxLayout(export_control)
+        export_control_layout.setContentsMargins(0, 0, 0, 0)
+        export_control_layout.setSpacing(8)
+        self.export_path_value = QLabel("—")
+        self.export_path_value.setObjectName("SettingHint")
+        self.export_path_value.setWordWrap(True)
+        self.export_path_value.setMinimumWidth(220)
+        choose_export = QPushButton("Выбрать…")
+        choose_export.setProperty("secondary", True)
+        choose_export.clicked.connect(self._on_choose_export_folder)
+        export_control_layout.addWidget(self.export_path_value, 1)
+        export_control_layout.addWidget(choose_export)
+        storage_layout.addWidget(SettingRow(
+            "Папка ручного экспорта",
+            "Сюда DDS сохраняет ZIP из команды «Упаковать» в Библиотеке.",
+            control=export_control,
         ))
 
         usage = Card()
@@ -1815,6 +1883,7 @@ class SettingsPage(Page):
             )
 
         settings = snapshot.get("settings", {})
+        self.export_path_value.setText(str(settings.get("effective_manual_export_path") or settings.get("manual_export_path") or "—"))
         self._set_combo_value(self.cache_limit_combo, settings.get("media_cache_limit_bytes"))
         self._set_combo_value(self.max_file_combo, settings.get("media_max_file_bytes"))
         self._set_combo_value(self.retention_combo, settings.get("media_retention_days"))
