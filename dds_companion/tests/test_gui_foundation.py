@@ -21,18 +21,6 @@ from dds_companion.tests.test_imports import sample_capture
 class LibraryServiceTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.discord_probe = patch(
-            "dds_companion.services.health_service.probe_discord_process",
-            return_value=DiscordProbeResult(
-                state="UNKNOWN",
-                summary="Discord process probe isolated for tests",
-                checked_at="2026-09-21T00:00:00+00:00",
-            ),
-        )
-        self.discord_probe.start()
-        self.addCleanup(self.discord_probe.stop)
-
         self.root = Path(self.tmp.name)
         self.conn = connect_database(self.root / "archive.sqlite3")
         self.importer = ImportService(self.conn)
@@ -192,6 +180,18 @@ class LibraryServiceTests(unittest.TestCase):
 class GuiRuntimeTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.discord_probe = patch(
+            "dds_companion.services.health_service.probe_discord_process",
+            return_value=DiscordProbeResult(
+                state="UNKNOWN",
+                summary="Discord process probe isolated for tests",
+                checked_at="2026-09-21T00:00:00+00:00",
+            ),
+        )
+        self.discord_probe.start()
+        self.addCleanup(self.discord_probe.stop)
+
         self.root = Path(self.tmp.name)
         self.dds = self.root / "DDS_Data"
         self.app_data = self.root / "Companion"
@@ -221,7 +221,8 @@ class GuiRuntimeTests(unittest.TestCase):
         self.capture_path.write_text(json.dumps(sample_capture()), encoding="utf-8")
 
     def _start_runtime(self, runtime: GuiRuntime) -> threading.Thread:
-        thread = self._start_runtime(runtime)
+        thread = threading.Thread(target=runtime.run)
+        thread.start()
         # unittest cleanups run LIFO: stop first, then join, then temp-dir cleanup.
         self.addCleanup(thread.join, 5.0)
         self.addCleanup(runtime.stop)
