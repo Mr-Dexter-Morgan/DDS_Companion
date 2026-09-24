@@ -11,6 +11,7 @@ from pathlib import Path
 from dds_companion.services.activity_service import ActivityService
 from dds_companion.services.discord_probe import DiscordProbeResult
 from dds_companion.services.health_service import HealthService
+from dds_companion.updater.check_state import CheckStateStore
 from dds_companion.services.import_service import ImportService
 from dds_companion.services.runtime_monitor import RuntimeMonitor
 from dds_companion.services.stats_service import StatsService
@@ -153,6 +154,28 @@ class ObservabilityTests(unittest.TestCase):
         self.assertEqual(updates["details"]["last_attempt_at"], "2026-09-16T00:10:00+00:00")
         self.assertIsNotNone(updates["details"]["next_check_at"])
 
+    def test_update_telemetry_uses_real_updater_check_state(self):
+        check_path = self.app / "update" / "check_state.json"
+        store = CheckStateStore(check_path)
+        attempt = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
+        store.mark_attempt(now=attempt)
+        store.mark_success(now=attempt + timedelta(seconds=2))
+
+        health = HealthService(
+            self.conn,
+            self.dds,
+            update_check_state_path=check_path,
+        )
+        updates = health.snapshot(watcher_expected=False)["subsystems"]["updates"]
+        self.assertEqual(updates["state"], "OK")
+        self.assertEqual(updates["details"]["interval_hours"], 24)
+        self.assertEqual(updates["details"]["last_attempt_at"], attempt.isoformat())
+        self.assertEqual(
+            updates["details"]["last_success_at"],
+            (attempt + timedelta(seconds=2)).isoformat(),
+        )
+        self.assertIsNotNone(updates["details"]["next_check_at"])
+
     def test_unavailable_discord_only_limits_when_probe_reports_not_running(self):
         self.health.refresh_core(watcher_expected=True, watcher_state="RUNNING")
         self.health.set_subsystem("importer", "RUNNING", "ok")
@@ -160,7 +183,7 @@ class ObservabilityTests(unittest.TestCase):
         discord_state = snapshot["subsystems"]["discord"]["state"]
         self.assertIn(discord_state, {"RUNNING", "NOT RUNNING", "UNKNOWN"})
         self.assertEqual(snapshot["subsystems"]["updates"]["state"], "NEVER")
-        self.assertEqual(snapshot["subsystems"]["updates"]["details"]["interval_hours"], 6)
+        self.assertEqual(snapshot["subsystems"]["updates"]["details"]["interval_hours"], 24)
         self.assertEqual(snapshot["state"], "LIMITED" if discord_state == "NOT RUNNING" else "RUNNING")
 
     def test_last_error_info_has_subsystem_and_clears_after_recovery(self):

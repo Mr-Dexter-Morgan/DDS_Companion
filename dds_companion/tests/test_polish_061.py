@@ -113,7 +113,7 @@ class ArchiveReset061Tests(unittest.TestCase):
 
 class UiPolish061Tests(unittest.TestCase):
     def test_version_and_semantic_storage_delta(self):
-        self.assertEqual(__version__, "0.7.0")
+        self.assertEqual(__version__, "0.7.1")
         self.assertEqual(human_storage_delta(-(496 * 1024**2)), "Освобождено за сессию: 496.00 MB")
         self.assertEqual(human_storage_delta(24 * 1024**2), "Добавлено за сессию: 24.00 MB")
         self.assertEqual(human_storage_delta(0), "Без изменений за сессию")

@@ -27,9 +27,10 @@ This Git history was reconstructed from preserved DDS Companion source snapshots
 | `v0.6.1` | 2026-09-21 | Archive reset boundary + passive media rediscovery |
 | `v0.6.2` | 2026-09-21 | Manual ZIP export + branch management + branding + redirected Documents + Windows recovery hardening |
 | `v0.7.0` | 2026-09-24 | Safe updater foundation + transactional rollback + single-instance/runtime/build hardening |
+| `v0.7.1` | 2026-09-24 | Media-cache race fix + truthful updater status telemetry |
 
 The archived `CHANGELOG.txt`, validation files, live-test checklists and contracts inside each tagged tree provide the detailed record for that milestone.
 
 `v0.6.2` is tagged on the validated Public Preview release commit. That commit layers release documentation, Windows CI hardening and packaging metadata on top of the preserved candidate-r2 source snapshot.
 
-`v0.7.0` source and Windows artifacts are frozen and locally validated. The public GitHub v0.7.0 tag/release is intentionally pending explicit publication approval.
+`v0.7.1` is the current Public Preview release line. It carries the validated 0.7 updater foundation plus the manual-test fixes for media-cache scan races and updater status telemetry.
