@@ -1,5 +1,8 @@
 Unreleased — post-0.6.2 repository baseline
 
+Runtime safety
+- Added a GUI single-instance guard before MainWindow/runtime startup. A second launch activates the existing window and exits without starting another watcher or opening another archive runtime.
+
 Documentation
 - Added ROADMAP.md with the post-0.6.2 order: Safe Updater Foundation -> Tray/Autostart -> Setup/Repair/Installer -> 1.0.
 - README now points to the roadmap.
