@@ -27,6 +27,7 @@ Recovery and observability
 - updater.log records promotion, startup confirmation and rollback.
 - journal.json records durable updater lifecycle states.
 - Power-loss handoff between pending/current pointers is recoverable.
+- Launcher startup removes orphaned non-authoritative version directories and stale .incoming-* trees after interrupted promotion.
 - Failed Windows candidates are terminated as a process tree and removed with bounded retry.
 - Rollback preserves the already-committed previous working build and relaunches the restored version.
 - Release/download operations use bounded timeout/retry and cancellation cleanup.
@@ -34,12 +35,13 @@ Recovery and observability
 Update UX
 - Settings provides manual check/download/install flow.
 - Optional background checking is bounded to at most once per day.
+- Daily background update throttling counts attempts, not only successful GitHub responses, so outages do not cause a check on every DDS launch.
 - Automatic install remains opt-in; update/network failure never blocks archive use.
 - Release notes are normalized and bounded before display.
 - Updater protocol/package format are versioned and fail closed on unsupported formats.
 
 Validation completed on Windows
-- Full unittest discovery: 170/170 PASS, three consecutive runs.
+- Full unittest discovery: 174/174 PASS, three consecutive runs.
 - compileall PASS.
 - Native PyInstaller build PASS for DDS.exe, DDSApp.exe and DDSUpdater.exe.
 - Live success PASS: dev0 -> synthetic dev1, startup ACK, journal COMPLETE, STARTUP_CONFIRMED, previous=dev0.

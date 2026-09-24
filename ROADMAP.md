@@ -27,11 +27,13 @@ Implemented:
 - Startup ACK tied to core runtime readiness.
 - Automatic rollback on crash/startup timeout.
 - Power-loss-safe/idempotent startup commit.
+- Crash-startup cleanup for orphaned candidate/incoming version directories.
 - Durable journal and updater-specific log.
 - Cross-process update lock and free-space preflight.
 - Bounded retry/cancel behavior.
 - Windows process-tree termination and failed-version cleanup.
 - Manual update UI, optional daily background check and opt-in automatic install.
+- Background check throttling is attempt-based, including GitHub/network failures.
 - Real Windows EXE happy-path and forced-timeout rollback validation.
 
 Remaining before publication:

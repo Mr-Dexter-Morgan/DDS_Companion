@@ -6,10 +6,10 @@ Status
 - Public v0.7.0 is not tagged/released yet.
 
 Automated source gate completed
-- Full unittest discovery: 170/170 PASS, three consecutive runs.
+- Full unittest discovery: 174/174 PASS, three consecutive runs.
 - compileall PASS.
 - Focused updater/launcher/runtime-ready suites PASS.
-- Covered: bad/truncated packages, retry/cancel cleanup, protected ZIP roots, low disk, duplicate updater lock, UTF-8 BOM launch args, power-loss pointer window, previous-version retention, startup ACK commit, forced rollback, byte-identical user-data preservation, and runtime-ready independent of long initial import.
+- Covered: bad/truncated packages, retry/cancel cleanup, protected ZIP roots, low disk, duplicate updater lock, UTF-8 BOM launch args, power-loss pointer window, orphan-version recovery, attempt-based 24h background throttling, previous-version retention, startup ACK commit, forced rollback, byte-identical user-data preservation, and runtime-ready independent of long initial import.
 
 Native Windows build gate completed
 - DDSApp.exe PASS.
@@ -17,8 +17,10 @@ Native Windows build gate completed
 - DDSUpdater.exe PASS.
 - build_windows.bat exit 0.
 - Versioned dist + full/update ZIP + update manifest produced.
+- Final post-audit native rebuild PASS after orphan recovery and attempt-throttling fixes.
 
 Windows live updater gate completed
+- Final single-instance smoke on refreshed dev0 sandbox PASS: second launch exited 0, one DDSApp remained, cleanup left zero test DDS processes.
 
 Successful promotion:
 - dev0 -> synthetic dev1.

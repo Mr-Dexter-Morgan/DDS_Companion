@@ -13,9 +13,11 @@ DDS Companion is the local-first desktop side of DDS. It imports captures from t
 - Transactional current.json / previous.json / pending_update.json pointers.
 - Startup acknowledgement and automatic rollback when the candidate cannot prove core runtime readiness.
 - Power-loss recovery for the pending/current pointer handoff.
+- Crash-startup cleanup removes orphaned candidate/incoming version directories without touching authoritative current/previous/pending versions.
 - Cross-process update lock, free-space preflight, bounded retries/cancellation, durable journal and updater log.
 - Windows process-tree termination so failed PyInstaller candidates cannot strand locked payload files.
 - Manual update flow plus optional bounded background checks.
+- Daily background checks are throttled by attempt, so a GitHub outage does not cause a request on every DDS launch.
 - Regression coverage proving user data remains byte-identical across successful update and forced rollback.
 
 ## Existing archive/export features
@@ -68,7 +70,7 @@ Expected output:
 
 The active 0.7.0 candidate gate includes three consecutive full unittest passes, compileall, native Windows builds for the app/bootstrap/updater, package integrity checks, and interactive EXE tests for successful promotion and watchdog rollback.
 
-Current validated source: 170/170 tests x3 before the final native build/live gate.
+Current validated source: 174/174 tests x3, followed by a native Windows rebuild and final single-instance smoke.
 
 Detailed status: VALIDATION.txt and LIVE_TEST_CHECKLIST_0.7.0.txt.
 
