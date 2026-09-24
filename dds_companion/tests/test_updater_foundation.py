@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import stat
 import tempfile
 import unittest
@@ -38,6 +39,11 @@ from dds_companion.updater.pointer import (
     write_pointer,
 )
 from dds_companion.updater.release_source import GitHubReleaseSource
+
+def canonical_path(path: Path) -> str:
+    return os.path.normcase(os.path.realpath(os.path.abspath(path)))
+
+
 from dds_companion.updater.versioning import is_newer
 from dds_companion.updater.staging import PackageStager, StageError
 from dds_companion.updater.external import install_candidate
@@ -144,7 +150,7 @@ class UpdaterFoundationTests(unittest.TestCase):
         app_dir = self.root / "DDS"
         paths = build_runtime_paths(portable=True, app_dir=app_dir)
         updater = build_updater_paths(paths)
-        self.assertEqual(updater.workspace.parent, app_dir.parent)
+        self.assertEqual(canonical_path(updater.workspace.parent), canonical_path(app_dir.parent))
         self.assertNotEqual(updater.workspace, paths.app_data)
         self.assertFalse(str(updater.workspace).startswith(str(paths.app_data)))
 
@@ -152,7 +158,7 @@ class UpdaterFoundationTests(unittest.TestCase):
         app_data = self.root / "AppData"
         paths = build_runtime_paths(app_data=app_data, app_dir=self.root / "Program")
         updater = build_updater_paths(paths)
-        self.assertEqual(updater.workspace, app_data / "update")
+        self.assertEqual(canonical_path(updater.workspace), canonical_path(app_data / "update"))
 
     def test_state_machine_persists_valid_transition(self):
         store = JournalStore(self.root / "journal.json")
