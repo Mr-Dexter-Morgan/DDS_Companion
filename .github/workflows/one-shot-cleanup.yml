@@ -1,0 +1,28 @@
+name: One-shot release cleanup
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  cleanup:
+    if: github.event.head_commit.message == 'Run one-shot release cleanup'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete archived failed workflow runs and merged dev branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          for run_id in 36001468393 35998270085 35996468598; do
+            echo "Deleting archived failed run $run_id"
+            gh api -X DELETE "repos/$repo/actions/runs/$run_id"
+          done
+          echo "Deleting merged branch dev/0.7.1"
+          gh api -X DELETE "repos/$repo/git/refs/heads/dev%2F0.7.1"
+          echo "Cleanup complete"
