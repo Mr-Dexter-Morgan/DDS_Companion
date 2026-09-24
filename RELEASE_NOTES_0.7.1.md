@@ -1,6 +1,6 @@
 # DDS Companion 0.7.1
 
-Patch candidate for the two issues found during manual testing of the unreleased 0.7.0 build.
+Public Preview patch release built on the 0.7 updater foundation after manual testing.
 
 ## Fixed
 
@@ -15,4 +15,4 @@ Patch candidate for the two issues found during manual testing of the unreleased
 - No DDS Plugin change.
 - No user-data migration.
 - Existing 0.7.0 `check_state.json` is read backward-compatibly.
-- Main/tag/Release publication remains gated on manual testing of this candidate.
+- Published after the final Windows CI and manual usability gate passed.

@@ -1,6 +1,6 @@
 # DDS Companion Roadmap
 
-Current public baseline: v0.6.2 Public Preview. Release-ready source freeze: v0.7.0 Safe Updater Foundation. Public v0.7.0 has not been tagged/published yet.
+Current public baseline: **v0.7.1 Public Preview**. The 0.7 updater foundation is released; 0.8.0 Desktop Lifecycle is next.
 
 ## Non-negotiable architecture rules
 
@@ -14,7 +14,7 @@ Current public baseline: v0.6.2 Public Preview. Release-ready source freeze: v0.
 
 ## 0.7.0 - Safe Updater Foundation
 
-Status: source/product version frozen at 0.7.0, full Windows gate complete, publication pending explicit approval.
+Status: released through the 0.7.1 Public Preview patch line after full Windows CI and manual testing.
 
 Implemented:
 - External updater process and stable bootstrap launcher.
@@ -38,8 +38,9 @@ Implemented:
 - Bounded transient ZIP-read retry plus completed-archive integrity validation.
 - Real Windows EXE happy-path, final 0.7.0 update smoke and forced-timeout rollback validation.
 
-Remaining before public release:
-- Create the GitHub v0.7.0 tag/pre-release only after explicit publication approval.
+0.7.1 patch follow-up:
+- Fixed media-cache/statistics traversal races that could terminate the GUI runtime on WinError 3.
+- Unified updater Status with the updater's persistent check state and corrected the 24-hour scheduler display.
 
 ## 0.8.0 - Desktop Lifecycle
 

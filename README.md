@@ -2,9 +2,13 @@
 
 DDS Companion is the local-first desktop side of DDS. It imports captures from the BetterDiscord DDS plugin, stores a durable SQLite archive, keeps a recoverable media cache, browses Discord knowledge locally, packages selected branches into ZIP archives, and includes a recoverable Windows updater foundation.
 
-> Release line: 0.x / Public Preview. Current public baseline: v0.6.2. Release-ready source freeze: v0.7.0 - Safe Updater Foundation. Public v0.7.0 has not been published yet.
+[![Скачать DDS 0.7.1](https://img.shields.io/badge/%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC_DDS-0.7.1-6C63FF?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/download/v0.7.1/DDS-0.7.1-windows-x64.zip)
 
-## What 0.7.0 adds
+**Готовая сборка Windows x64. Python пользователю не нужен.** Нужен установленный BetterDiscord-плагин DDS.
+
+> Release line: 0.x / Public Preview. Current public release: **v0.7.1**.
+
+## What 0.7.1 includes
 
 - Separate DDSUpdater.exe; the running application never overwrites itself.
 - Stable DDS.exe bootstrap and versioned application payloads under versions/<version>.
@@ -79,17 +83,13 @@ Expected output:
 
 ## Validation
 
-The frozen v0.7.0 gate passed 174/174 tests three consecutive times after the final build-tooling changes, plus compileall, native Windows builds, a live concurrent-build rejection gate (primary exit 0 / secondary exit 16), package-integrity checks, final single-instance smoke, final update promotion smoke, and forced-timeout rollback validation.
+The 0.7.1 patch line passed the full Windows CI gate on the final development head: three regression passes, compile/version verification, native Windows build, package integrity/SHA verification and artifact upload. Manual pre-release testing also verified the updater/status fixes that motivated 0.7.1.
 
-Final local artifacts:
-- DDS-0.7.0-windows-x64.zip SHA-256 e3cfd2307b83230c4cbf3fec7adf17015311f9596c19c37bd9b9054a51704e80
-- DDS-0.7.0-update.zip SHA-256 b870d6a0fa8a934fa7e26ab4611cbe56a73220ad6b40bd91e366c0ff0e1cec56
-
-Detailed status: VALIDATION.txt and LIVE_TEST_CHECKLIST_0.7.0.txt.
+Detailed historical validation remains in VALIDATION.txt and the 0.7.0 live-test checklist.
 
 ## Roadmap
 
-0.7.0 Safe Updater Foundation is frozen and validated; only explicit public publication remains. Next planned layer: 0.8.0 Desktop Lifecycle (tray/autostart). See ROADMAP.md.
+0.7.1 is the current Public Preview release. Next planned layer: 0.8.0 Desktop Lifecycle (tray/autostart). See ROADMAP.md.
 
 ## History
 
