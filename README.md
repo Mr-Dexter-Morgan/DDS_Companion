@@ -52,6 +52,10 @@ dist\DDS\DDS.exe
 
 The 0.6.2 release gate runs the full test suite three times, `compileall`, the CLI version smoke, a native Windows PyInstaller build, Windows file-version verification, ZIP integrity verification and SHA-256 generation. Real interactive Discord/GUI behavior remains a separate live-validation layer.
 
+## Roadmap
+
+The next implementation target is **0.7.0 — Safe Updater Foundation**. The planned order through 1.0 and the architectural safety rules are tracked in [ROADMAP.md](ROADMAP.md).
+
 ## History
 
 Development snapshots from **0.1.0 through 0.6.2** were reconstructed into chronological Git history from preserved project archives. See [HISTORY.md](HISTORY.md). Every historical version has a Git tag pointing to the corresponding archived source snapshot; `v0.6.2` points to the public-release preparation commit built from candidate-r2.
