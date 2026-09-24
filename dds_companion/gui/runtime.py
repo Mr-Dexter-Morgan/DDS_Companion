@@ -17,6 +17,7 @@ from dds_companion.services.media_runtime import MediaBackfillRuntime
 from dds_companion.services.runtime_monitor import RuntimeMonitor
 from dds_companion.services.stats_service import StatsService
 from dds_companion.storage.database import connect_database
+from dds_companion.updater.paths import build_updater_paths
 from dds_companion.watcher.capture_watcher import CaptureWatcher
 from dds_companion.watcher.file_events import WatcherEvent
 
@@ -136,7 +137,11 @@ class GuiRuntime:
                 config_path=self.paths.config,
             )
             activity = ActivityService(connection)
-            health = HealthService(connection, self.paths.dds_data)
+            health = HealthService(
+                connection,
+                self.paths.dds_data,
+                update_check_state_path=build_updater_paths(self.paths).check_state,
+            )
             library = LibraryService(connection)
             monitor = RuntimeMonitor(activity, health)
 

@@ -5,35 +5,26 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from dds_companion.core.fs_scan import iter_regular_files
+
 
 def _count(connection: sqlite3.Connection, table: str) -> int:
     return int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
 
 
 def directory_size(path: Path) -> int:
-    if not path.exists():
-        return 0
     total = 0
-    for item in path.rglob("*"):
+    for item in iter_regular_files(path):
         try:
-            if item.is_file():
-                total += item.stat().st_size
+            total += item.stat().st_size
         except OSError:
+            # Cache maintenance may remove a file after enumeration.
             continue
     return total
 
 
 def directory_file_count(path: Path) -> int:
-    if not path.exists():
-        return 0
-    total = 0
-    for item in path.rglob("*"):
-        try:
-            if item.is_file():
-                total += 1
-        except OSError:
-            continue
-    return total
+    return sum(1 for _item in iter_regular_files(path))
 
 
 def sqlite_family_size(database_path: Path) -> int:

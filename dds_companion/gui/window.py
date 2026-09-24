@@ -851,6 +851,10 @@ class MainWindow(QMainWindow):
         self.settings.set_update_status(payload)
         state = str(payload.get("state") or "")
         message = str(payload.get("message") or "")
+        if state in {"CHECKING", "CURRENT", "AVAILABLE", "ERROR"} and self.runtime is not None:
+            # Health/Status observes updater check_state.json on the runtime
+            # thread. Force a snapshot so manual checks become visible at once.
+            self.runtime.request_refresh()
         if state in {"AVAILABLE", "STAGED", "ERROR"} and message:
             self.statusBar().showMessage(message, 6000)
         if state == "STAGED" and bool(payload.get("auto_install")):

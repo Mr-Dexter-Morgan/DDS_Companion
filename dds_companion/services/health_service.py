@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dds_companion.parser.validation import CAPTURE_SCHEMA_VERSION
+from dds_companion.updater.check_state import CheckStateStore
 from dds_companion.services.discord_probe import probe_discord_process
 
 VALID_STATES = {
@@ -21,7 +22,7 @@ VALID_STATES = {
     "UNKNOWN",
 }
 CRITICAL_SUBSYSTEMS = {"database", "dds_data", "importer", "watcher", "runtime"}
-DEFAULT_UPDATE_INTERVAL_HOURS = 6
+DEFAULT_UPDATE_INTERVAL_HOURS = 24
 PLUGIN_HEARTBEAT_MIN_VERSION = (0, 5, 3)
 PLUGIN_HEARTBEAT_FILE = "plugin_heartbeat.json"
 
@@ -59,9 +60,18 @@ def _version_tuple(value: str | None) -> tuple[int, int, int] | None:
 class HealthService:
     """Own subsystem state and compute the single overall Companion health."""
 
-    def __init__(self, connection: sqlite3.Connection, dds_data_path: str | Path):
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        dds_data_path: str | Path,
+        *,
+        update_check_state_path: str | Path | None = None,
+    ):
         self.connection = connection
         self.dds_data_path = Path(dds_data_path)
+        self.update_check_state_path = (
+            Path(update_check_state_path) if update_check_state_path else None
+        )
         self._discord_probe_monotonic = 0.0
         self._discord_cache: dict | None = None
 
@@ -529,29 +539,58 @@ class HealthService:
         return dict(self._discord_cache)
 
     def _updates_snapshot(self, now: datetime) -> dict:
-        keys = {
-            row["key"]: row["value"]
-            for row in self.connection.execute(
-                "SELECT key, value FROM application_state WHERE key LIKE 'update_%'"
-            ).fetchall()
-        }
-        try:
-            interval_hours = max(1, int(keys.get("update_interval_hours") or DEFAULT_UPDATE_INTERVAL_HOURS))
-        except (TypeError, ValueError):
-            interval_hours = DEFAULT_UPDATE_INTERVAL_HOURS
+        interval_hours = DEFAULT_UPDATE_INTERVAL_HOURS
+        last_attempt = last_success = last_error = None
 
-        last_attempt = keys.get("update_last_attempt")
-        last_success = keys.get("update_last_success")
-        next_check = keys.get("update_next_check")
-        last_error = keys.get("update_last_error")
+        # 0.7.1: Status and updater share one source of truth. The updater owns
+        # check_state.json; Health only observes it and never performs networking.
+        if self.update_check_state_path is not None and self.update_check_state_path.is_file():
+            check_state = CheckStateStore(self.update_check_state_path).load()
+            last_attempt = check_state.last_attempt_at
+            last_success = check_state.last_success_at
+            last_error = check_state.last_error
+
+        if not any((last_attempt, last_success, last_error)):
+            # Backward-compatible fallback for pre-0.7.1 databases. New updater
+            # checks no longer depend on SQLite telemetry.
+            keys = {
+                row["key"]: row["value"]
+                for row in self.connection.execute(
+                    "SELECT key, value FROM application_state WHERE key LIKE 'update_%'"
+                ).fetchall()
+            }
+            try:
+                interval_hours = max(
+                    1,
+                    int(keys.get("update_interval_hours") or DEFAULT_UPDATE_INTERVAL_HOURS),
+                )
+            except (TypeError, ValueError):
+                interval_hours = DEFAULT_UPDATE_INTERVAL_HOURS
+            last_attempt = keys.get("update_last_attempt")
+            last_success = keys.get("update_last_success")
+            last_error = keys.get("update_last_error")
+            next_check = keys.get("update_next_check")
+        else:
+            next_check = None
+
         if next_check is None and last_attempt:
             parsed = _parse_iso(last_attempt)
             if parsed is not None:
                 next_check = (parsed + timedelta(hours=interval_hours)).isoformat()
 
+        attempt_dt = _parse_iso(last_attempt)
+        success_dt = _parse_iso(last_success)
         if last_error and last_attempt:
             state = "FAILED"
             summary = f"Last update check failed · interval {interval_hours} h"
+        elif last_success and (
+            attempt_dt is None or success_dt is None or success_dt >= attempt_dt
+        ):
+            state = "OK"
+            summary = f"Last update check succeeded · interval {interval_hours} h"
+        elif last_attempt:
+            state = "UNKNOWN"
+            summary = f"Last update check has no recorded result · interval {interval_hours} h"
         elif last_success:
             state = "OK"
             summary = f"Last update check succeeded · interval {interval_hours} h"

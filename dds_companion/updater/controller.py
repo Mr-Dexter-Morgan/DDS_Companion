@@ -144,6 +144,7 @@ class UpdateController:
 
     def _check_worker(self, manual: bool) -> None:
         process_lock = None
+        check_succeeded = False
         try:
             process_lock = self._claim_process_lock()
             if process_lock is None:
@@ -152,10 +153,13 @@ class UpdateController:
             raise_if_cancelled(self._cancelled)
             # Throttle attempts, not only successful GitHub responses. Otherwise
             # an outage would cause a background request on every DDS launch.
-            self.check_state.mark_checked()
+            self.check_state.mark_attempt()
             result = self.client.check(self.current_version, channel="preview")
             raise_if_cancelled(self._cancelled)
+
             if not result.update_available:
+                self.check_state.mark_success()
+                check_succeeded = True
                 self.available_result = None
                 self._emit("CURRENT", "Установлена актуальная версия.", manual=manual)
                 return
@@ -164,9 +168,13 @@ class UpdateController:
             descriptor = result.descriptor
             manifest = result.manifest
             if descriptor is None or manifest is None:
-                self._emit("ERROR", "GitHub сообщил об обновлении без manifest.")
+                detail = "GitHub сообщил об обновлении без manifest."
+                self.check_state.mark_failure(detail)
+                self._emit("ERROR", detail)
                 return
 
+            self.check_state.mark_success()
+            check_succeeded = True
             self._emit(
                 "AVAILABLE",
                 f"Доступна версия {manifest.version}.",
@@ -182,7 +190,14 @@ class UpdateController:
         except UpdateCancelled:
             self._mark_cancelled()
         except Exception as exc:
-            self._emit("ERROR", f"Проверка обновлений не удалась: {type(exc).__name__}: {exc}")
+            detail = f"{type(exc).__name__}: {exc}"
+            if not check_succeeded:
+                try:
+                    self.check_state.mark_failure(detail)
+                except Exception:
+                    # Status persistence must never hide the original update error.
+                    pass
+            self._emit("ERROR", f"Проверка обновлений не удалась: {detail}")
         finally:
             if process_lock is not None:
                 process_lock.release()

@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
+from dds_companion.core.fs_scan import iter_directories, iter_regular_files
 from dds_companion.core.settings import CompanionSettings
 from dds_companion.services.media_registry_service import MediaRegistryService
 from dds_companion.storage.database import connect_database
@@ -141,7 +142,7 @@ class MediaCacheService:
             return []
         result: list[Path] = []
         staging = (self.media_root / ".staging").resolve()
-        for path in self.media_root.rglob("*"):
+        for path in iter_regular_files(self.media_root):
             try:
                 if not path.is_file():
                     continue
@@ -214,7 +215,7 @@ class MediaCacheService:
     def _prune_empty_dirs(self) -> None:
         if not self.media_root.exists():
             return
-        directories = [p for p in self.media_root.rglob("*") if p.is_dir() and p.name != ".staging"]
+        directories = [p for p in iter_directories(self.media_root) if p.name != ".staging"]
         directories.sort(key=lambda p: len(p.parts), reverse=True)
         for path in directories:
             try:
