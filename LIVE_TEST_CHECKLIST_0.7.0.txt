@@ -1,62 +1,57 @@
-DDS Companion 0.7.0.dev0 — Windows Live Gate / Candidate Evidence
+DDS Companion 0.7.0 - Windows Final Release Gate
 
-Automated / build
+Automated / source
+[x] Source/product version frozen at 0.7.0.
 [x] Full unittest discovery PASS: 174/174.
-[x] Full suite repeated three times.
+[x] Full suite repeated three times after final build-tooling changes.
 [x] compileall PASS.
+[x] Build metadata generator tracks current __version__.
+[x] Build cleanup is bounded-retry and fail-closed.
+[x] Whole build pipeline is protected by a Windows named mutex.
+[x] Deliberately overlapping second build rejected with exit 16; primary build completed exit 0.
+
+Native build / package
 [x] DDSApp.exe build PASS.
 [x] DDS.exe bootstrap build PASS.
 [x] DDSUpdater.exe build PASS.
 [x] build_windows.bat exit 0.
-[x] Full ZIP, update ZIP and update manifest produced.
-[x] Final refreshed-dev0 single-instance smoke: second launcher exit 0, exactly one DDSApp.
+[x] All three EXEs FileVersion/ProductVersion = 0.7.0.
+[x] Full ZIP, update ZIP, SHA files and update manifest produced.
+[x] Both ZIPs pass integrity test.
+[x] ZIP creation tolerates bounded transient Windows read races and fails closed if they persist.
+[x] Full ZIP SHA-256: e3cfd2307b83230c4cbf3fec7adf17015311f9596c19c37bd9b9054a51704e80
+[x] Update ZIP SHA-256: b870d6a0fa8a934fa7e26ab4611cbe56a73220ad6b40bd91e366c0ff0e1cec56
+[x] Update manifest hash/size/version match update ZIP.
 
-Successful update path
-[x] Clean dev0 pointer.
-[x] Synthetic dev1 validates and promotes.
+Final live smoke
+[x] Clean final 0.7.0 pointer.
+[x] First DDS.exe creates one runtime.
+[x] Repeated DDS.exe launch exits cleanly and leaves one runtime.
+[x] Synthetic 0.7.1 validates and promotes from final 0.7.0.
 [x] Candidate reaches core runtime readiness.
 [x] Startup ACK created; pending removed.
-[x] current=dev1; previous=dev0.
-[x] journal COMPLETE.
-[x] STARTUP_CONFIRMED logged.
+[x] current=0.7.1; previous=0.7.0.
+[x] journal COMPLETE; STARTUP_CONFIRMED logged.
 
-Failure / rollback path
-[x] Start from dev1 with previous=dev0.
-[x] Promote intentionally nonfunctional synthetic dev2.
-[x] No startup ACK.
-[x] Watchdog triggers rollback.
-[x] Candidate Windows process tree terminated.
-[x] current returns to dev1; previous stays dev0.
-[x] pending removed.
-[x] Failed dev2 directory removed.
-[x] No dev2 process remains.
-[x] dev1 relaunched automatically.
-[x] journal FAILED.
-[x] ROLLBACK_START and ROLLBACK_COMPLETE logged.
-[x] No CLEANUP_DEFERRED remains.
-
-Data / isolation
+Rollback / safety evidence
+[x] Forced timeout rollback live-tested on the same updater logic.
+[x] Windows failed-candidate process tree terminated.
+[x] Failed candidate directory removed.
+[x] Previous working version relaunched automatically.
+[x] journal FAILED with ROLLBACK_START/ROLLBACK_COMPLETE.
 [x] Successful-update user-data sentinels byte-identical.
 [x] Failed-update user-data sentinels byte-identical.
 [x] Protected ZIP roots rejected.
 [x] Cross-process lock enforced.
 [x] Low-disk preflight fails closed.
 [x] Power-loss pointer window recoverable.
-[x] Orphan candidate/.incoming directories are cleaned on startup without deleting authoritative versions.
-[x] Background check throttle counts failed attempts, preventing repeated GitHub calls during outages.
+[x] Orphan/unreferenced version cleanup is fail-safe.
 
 Post-test cleanup
-[x] Test sandbox restored to clean 0.7.0.dev0 app baseline.
+[x] Test sandbox restored to clean 0.7.0 app baseline.
 [x] No test DDS process remains.
-[x] UpdaterTest evidence/logs preserved.
-[x] Temporary patch scripts removed.
+[x] DDS_Data/TestData/UpdaterTest evidence preserved.
+[x] Temporary one-off helper scripts removed from source root.
 
-Final release freeze — not done yet
-[ ] Change source/product/file version to 0.7.0.
-[ ] Re-run full suite x3 + compileall.
-[ ] Rebuild final Windows artifacts.
-[ ] Verify all final FileVersion/ProductVersion values.
-[ ] Verify ZIP/update manifest integrity and hashes.
-[ ] Repeat short final EXE gate.
-[ ] Update HISTORY.md.
-[ ] Tag/publish v0.7.0 only after explicit release approval.
+Public release
+[ ] Create GitHub v0.7.0 tag/pre-release after explicit publication approval.

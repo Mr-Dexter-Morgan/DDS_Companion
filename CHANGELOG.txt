@@ -1,52 +1,64 @@
-Unreleased — 0.7.0 Safe Updater Foundation
+Unreleased - DDS Companion 0.7.0 Safe Updater Foundation (release-ready freeze)
 
 Status
-- Active candidate version: 0.7.0.dev0.
-- Implementation and Windows live updater validation are complete for the 0.7.0 scope.
-- The public v0.7.0 tag/release has not been created yet.
+- Source/product version is frozen at 0.7.0.
+- Public baseline remains v0.6.2 until v0.7.0 is explicitly published.
+- Final local Windows release gate is complete; the GitHub v0.7.0 tag/release has not been created yet.
 
 Safe update architecture
-- DDSUpdater.exe runs as a separate external updater process; DDS never overwrites its running payload.
-- DDS.exe is the stable bootstrap; application payloads live under versions/<version>.
+- DDSUpdater.exe is a separate external updater; the running DDS payload never overwrites itself.
+- DDS.exe is a stable bootstrap; application payloads live under versions/<version>.
 - current.json selects the active version, previous.json records the previous successfully-started version, and pending_update.json makes promotion transactional.
-- A candidate is committed only after startup acknowledgement; failed startup automatically rolls back.
+- Candidate promotion is committed only after startup acknowledgement; failed startup automatically rolls back.
 - Startup acknowledgement is tied to core runtime readiness, not completion time of the initial full archive import.
-- Startup commit is idempotent and repairs the crash window where pending state reached disk before current.json switched.
+- Startup commit is idempotent and repairs the power-loss window between durable pending state and current-pointer switch.
+- Launcher startup removes only orphan/unreferenced version directories; authoritative current/previous/pending versions are preserved.
 
 Integrity and isolation
-- Versioned release manifest: channel, asset, SHA-256, exact size, updater protocol and package format.
-- Atomic partial download promotion only after exact size and SHA-256 verification.
+- Release manifest includes channel, asset, SHA-256, exact size, updater protocol and package format.
+- Downloads use atomic partial promotion only after exact size and SHA-256 verification.
 - ZIP validation rejects traversal, drive paths, symlinks, Windows case collisions and protected user-data roots.
 - Staging verifies the package and DDS.install.json before promotion.
 - SQLite/archive, settings, media/cache, exports and DDS_Data are outside updater ownership.
-- Tests prove user-data sentinels remain byte-identical after both success and forced rollback.
+- Regression tests prove user-data sentinels remain byte-identical after success and forced rollback.
 
 Recovery and observability
-- Cross-process update.lock prevents concurrent update ownership.
+- OS-backed cross-process update.lock prevents concurrent update ownership.
 - Free-space guards run before download/staging and before install.
 - updater.log records promotion, startup confirmation and rollback.
 - journal.json records durable updater lifecycle states.
-- Power-loss handoff between pending/current pointers is recoverable.
-- Launcher startup removes orphaned non-authoritative version directories and stale .incoming-* trees after interrupted promotion.
 - Failed Windows candidates are terminated as a process tree and removed with bounded retry.
 - Rollback preserves the already-committed previous working build and relaunches the restored version.
 - Release/download operations use bounded timeout/retry and cancellation cleanup.
+- Background update attempts are throttled to at most once per 24 hours even when GitHub is unavailable.
 
 Update UX
 - Settings provides manual check/download/install flow.
-- Optional background checking is bounded to at most once per day.
-- Daily background update throttling counts attempts, not only successful GitHub responses, so outages do not cause a check on every DDS launch.
-- Automatic install remains opt-in; update/network failure never blocks archive use.
+- Background checking, automatic download and automatic install are independently controlled; auto-install implies auto-download.
+- Automatic install never closes DDS merely because a package finished downloading; a staged package installs at natural exit unless the user selects Install now.
 - Release notes are normalized and bounded before display.
-- Updater protocol/package format are versioned and fail closed on unsupported formats.
+- Window/presentation state is captured for update restart; tray-hidden restoration is architecture-ready for the 0.8.0 tray layer.
+- Update/network failure never blocks archive use.
 
-Validation completed on Windows
-- Full unittest discovery: 174/174 PASS, three consecutive runs.
+Build/release hardening
+- Windows FileVersion/ProductVersion metadata is generated from dds_companion.__version__ on every build.
+- build_windows.bat fails closed if old build/dist trees cannot be cleaned after bounded retry; silent partial rmdir cleanup is no longer possible.
+- A Windows named mutex protects the whole build pipeline; a concurrent build exits 16 before touching shared build/dist trees.
+- ZIP creation retries bounded transient Windows file-read races and then validates the completed archive with testzip.
+- Final DDS.exe, DDSUpdater.exe and DDSApp.exe report FileVersion/ProductVersion 0.7.0.
+
+Final validation on Windows
+- Full unittest discovery: 174/174 PASS, three consecutive runs after the final build-tooling changes.
 - compileall PASS.
 - Native PyInstaller build PASS for DDS.exe, DDSApp.exe and DDSUpdater.exe.
-- Live success PASS: dev0 -> synthetic dev1, startup ACK, journal COMPLETE, STARTUP_CONFIRMED, previous=dev0.
-- Live forced-timeout rollback PASS: dev1 -> broken dev2 -> watchdog rollback; current=dev1, previous=dev0, failed dev2 removed, no dev2 processes remain, journal FAILED, ROLLBACK_COMPLETE.
-- Test sandbox returned to a clean 0.7.0.dev0 application baseline.
+- Build-concurrency live gate PASS: primary build exit 0; deliberately overlapping secondary build exit 16.
+- Final full ZIP: DDS-0.7.0-windows-x64.zip, SHA-256 e3cfd2307b83230c4cbf3fec7adf17015311f9596c19c37bd9b9054a51704e80.
+- Final update ZIP: DDS-0.7.0-update.zip, SHA-256 b870d6a0fa8a934fa7e26ab4611cbe56a73220ad6b40bd91e366c0ff0e1cec56.
+- Both ZIPs pass testzip; update manifest hash/size/version match the update ZIP.
+- Final EXE smoke PASS: repeated DDS.exe launch keeps exactly one DDSApp runtime.
+- Final updater smoke PASS: frozen 0.7.0 -> synthetic 0.7.1, ACK received, current=0.7.1, previous=0.7.0, journal COMPLETE.
+- Forced-timeout rollback was live-tested earlier on the same updater code: synthetic dev1 -> broken dev2 -> dev1 restored, dev0 backup preserved, failed candidate/process tree removed, journal FAILED.
+- Test sandbox returned to a clean 0.7.0 application baseline with zero DDS test processes.
 
 Out of scope for 0.7.0
 - Tray/autostart (0.8.0).

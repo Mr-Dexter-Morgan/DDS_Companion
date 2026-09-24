@@ -13,16 +13,16 @@ permissions:
 jobs:
   test-build:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.13
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: "3.11"
           cache: pip
           cache-dependency-path: requirements-build.txt
 
@@ -31,18 +31,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-build.txt
-
-      - name: Focused Windows regressions
-        timeout-minutes: 8
-        shell: pwsh
-        run: |
-          python -m unittest -v `
-            dds_companion.tests.test_observability.ObservabilityTests.test_health_reports_core_subsystems `
-            dds_companion.tests.test_observability.ObservabilityTests.test_last_error_info_has_subsystem_and_clears_after_recovery `
-            dds_companion.tests.test_observability.ObservabilityTests.test_runtime_monitor_degrades_then_recovers_importer `
-            dds_companion.tests.test_observability.ObservabilityTests.test_plugin_053_running_stopped_and_stale_heartbeat `
-            dds_companion.tests.test_gui_foundation.GuiRuntimeTests.test_runtime_emits_real_snapshot_and_stops_cleanly `
-            dds_companion.tests.test_gui_foundation.GuiRuntimeTests.test_runtime_serves_library_pages_and_persists_export_rule
 
       - name: Regression pass 1 of 3
         timeout-minutes: 8
@@ -60,112 +48,74 @@ jobs:
         shell: pwsh
         run: |
           python -m compileall -q dds_companion
-          $version = python -m dds_companion.app --version
+          $version = (python -m dds_companion.app --version).Trim()
           Write-Host $version
-          if ($version -notmatch "0\.6\.2") {
+          if ($version -ne "DDS Companion 0.7.0") {
             throw "Unexpected application version: $version"
           }
 
-      - name: Build native Windows onedir
-        timeout-minutes: 10
+      - name: Build native Windows distribution
+        timeout-minutes: 12
         shell: pwsh
         run: |
-          python -m PyInstaller --clean --noconfirm DDS.spec
-          if (-not (Test-Path "dist/DDS/DDS.exe")) {
-            throw "dist/DDS/DDS.exe was not produced"
+          cmd /c build_windows.bat
+          if ($LASTEXITCODE -ne 0) {
+            throw "build_windows.bat failed with exit code $LASTEXITCODE"
           }
 
-      - name: Verify and package DDS.exe
+      - name: Verify Windows distribution and packages
         shell: pwsh
         run: |
-          $exe = (Resolve-Path "dist/DDS/DDS.exe").Path
-          $info = (Get-Item $exe).VersionInfo
-          Write-Host "FileVersion=$($info.FileVersion)"
-          Write-Host "ProductVersion=$($info.ProductVersion)"
-          if ($info.FileVersion -notlike "0.6.2*") {
-            throw "Unexpected DDS.exe FileVersion: $($info.FileVersion)"
+          $root = "dist/DDS"
+          $app = "$root/versions/0.7.0/DDSApp.exe"
+          $launcher = "$root/DDS.exe"
+          $updater = "$root/DDSUpdater.exe"
+
+          foreach ($exe in @($launcher, $updater, $app)) {
+            if (-not (Test-Path $exe)) { throw "Missing executable: $exe" }
+            $info = (Get-Item $exe).VersionInfo
+            Write-Host "$exe FileVersion=$($info.FileVersion) ProductVersion=$($info.ProductVersion)"
+            if ($info.FileVersion -ne "0.7.0") { throw "Unexpected FileVersion: $exe" }
+            if ($info.ProductVersion -ne "0.7.0") { throw "Unexpected ProductVersion: $exe" }
           }
 
-          $zip = "DDS-0.6.2-windows-x64.zip"
-          if (Test-Path $zip) { Remove-Item $zip -Force }
-          Compress-Archive -Path "dist/DDS/*" -DestinationPath $zip -CompressionLevel Optimal
+          $current = Get-Content "$root/current.json" -Raw | ConvertFrom-Json
+          if ($current.version -ne "0.7.0") { throw "Unexpected current pointer" }
 
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $archive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
-          try {
-            if (-not ($archive.Entries | Where-Object { $_.FullName -eq "DDS.exe" })) {
-              throw "DDS.exe is not at the ZIP root"
-            }
-          }
-          finally {
-            $archive.Dispose()
+          $full = "dist/release/DDS-0.7.0-windows-x64.zip"
+          $update = "dist/release/DDS-0.7.0-update.zip"
+          $manifestPath = "dist/release/DDS-0.7.0-update.json"
+          foreach ($path in @($full, $update, $manifestPath, "$full.sha256", "$update.sha256")) {
+            if (-not (Test-Path $path)) { throw "Missing release artifact: $path" }
           }
 
-          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
-          "$hash  $zip" | Set-Content "$zip.sha256" -Encoding ascii
-          Write-Host "SHA256=$hash"
+          python -m zipfile -t $full
+          if ($LASTEXITCODE -ne 0) { throw "Full ZIP integrity test failed" }
+          python -m zipfile -t $update
+          if ($LASTEXITCODE -ne 0) { throw "Update ZIP integrity test failed" }
 
-      - name: Upload validated Windows artifact
+          $fullHash = (Get-FileHash $full -Algorithm SHA256).Hash.ToLower()
+          $updateHash = (Get-FileHash $update -Algorithm SHA256).Hash.ToLower()
+          $fullExpected = ((Get-Content "$full.sha256" -Raw).Trim() -split "\s+")[0].ToLower()
+          $updateExpected = ((Get-Content "$update.sha256" -Raw).Trim() -split "\s+")[0].ToLower()
+          if ($fullHash -ne $fullExpected) { throw "Full ZIP SHA-256 mismatch" }
+          if ($updateHash -ne $updateExpected) { throw "Update ZIP SHA-256 mismatch" }
+
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          if ($manifest.version -ne "0.7.0") { throw "Unexpected update manifest version" }
+          if ($manifest.asset -ne "DDS-0.7.0-update.zip") { throw "Unexpected update asset" }
+          if ($manifest.sha256.ToLower() -ne $updateHash) { throw "Manifest SHA-256 mismatch" }
+          if ([int64]$manifest.size_bytes -ne (Get-Item $update).Length) { throw "Manifest size mismatch" }
+
+      - name: Upload validated Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: DDS-0.6.2-windows-x64
+          name: DDS-0.7.0-windows-x64
           path: |
-            DDS-0.6.2-windows-x64.zip
-            DDS-0.6.2-windows-x64.zip.sha256
+            dist/release/DDS-0.7.0-windows-x64.zip
+            dist/release/DDS-0.7.0-windows-x64.zip.sha256
+            dist/release/DDS-0.7.0-update.zip
+            dist/release/DDS-0.7.0-update.zip.sha256
+            dist/release/DDS-0.7.0-update.json
           if-no-files-found: error
           retention-days: 14
-
-  publish-0-6-2:
-    name: Publish v0.6.2 public preview
-    if: github.event_name == 'push' && github.event.head_commit.message == 'Publish v0.6.2 public preview'
-    needs: test-build
-    runs-on: windows-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout validated release commit
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download validated Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: DDS-0.6.2-windows-x64
-          path: release-artifacts
-
-      - name: Move v0.6.2 tag to validated release commit
-        shell: pwsh
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch --tags --force
-          git tag -fa v0.6.2 "$env:GITHUB_SHA" -m "DDS Companion v0.6.2 — Public Preview"
-          git push --force origin refs/tags/v0.6.2
-
-      - name: Publish GitHub pre-release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $zip = (Resolve-Path "release-artifacts/DDS-0.6.2-windows-x64.zip").Path
-          $sha = (Resolve-Path "release-artifacts/DDS-0.6.2-windows-x64.zip.sha256").Path
-
-          gh release view v0.6.2 --json tagName *> $null
-          if ($LASTEXITCODE -eq 0) {
-            throw "GitHub Release v0.6.2 already exists; refusing to replace it automatically"
-          }
-
-          gh release create v0.6.2 $zip $sha `
-            --title "DDS Companion v0.6.2 — Public Preview" `
-            --notes-file "RELEASE_NOTES_0.6.2.md" `
-            --prerelease `
-            --verify-tag
-
-          $release = gh release view v0.6.2 --json tagName,name,isDraft,isPrerelease,url,assets | ConvertFrom-Json
-          if ($release.tagName -ne "v0.6.2") { throw "Release tag verification failed" }
-          if ($release.isDraft) { throw "Release unexpectedly remained a draft" }
-          if (-not $release.isPrerelease) { throw "Release is not marked as a pre-release" }
-          if (($release.assets | Measure-Object).Count -lt 2) { throw "Expected ZIP and SHA256 release assets" }
-          Write-Host "Published $($release.url)"

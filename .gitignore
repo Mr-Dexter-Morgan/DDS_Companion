@@ -12,7 +12,9 @@ __pycache__/
 venv/
 
 # Build output
-build/pyinstaller/
+build/pyinstaller-*/
+build/artifacts/
+build/windows_*_version_info.txt
 dist/
 *.spec.bak
 

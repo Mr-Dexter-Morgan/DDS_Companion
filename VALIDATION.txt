@@ -1,57 +1,68 @@
-DDS Companion 0.7.0.dev0 — Validation Candidate
+DDS Companion 0.7.0 - Final Local Release Validation
 
 Status
-- Public baseline remains v0.6.2.
-- 0.7.0.dev0 implementation is complete for Safe Updater Foundation.
-- Public v0.7.0 is not tagged/released yet.
+- Public GitHub baseline remains v0.6.2 until publication.
+- Source/product version is frozen at 0.7.0.
+- Final local Windows gate is complete.
+- GitHub v0.7.0 tag/release has not been created yet.
 
-Automated source gate completed
-- Full unittest discovery: 174/174 PASS, three consecutive runs.
+Automated source gate
+- Full unittest discovery: 174/174 PASS, three consecutive runs after the final build cleanup/metadata changes.
 - compileall PASS.
-- Focused updater/launcher/runtime-ready suites PASS.
-- Covered: bad/truncated packages, retry/cancel cleanup, protected ZIP roots, low disk, duplicate updater lock, UTF-8 BOM launch args, power-loss pointer window, orphan-version recovery, attempt-based 24h background throttling, previous-version retention, startup ACK commit, forced rollback, byte-identical user-data preservation, and runtime-ready independent of long initial import.
+- Focused updater/launcher/runtime-ready/build-contract suites PASS.
+- Covered: bad/truncated packages, retry/cancel cleanup, protected ZIP roots, low disk, duplicate updater lock, UTF-8 BOM launch args, power-loss pointer window, orphan-version recovery, previous-version retention, startup ACK commit, forced rollback, byte-identical user-data preservation, once-per-day failed-background-check throttling, runtime-ready independent of long initial import, and build metadata/cleanup contracts.
 
-Native Windows build gate completed
-- DDSApp.exe PASS.
-- Stable DDS.exe bootstrap PASS.
-- DDSUpdater.exe PASS.
+Native Windows build gate
 - build_windows.bat exit 0.
-- Versioned dist + full/update ZIP + update manifest produced.
-- Final post-audit native rebuild PASS after orphan recovery and attempt-throttling fixes.
+- Build cleanup is bounded-retry/fail-closed; silent partial rmdir cleanup is removed.
+- Whole-pipeline Windows named mutex PASS: deliberate concurrent build was rejected with exit 16 while the primary build continued to exit 0.
+- ZIP packaging uses bounded transient file-read retry and validates completed archives with testzip before success.
+- Windows metadata is regenerated from dds_companion.__version__ before every PyInstaller build.
+- DDS.exe FileVersion/ProductVersion: 0.7.0 / 0.7.0.
+- DDSUpdater.exe FileVersion/ProductVersion: 0.7.0 / 0.7.0.
+- DDSApp.exe FileVersion/ProductVersion: 0.7.0 / 0.7.0.
+- Full ZIP, update ZIP, SHA-256 files and update manifest produced.
 
-Windows live updater gate completed
-- Final single-instance smoke on refreshed dev0 sandbox PASS: second launch exited 0, one DDSApp remained, cleanup left zero test DDS processes.
+Final package integrity
+- DDS-0.7.0-windows-x64.zip
+  - size: 59669373 bytes
+  - SHA-256: e3cfd2307b83230c4cbf3fec7adf17015311f9596c19c37bd9b9054a51704e80
+  - zip test: PASS
+  - current.json version: 0.7.0
+  - embedded install manifest version: 0.7.0
+- DDS-0.7.0-update.zip
+  - size: 46717971 bytes
+  - SHA-256: b870d6a0fa8a934fa7e26ab4611cbe56a73220ad6b40bd91e366c0ff0e1cec56
+  - zip test: PASS
+  - embedded install manifest version: 0.7.0
+- DDS-0.7.0-update.json
+  - version: 0.7.0
+  - updater_protocol: 1
+  - package_format: 1
+  - hash/size match the update ZIP.
 
-Successful promotion:
-- dev0 -> synthetic dev1.
-- ACK received; pending cleared.
-- current=dev1, previous=dev0.
-- journal COMPLETE.
-- STARTUP_CONFIRMED logged.
+Windows live gates
+- Final single-instance smoke:
+  - first DDS.exe launch -> one DDSApp runtime.
+  - second DDS.exe launch exits 0 and leaves exactly one DDSApp runtime.
+- Final update smoke:
+  - frozen 0.7.0 -> synthetic 0.7.1.
+  - updater exits 0.
+  - startup ACK received; pending cleared.
+  - current=0.7.1; previous=0.7.0.
+  - journal COMPLETE; STARTUP_CONFIRMED logged.
+  - exactly one candidate DDSApp runtime.
+- Forced timeout rollback (same updater logic before final version freeze):
+  - synthetic dev1 -> intentionally nonfunctional dev2.
+  - watchdog rollback restored dev1 and kept dev0 as previous successful backup.
+  - failed dev2 process tree and directory were removed.
+  - journal FAILED; ROLLBACK_START/ROLLBACK_COMPLETE logged.
 
-Forced timeout rollback:
-- Started from dev1 with previous=dev0.
-- Promoted validly-hashed but intentionally nonfunctional dev2.
-- No ACK; watchdog rollback triggered.
-- Windows candidate process tree terminated.
-- current restored to dev1; previous stayed dev0.
-- failed dev2 directory removed; zero dev2 processes remained.
-- dev1 relaunched automatically.
-- journal FAILED.
-- ROLLBACK_START and ROLLBACK_COMPLETE logged; no CLEANUP_DEFERRED remained.
+Post-live state
+- Test sandbox restored to clean 0.7.0 application baseline.
+- No DDS test process remains.
+- DDS_Data, TestData and UpdaterTest evidence preserved.
 
-Post-live cleanup
-- Test sandbox returned to clean 0.7.0.dev0 application baseline.
-- Test data and UpdaterTest evidence preserved.
-- No test DDS process left running.
-- Temporary patch scripts removed.
-
-Release-freeze gate still required
-- Change source/product/file version to 0.7.0.
-- Re-run full suite x3 + compileall.
-- Rebuild Windows artifacts with final metadata.
-- Verify DDS.exe, DDSApp.exe and DDSUpdater.exe file/product versions.
-- Verify release ZIP/update ZIP/update manifest integrity and hashes.
-- Repeat short final EXE smoke/update gate.
-- Update HISTORY.md.
-- Tag/publish v0.7.0 Public Preview only after explicit release approval.
+Publication gate remaining
+- Sync release-ready source/documentation to GitHub main.
+- Create/tag/publish v0.7.0 Public Preview only after explicit publication approval.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import sys
+import time
 import zipfile
 from pathlib import Path
 
@@ -21,11 +22,52 @@ FINAL = ROOT / "dist" / "DDS"
 RELEASE = ROOT / "dist" / "release"
 
 
-def zip_tree(source: Path, destination: Path) -> None:
+def remove_tree_with_retries(path: Path, *, attempts: int = 20, delay_seconds: float = 0.1) -> None:
+    """Remove build output robustly across transient Windows file locks."""
+    for attempt in range(1, max(1, attempts) + 1):
+        if not path.exists():
+            return
+        try:
+            shutil.rmtree(path)
+            return
+        except OSError as exc:
+            if attempt >= attempts:
+                raise RuntimeError(
+                    f"could not clean build output after {attempts} attempts: {path}: {exc}"
+                ) from exc
+            time.sleep(max(0.0, delay_seconds))
+
+
+def zip_tree(
+    source: Path,
+    destination: Path,
+    *,
+    attempts: int = 8,
+    delay_seconds: float = 0.05,
+) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
+    files = sorted(
+        (item for item in source.rglob("*") if item.is_file()),
+        key=lambda p: str(p).casefold(),
+    )
     with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        for path in sorted((item for item in source.rglob("*") if item.is_file()), key=lambda p: str(p).casefold()):
-            archive.write(path, path.relative_to(source).as_posix())
+        for path in files:
+            arcname = path.relative_to(source).as_posix()
+            for attempt in range(1, max(1, attempts) + 1):
+                try:
+                    archive.write(path, arcname)
+                    break
+                except (FileNotFoundError, PermissionError) as exc:
+                    if attempt >= attempts:
+                        raise RuntimeError(
+                            f"could not read build payload after {attempts} attempts: {path}: {exc}"
+                        ) from exc
+                    time.sleep(max(0.0, delay_seconds))
+
+    with zipfile.ZipFile(destination, "r") as archive:
+        bad_member = archive.testzip()
+        if bad_member is not None:
+            raise RuntimeError(f"ZIP integrity check failed at member: {bad_member}")
 
 
 def write_sha_file(path: Path) -> Path:
@@ -42,8 +84,8 @@ def main() -> int:
         if not required.exists():
             raise FileNotFoundError(required)
 
-    shutil.rmtree(FINAL, ignore_errors=True)
-    shutil.rmtree(RELEASE, ignore_errors=True)
+    remove_tree_with_retries(FINAL)
+    remove_tree_with_retries(RELEASE)
     version_dir = FINAL / "versions" / __version__
     version_dir.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(app_source, version_dir)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,7 +21,7 @@ from dds_companion.core.identity import (
 
 class DataRoot060Tests(unittest.TestCase):
     def test_061_version_is_bumped(self):
-        self.assertEqual(__version__, "0.7.0.dev0")
+        self.assertEqual(__version__, "0.7.0")
 
     def test_installed_profile_preserves_localappdata_contract(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -99,9 +101,18 @@ class Branding060Tests(unittest.TestCase):
 
     def test_pyinstaller_contract_separates_launcher_runtime_and_updater(self):
         project = Path(__file__).resolve().parents[2]
+        subprocess.run(
+            [sys.executable, str(project / "tools" / "generate_windows_version_info.py")],
+            cwd=project,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
         launcher_spec = (project / "DDSLauncher.spec").read_text(encoding="utf-8")
         app_spec = (project / "DDSApp.spec").read_text(encoding="utf-8")
         updater_spec = (project / "DDSUpdater.spec").read_text(encoding="utf-8")
+        build_script = (project / "build_windows.bat").read_text(encoding="utf-8")
+        generator = (project / "tools" / "generate_windows_version_info.py").read_text(encoding="utf-8")
         launcher_version = (project / "build" / "windows_launcher_version_info.txt").read_text(encoding="utf-8")
         app_version = (project / "build" / "windows_app_version_info.txt").read_text(encoding="utf-8")
         updater_version = (project / "build" / "windows_updater_version_info.txt").read_text(encoding="utf-8")
@@ -109,13 +120,18 @@ class Branding060Tests(unittest.TestCase):
         self.assertIn('name="DDS"', launcher_spec)
         self.assertIn('name="DDSApp"', app_spec)
         self.assertIn('name="DDSUpdater"', updater_spec)
+        self.assertIn(r"python tools\prepare_windows_build.py", build_script)
+        self.assertIn(r"python tools\generate_windows_version_info.py", build_script)
+        self.assertNotIn("rmdir /s /q", build_script.lower())
+        self.assertIn("from dds_companion import __version__", generator)
         for spec in (launcher_spec, app_spec, updater_spec):
             self.assertIn('icon=str(ROOT / "assets" / "DDS.ico")', spec)
         self.assertIn("DDS.exe", launcher_version)
         self.assertIn("DDSApp.exe", app_version)
         self.assertIn("DDSUpdater.exe", updater_version)
         for version in (launcher_version, app_version, updater_version):
-            self.assertIn("0.7.0.dev0", version)
+            self.assertIn(f"StringStruct(u'FileVersion', u'{__version__}')", version)
+            self.assertIn(f"StringStruct(u'ProductVersion', u'{__version__}')", version)
 
 
 if __name__ == "__main__":

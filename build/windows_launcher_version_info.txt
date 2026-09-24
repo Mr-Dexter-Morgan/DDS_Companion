@@ -14,12 +14,12 @@ VSVersionInfo(
       StringTable(
         u'040904B0',
         [StringStruct(u'CompanyName', u'DDS Project'),
-         StringStruct(u'FileDescription', u'DDS — Discord Data Snatcher'),
-         StringStruct(u'FileVersion', u'0.7.0.dev0'),
+         StringStruct(u'FileDescription', u'DDS \u2014 Discord Data Snatcher'),
+         StringStruct(u'FileVersion', u'0.7.0'),
          StringStruct(u'InternalName', u'DDS'),
          StringStruct(u'OriginalFilename', u'DDS.exe'),
-         StringStruct(u'ProductName', u'DDS — Discord Data Snatcher'),
-         StringStruct(u'ProductVersion', u'0.7.0.dev0')]
+         StringStruct(u'ProductName', u'DDS \u2014 Discord Data Snatcher'),
+         StringStruct(u'ProductVersion', u'0.7.0')]
       )
     ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])

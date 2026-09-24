@@ -1,8 +1,6 @@
 # DDS Companion Roadmap
 
-Current public baseline: v0.6.2 Public Preview. Active validated candidate: 0.7.0.dev0 Safe Updater Foundation.
-
-A candidate being implemented/validated does not mean its public GitHub tag/release already exists.
+Current public baseline: v0.6.2 Public Preview. Release-ready source freeze: v0.7.0 Safe Updater Foundation. Public v0.7.0 has not been tagged/published yet.
 
 ## Non-negotiable architecture rules
 
@@ -14,9 +12,9 @@ A candidate being implemented/validated does not mean its public GitHub tag/rele
 - Migrations stay additive and transactional.
 - User archive data, settings, cache, exports and DDS_Data must survive application updates.
 
-## 0.7.0 — Safe Updater Foundation
+## 0.7.0 - Safe Updater Foundation
 
-Status: candidate complete and Windows live-validated; public v0.7.0 release not yet published.
+Status: source/product version frozen at 0.7.0, full Windows gate complete, publication pending explicit approval.
 
 Implemented:
 - External updater process and stable bootstrap launcher.
@@ -26,32 +24,34 @@ Implemented:
 - Transactional current/previous/pending version pointers.
 - Startup ACK tied to core runtime readiness.
 - Automatic rollback on crash/startup timeout.
-- Power-loss-safe/idempotent startup commit.
-- Crash-startup cleanup for orphaned candidate/incoming version directories.
+- Power-loss-safe/idempotent startup commit and orphan-version recovery.
 - Durable journal and updater-specific log.
-- Cross-process update lock and free-space preflight.
+- OS-backed cross-process update lock and free-space preflight.
 - Bounded retry/cancel behavior.
 - Windows process-tree termination and failed-version cleanup.
-- Manual update UI, optional daily background check and opt-in automatic install.
-- Background check throttling is attempt-based, including GitHub/network failures.
-- Real Windows EXE happy-path and forced-timeout rollback validation.
+- Manual update UI, optional once-per-day background checks, optional auto-download and opt-in auto-install at natural exit.
+- Window/presentation state capture for update restart.
+- Single-instance GUI boundary.
+- Windows build metadata generated from the source version on every build.
+- Fail-closed build/dist cleanup with bounded retry.
+- Whole-pipeline Windows build mutex; concurrent builds are rejected before shared state is touched.
+- Bounded transient ZIP-read retry plus completed-archive integrity validation.
+- Real Windows EXE happy-path, final 0.7.0 update smoke and forced-timeout rollback validation.
 
-Remaining before publication:
-- Freeze 0.7.0.dev0 to final 0.7.0.
-- Re-run final release gate with final version metadata.
-- Update HISTORY.md.
-- Tag and publish GitHub pre-release only after explicit release approval.
+Remaining before public release:
+- Create the GitHub v0.7.0 tag/pre-release only after explicit publication approval.
 
-## 0.8.0 — Desktop Lifecycle
+## 0.8.0 - Desktop Lifecycle
 
 Goal: make DDS unobtrusive for everyday use.
 - Tray lifecycle.
 - Optional autostart.
 - Explicit running/stopped/status behavior.
 - Clean shutdown/restart interactions with archive/media runtime.
+- Reuse the 0.7.0 saved presentation/hidden-to-tray update state.
 - No hidden network dependency.
 
-## 0.9.0 — Setup / Repair / Installer
+## 0.9.0 - Setup / Repair / Installer
 
 Goal: make installation/recovery understandable without sacrificing Portable mode.
 - Setup and repair flow.
@@ -60,7 +60,7 @@ Goal: make installation/recovery understandable without sacrificing Portable mod
 - Uninstall removes app-owned files only unless user explicitly removes data.
 - Portable distribution remains supported.
 
-## 1.0 — Stable Contract
+## 1.0 - Stable Contract
 
 - Migration/backward-compatibility review.
 - Recovery/corruption-path testing.
