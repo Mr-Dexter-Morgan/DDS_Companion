@@ -1,3 +1,10 @@
+Unreleased — post-0.6.2 repository baseline
+
+Documentation
+- Added ROADMAP.md with the post-0.6.2 order: Safe Updater Foundation -> Tray/Autostart -> Setup/Repair/Installer -> 1.0.
+- README now points to the roadmap.
+- Product version remains 0.6.2 until implementation work for a later release actually begins.
+
 DDS Companion 0.6.2 — Unified Manual Export / Branch Management / Branding
 
 Base
