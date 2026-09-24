@@ -1,0 +1,59 @@
+DDS Companion 0.7.0.dev0 — Windows Live Gate / Candidate Evidence
+
+Automated / build
+[x] Full unittest discovery PASS: 170/170.
+[x] Full suite repeated three times.
+[x] compileall PASS.
+[x] DDSApp.exe build PASS.
+[x] DDS.exe bootstrap build PASS.
+[x] DDSUpdater.exe build PASS.
+[x] build_windows.bat exit 0.
+[x] Full ZIP, update ZIP and update manifest produced.
+
+Successful update path
+[x] Clean dev0 pointer.
+[x] Synthetic dev1 validates and promotes.
+[x] Candidate reaches core runtime readiness.
+[x] Startup ACK created; pending removed.
+[x] current=dev1; previous=dev0.
+[x] journal COMPLETE.
+[x] STARTUP_CONFIRMED logged.
+
+Failure / rollback path
+[x] Start from dev1 with previous=dev0.
+[x] Promote intentionally nonfunctional synthetic dev2.
+[x] No startup ACK.
+[x] Watchdog triggers rollback.
+[x] Candidate Windows process tree terminated.
+[x] current returns to dev1; previous stays dev0.
+[x] pending removed.
+[x] Failed dev2 directory removed.
+[x] No dev2 process remains.
+[x] dev1 relaunched automatically.
+[x] journal FAILED.
+[x] ROLLBACK_START and ROLLBACK_COMPLETE logged.
+[x] No CLEANUP_DEFERRED remains.
+
+Data / isolation
+[x] Successful-update user-data sentinels byte-identical.
+[x] Failed-update user-data sentinels byte-identical.
+[x] Protected ZIP roots rejected.
+[x] Cross-process lock enforced.
+[x] Low-disk preflight fails closed.
+[x] Power-loss pointer window recoverable.
+
+Post-test cleanup
+[x] Test sandbox restored to clean 0.7.0.dev0 app baseline.
+[x] No test DDS process remains.
+[x] UpdaterTest evidence/logs preserved.
+[x] Temporary patch scripts removed.
+
+Final release freeze — not done yet
+[ ] Change source/product/file version to 0.7.0.
+[ ] Re-run full suite x3 + compileall.
+[ ] Rebuild final Windows artifacts.
+[ ] Verify all final FileVersion/ProductVersion values.
+[ ] Verify ZIP/update manifest integrity and hashes.
+[ ] Repeat short final EXE gate.
+[ ] Update HISTORY.md.
+[ ] Tag/publish v0.7.0 only after explicit release approval.

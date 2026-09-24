@@ -1,49 +1,55 @@
-DDS Companion 0.6.2 — Validation
+DDS Companion 0.7.0.dev0 — Validation Candidate
 
-Automated source gate
-- Run complete unittest discovery three consecutive times.
-- Run compileall.
-- Run CLI --version and require DDS Companion 0.6.2.
-- Exercise manual export service against real SQLite fixture data:
-  - Text Only package contains no media bytes;
-  - Text + Cache package contains cached media and relative Markdown references;
-  - missing media is declared;
-  - duplicate original filenames cannot collide;
-  - failed package leaves no false-success ZIP.
-- Exercise branch maintenance:
-  - branch cache clear preserves archive/rules;
-  - delete data preserves structural node/rule;
-  - full delete removes node/content/rule/cache;
-  - channel full delete removes child threads.
-- Validate persistent manual export path.
-- Validate source-level branding/context-menu contracts.
+Status
+- Public baseline remains v0.6.2.
+- 0.7.0.dev0 implementation is complete for Safe Updater Foundation.
+- Public v0.7.0 is not tagged/released yet.
 
-Environment note
-- This source-validation environment does not currently have PySide6 installed, so a native GUI smoke cannot be executed here.
-- Global `pip check` is not a DDS gate in this environment because the host image currently has an unrelated moviepy/Pillow dependency conflict.
-- Native Windows PyInstaller build and real GUI/live interaction remain the release gate.
-
-Windows live gate required before freeze/release
-- Build onedir DDS.exe from this exact source candidate.
-- Verify File Properties version 0.6.2 and approved icon/taskbar identity.
-- Verify title/sidebar branding visually.
-- On real archive data, package one thread as Text Only and Text + Cache.
-- Open both ZIPs and inspect Markdown/JSON/media completeness.
-- Test configured export folder persistence.
-- Test branch cache clear, delete-data and full-delete confirmation/behavior.
-- Restart DDS and verify archive consistency after each destructive operation.
-- Revisit Discord after deliberate deletion and verify new capture can repopulate normally when Plugin produces fresh data.
-- Confirm existing 0.6.1 archive/media/reset behavior remains intact.
-
-candidate-r2 delta validation
-- Live finding from Windows: the r1 default used C:\Users\<user>\Documents\DDS Exports even when Documents had been relocated by Windows to another drive.
-- Root cause: default_manual_export_path() used Path.home() / "Documents" instead of the Windows Known Folder API.
-- Fix: installed profile now resolves FOLDERID_Documents via SHGetKnownFolderPath; fallback remains non-fatal.
-- Regression suite increased to 121 tests.
-- 121/121 PASS x3 after the correction.
+Automated source gate completed
+- Full unittest discovery: 170/170 PASS, three consecutive runs.
 - compileall PASS.
-- CLI version: DDS Companion 0.6.2 PASS.
+- Focused updater/launcher/runtime-ready suites PASS.
+- Covered: bad/truncated packages, retry/cancel cleanup, protected ZIP roots, low disk, duplicate updater lock, UTF-8 BOM launch args, power-loss pointer window, previous-version retention, startup ACK commit, forced rollback, byte-identical user-data preservation, and runtime-ready independent of long initial import.
 
-Public GitHub release gate
-- Windows CI/release automation repeats the 121-test suite x3, compileall, version smoke, native onedir build, file-version validation, ZIP integrity validation and SHA-256 generation before publishing assets.
-- Release remains Public Preview / pre-1.0; interactive Discord/GUI live validation remains separate.
+Native Windows build gate completed
+- DDSApp.exe PASS.
+- Stable DDS.exe bootstrap PASS.
+- DDSUpdater.exe PASS.
+- build_windows.bat exit 0.
+- Versioned dist + full/update ZIP + update manifest produced.
+
+Windows live updater gate completed
+
+Successful promotion:
+- dev0 -> synthetic dev1.
+- ACK received; pending cleared.
+- current=dev1, previous=dev0.
+- journal COMPLETE.
+- STARTUP_CONFIRMED logged.
+
+Forced timeout rollback:
+- Started from dev1 with previous=dev0.
+- Promoted validly-hashed but intentionally nonfunctional dev2.
+- No ACK; watchdog rollback triggered.
+- Windows candidate process tree terminated.
+- current restored to dev1; previous stayed dev0.
+- failed dev2 directory removed; zero dev2 processes remained.
+- dev1 relaunched automatically.
+- journal FAILED.
+- ROLLBACK_START and ROLLBACK_COMPLETE logged; no CLEANUP_DEFERRED remained.
+
+Post-live cleanup
+- Test sandbox returned to clean 0.7.0.dev0 application baseline.
+- Test data and UpdaterTest evidence preserved.
+- No test DDS process left running.
+- Temporary patch scripts removed.
+
+Release-freeze gate still required
+- Change source/product/file version to 0.7.0.
+- Re-run full suite x3 + compileall.
+- Rebuild Windows artifacts with final metadata.
+- Verify DDS.exe, DDSApp.exe and DDSUpdater.exe file/product versions.
+- Verify release ZIP/update ZIP/update manifest integrity and hashes.
+- Repeat short final EXE smoke/update gate.
+- Update HISTORY.md.
+- Tag/publish v0.7.0 Public Preview only after explicit release approval.

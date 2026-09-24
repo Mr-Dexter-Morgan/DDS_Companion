@@ -253,6 +253,14 @@ class DashboardPage(Page):
             lower.setHorizontalSpacing(spacing)
             lower.setVerticalSpacing(spacing)
 
+    @staticmethod
+    def _set_checkbox_value(checkbox: QCheckBox, value: bool) -> None:
+        checkbox.blockSignals(True)
+        try:
+            checkbox.setChecked(bool(value))
+        finally:
+            checkbox.blockSignals(False)
+
     def update_snapshot(self, snapshot: dict) -> None:
         self.latest_snapshot = snapshot
         stats = snapshot.get("stats", {})
@@ -1544,6 +1552,10 @@ class SettingsPage(Page):
         on_clear_media_cache,
         on_reset_local_archive,
         on_choose_export_folder,
+        on_check_updates,
+        on_download_update,
+        on_install_update,
+        on_cancel_update,
         on_run_diagnostics,
         on_database_check,
         on_copy_report,
@@ -1556,7 +1568,15 @@ class SettingsPage(Page):
         )
         self._on_setting_changed = on_setting_changed
         self._on_choose_export_folder = on_choose_export_folder
+        self._on_check_updates = on_check_updates
+        self._on_download_update = on_download_update
+        self._on_install_update = on_install_update
+        self._on_cancel_update = on_cancel_update
         self._last_report_available = False
+        self._update_release_notes = ""
+        self._update_target_version = ""
+        self._update_current_version = ""
+        self._update_size_bytes: int | None = None
 
         self.tabs = QTabWidget()
         self.tabs.setObjectName("SettingsTabs")
@@ -1600,6 +1620,99 @@ class SettingsPage(Page):
         info.setWordWrap(True)
         general_layout.addWidget(info)
         general_layout.addStretch(1)
+
+        updates, updates_layout = self._make_scroll_page()
+        updates_layout.addWidget(SectionHeader(
+            "Обновления",
+            "Проверка, загрузка и установка — независимые уровни автоматизации.",
+        ))
+
+        self.update_background_check = QCheckBox("Включено")
+        self.update_background_check.toggled.connect(
+            lambda value: self._on_setting_changed("update_background_check_enabled", bool(value))
+        )
+        updates_layout.addWidget(SettingRow(
+            "Фоновая проверка",
+            "Проверять GitHub Releases не чаще одного раза в 24 часа. Ошибка сети не влияет на работу DDS.",
+            control=self.update_background_check,
+        ))
+
+        self.update_auto_download = QCheckBox("Включено")
+        self.update_auto_download.toggled.connect(
+            lambda value: self._on_setting_changed("update_auto_download_enabled", bool(value))
+        )
+        updates_layout.addWidget(SettingRow(
+            "Автоматическая загрузка",
+            "Если найдена новая версия, скачать её в staging и проверить SHA-256 без установки.",
+            control=self.update_auto_download,
+        ))
+
+        self.update_auto_install = QCheckBox("Включено")
+        self.update_auto_install.toggled.connect(
+            lambda value: self._on_setting_changed("update_auto_install_enabled", bool(value))
+        )
+        updates_layout.addWidget(SettingRow(
+            "Автоматическая установка",
+            "Установить уже проверенное обновление безопасным внешним updater-процессом. Включение также включает автозагрузку.",
+            control=self.update_auto_install,
+        ))
+
+        self.check_updates_button = QPushButton("Проверить обновления")
+        self.check_updates_button.setProperty("secondary", True)
+        self.check_updates_button.clicked.connect(self._on_check_updates)
+        updates_layout.addWidget(SettingRow(
+            "Ручная проверка",
+            "Всегда доступна независимо от режима автоматизации.",
+            control=self.check_updates_button,
+        ))
+        action_row = QWidget()
+        action_layout = QHBoxLayout(action_row)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.setSpacing(8)
+        self.download_update_button = QPushButton("Скачать")
+        self.download_update_button.setProperty("secondary", True)
+        self.download_update_button.setEnabled(False)
+        self.download_update_button.clicked.connect(self._on_download_update)
+        self.install_update_button = QPushButton("Установить сейчас")
+        self.install_update_button.setProperty("secondary", True)
+        self.install_update_button.setEnabled(False)
+        self.install_update_button.clicked.connect(self._on_install_update)
+        self.cancel_update_button = QPushButton("Отменить")
+        self.cancel_update_button.setProperty("secondary", True)
+        self.cancel_update_button.setEnabled(False)
+        self.cancel_update_button.clicked.connect(self._on_cancel_update)
+        action_layout.addWidget(self.download_update_button)
+        action_layout.addWidget(self.install_update_button)
+        action_layout.addWidget(self.cancel_update_button)
+        action_layout.addStretch(1)
+        updates_layout.addWidget(action_row)
+
+        self.update_status = QLabel("Обновления ещё не проверялись.")
+        self.update_status.setObjectName("SettingHint")
+        self.update_status.setWordWrap(True)
+        updates_layout.addWidget(self.update_status)
+
+        self.update_details = QLabel()
+        self.update_details.setObjectName("SettingHint")
+        self.update_details.setWordWrap(True)
+        self.update_details.setVisible(False)
+        updates_layout.addWidget(self.update_details)
+
+        self.update_notes = QLabel()
+        self.update_notes.setObjectName("SettingHint")
+        self.update_notes.setTextFormat(Qt.PlainText)
+        self.update_notes.setWordWrap(True)
+        self.update_notes.setVisible(False)
+        updates_layout.addWidget(self.update_notes)
+
+        update_note = QLabel(
+            "DDS никогда не заменяет работающий DDS.exe самостоятельно. "
+            "Пользовательские данные не входят в update payload."
+        )
+        update_note.setObjectName("SectionHint")
+        update_note.setWordWrap(True)
+        updates_layout.addWidget(update_note)
+        updates_layout.addStretch(1)
 
         storage, storage_layout = self._make_scroll_page()
         storage_layout.addWidget(SectionHeader(
@@ -1811,6 +1924,7 @@ class SettingsPage(Page):
         self.tabs.addTab(general, "Общие")
         self.tabs.addTab(storage, "Хранилище")
         self.tabs.addTab(archive, "Архив")
+        self.tabs.addTab(updates, "Обновления")
         self.tabs.addTab(diagnostics, "Диагностика")
 
     @staticmethod
@@ -1898,6 +2012,19 @@ class SettingsPage(Page):
         finally:
             self.confirm_clear.blockSignals(False)
 
+        self._set_checkbox_value(
+            self.update_background_check,
+            settings.get("update_background_check_enabled", True),
+        )
+        self._set_checkbox_value(
+            self.update_auto_download,
+            settings.get("update_auto_download_enabled", False),
+        )
+        self._set_checkbox_value(
+            self.update_auto_install,
+            settings.get("update_auto_install_enabled", False),
+        )
+
         self.archive_messages.setText(f"{int(stats.get('messages', 0)):,}".replace(",", " "))
         self.archive_context.setText(
             f"{stats.get('guilds', 0)} · {stats.get('channels', 0)} · {stats.get('threads', 0)}"
@@ -1914,6 +2041,71 @@ class SettingsPage(Page):
         capture_schema = details.get("capture_schema_version") or "—"
         heartbeat_schema = details.get("heartbeat_schema_version") or "plugin-heartbeat-v1"
         self.contract_value.setText(f"capture-v{capture_schema} · {heartbeat_schema}")
+
+    @staticmethod
+    def _format_release_notes(value: object, *, limit: int = 1400) -> str:
+        raw = str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        if not raw:
+            return ""
+        # Keep short release notes useful without letting a huge GitHub body turn
+        # the Settings page into an unbounded wall of text.
+        lines = [line.rstrip() for line in raw.split("\n")]
+        while lines and not lines[0].strip():
+            lines.pop(0)
+        while lines and not lines[-1].strip():
+            lines.pop()
+        text = "\n".join(lines)
+        if len(text) > limit:
+            text = text[: max(0, limit - 1)].rstrip() + "…"
+        return text
+
+    def set_update_status(self, payload: dict) -> None:
+        state = str(payload.get("state") or "IDLE")
+        message = str(payload.get("message") or state)
+        self.update_status.setText(message)
+
+        if payload.get("version"):
+            self._update_target_version = str(payload.get("version"))
+        if payload.get("current_version"):
+            self._update_current_version = str(payload.get("current_version"))
+        if payload.get("size_bytes") is not None:
+            try:
+                self._update_size_bytes = max(0, int(payload.get("size_bytes")))
+            except (TypeError, ValueError):
+                self._update_size_bytes = None
+        if "notes" in payload:
+            self._update_release_notes = self._format_release_notes(payload.get("notes"))
+        if state == "CURRENT":
+            self._update_release_notes = ""
+            self._update_target_version = ""
+            self._update_size_bytes = None
+
+        details: list[str] = []
+        if self._update_target_version:
+            if self._update_current_version:
+                details.append(f"Версия: {self._update_current_version} → {self._update_target_version}")
+            else:
+                details.append(f"Версия: {self._update_target_version}")
+        if self._update_size_bytes:
+            details.append(f"Пакет: {human_size(self._update_size_bytes)}")
+        self.update_details.setText(" · ".join(details))
+        self.update_details.setVisible(bool(details))
+
+        if self._update_release_notes:
+            self.update_notes.setText("Что нового:\n" + self._update_release_notes)
+            self.update_notes.setVisible(True)
+        else:
+            self.update_notes.clear()
+            self.update_notes.setVisible(False)
+
+        busy = state in {"CHECKING", "DOWNLOADING", "VERIFYING", "CANCELLING"}
+        self.check_updates_button.setEnabled(not busy)
+        self.download_update_button.setEnabled(
+            state == "AVAILABLE"
+            or (state == "CANCELLED" and bool(self._update_target_version))
+        )
+        self.install_update_button.setEnabled(state == "STAGED")
+        self.cancel_update_button.setEnabled(state in {"CHECKING", "DOWNLOADING", "VERIFYING"})
 
     def set_diagnostic_status(self, text: str, *, report_available: bool = False) -> None:
         self.diag_status.setText(text)

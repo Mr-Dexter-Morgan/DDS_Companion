@@ -24,6 +24,9 @@ class CompanionSettings:
     media_autodownload_enabled: bool = False
     confirm_media_cache_clear: bool = True
     manual_export_path: str | None = None
+    update_background_check_enabled: bool = True
+    update_auto_download_enabled: bool = False
+    update_auto_install_enabled: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -111,9 +114,18 @@ class SettingsStore:
             if not minimum <= value <= maximum:
                 raise ValueError(f"{key} is outside the supported range")
 
-        for key in ("media_autodownload_enabled", "confirm_media_cache_clear"):
+        for key in (
+            "media_autodownload_enabled",
+            "confirm_media_cache_clear",
+            "update_background_check_enabled",
+            "update_auto_download_enabled",
+            "update_auto_install_enabled",
+        ):
             if not isinstance(values[key], bool):
                 raise ValueError(f"{key} must be boolean")
+
+        if values["update_auto_install_enabled"]:
+            values["update_auto_download_enabled"] = True
 
         export_path = values.get("manual_export_path")
         if export_path is not None:

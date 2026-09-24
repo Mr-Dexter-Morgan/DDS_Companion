@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+from pathlib import Path
 
 try:
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import QTimer, Qt
     from PySide6.QtGui import QColor, QIcon, QPalette
     from PySide6.QtWidgets import QApplication
 except ModuleNotFoundError as exc:  # pragma: no cover - user-facing bootstrap path
@@ -31,6 +33,8 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--portable", action="store_true", help="Use Data next to DDS.exe as the Companion data root")
     parser.add_argument("--poll-ms", type=int, default=750)
     parser.add_argument("--settle-ms", type=int, default=500)
+    parser.add_argument("--update-ack", help=argparse.SUPPRESS)
+    parser.add_argument("--update-resume-state", help=argparse.SUPPRESS)
     parser.add_argument("--version", action="version", version=f"DDS Companion {__version__}")
     return parser
 
@@ -41,6 +45,14 @@ def make_app_icon() -> QIcon:
     icon_path = resource_path("assets/DDS.ico")
     icon = QIcon(str(icon_path))
     return icon
+
+def _write_update_ack(path: str) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_name(target.name + ".tmp")
+    temp.write_text(f"{os.getpid()}\n", encoding="utf-8")
+    os.replace(temp, target)
+
 
 def main(argv: list[str] | None = None) -> int:
     args = make_parser().parse_args(argv)
@@ -86,7 +98,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     window.setWindowIcon(app_icon)
     instance_guard.activation_requested.connect(window.activate_from_secondary_launch)
+    if args.update_ack:
+        ack_callback = lambda: _write_update_ack(args.update_ack)
+        window.startup_ready.connect(ack_callback)
+        if window.startup_is_ready:
+            QTimer.singleShot(0, ack_callback)
     window.show()
+    if args.update_resume_state:
+        QTimer.singleShot(0, lambda: window.restore_update_resume_state(args.update_resume_state))
     return app.exec()
 
 

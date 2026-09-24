@@ -54,7 +54,7 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
         self.assertIn("pythonw.exe", normal)
         self.assertIn("run_companion.pyw", normal)
-        self.assertIn("DDS Companion 0.5.8", normal)
+        self.assertIn("DDS Companion - Development Launcher", normal)
         self.assertIn("python -m dds_companion.gui.app", debug)
         self.assertIn("DDS Companion 0.5.8", debug)
 

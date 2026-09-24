@@ -31,6 +31,9 @@ def application_directory() -> Path:
     source development it is the project root. Keeping this decision here gives
     Installed and Portable builds one deployment-neutral path boundary.
     """
+    override = os.environ.get("DDS_APPLICATION_DIR")
+    if override:
+        return Path(override).expanduser().resolve()
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parents[2]

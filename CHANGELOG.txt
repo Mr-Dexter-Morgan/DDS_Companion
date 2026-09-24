@@ -1,3 +1,57 @@
+Unreleased — 0.7.0 Safe Updater Foundation
+
+Status
+- Active candidate version: 0.7.0.dev0.
+- Implementation and Windows live updater validation are complete for the 0.7.0 scope.
+- The public v0.7.0 tag/release has not been created yet.
+
+Safe update architecture
+- DDSUpdater.exe runs as a separate external updater process; DDS never overwrites its running payload.
+- DDS.exe is the stable bootstrap; application payloads live under versions/<version>.
+- current.json selects the active version, previous.json records the previous successfully-started version, and pending_update.json makes promotion transactional.
+- A candidate is committed only after startup acknowledgement; failed startup automatically rolls back.
+- Startup acknowledgement is tied to core runtime readiness, not completion time of the initial full archive import.
+- Startup commit is idempotent and repairs the crash window where pending state reached disk before current.json switched.
+
+Integrity and isolation
+- Versioned release manifest: channel, asset, SHA-256, exact size, updater protocol and package format.
+- Atomic partial download promotion only after exact size and SHA-256 verification.
+- ZIP validation rejects traversal, drive paths, symlinks, Windows case collisions and protected user-data roots.
+- Staging verifies the package and DDS.install.json before promotion.
+- SQLite/archive, settings, media/cache, exports and DDS_Data are outside updater ownership.
+- Tests prove user-data sentinels remain byte-identical after both success and forced rollback.
+
+Recovery and observability
+- Cross-process update.lock prevents concurrent update ownership.
+- Free-space guards run before download/staging and before install.
+- updater.log records promotion, startup confirmation and rollback.
+- journal.json records durable updater lifecycle states.
+- Power-loss handoff between pending/current pointers is recoverable.
+- Failed Windows candidates are terminated as a process tree and removed with bounded retry.
+- Rollback preserves the already-committed previous working build and relaunches the restored version.
+- Release/download operations use bounded timeout/retry and cancellation cleanup.
+
+Update UX
+- Settings provides manual check/download/install flow.
+- Optional background checking is bounded to at most once per day.
+- Automatic install remains opt-in; update/network failure never blocks archive use.
+- Release notes are normalized and bounded before display.
+- Updater protocol/package format are versioned and fail closed on unsupported formats.
+
+Validation completed on Windows
+- Full unittest discovery: 170/170 PASS, three consecutive runs.
+- compileall PASS.
+- Native PyInstaller build PASS for DDS.exe, DDSApp.exe and DDSUpdater.exe.
+- Live success PASS: dev0 -> synthetic dev1, startup ACK, journal COMPLETE, STARTUP_CONFIRMED, previous=dev0.
+- Live forced-timeout rollback PASS: dev1 -> broken dev2 -> watchdog rollback; current=dev1, previous=dev0, failed dev2 removed, no dev2 processes remain, journal FAILED, ROLLBACK_COMPLETE.
+- Test sandbox returned to a clean 0.7.0.dev0 application baseline.
+
+Out of scope for 0.7.0
+- Tray/autostart (0.8.0).
+- Setup/Repair/Installer (0.9.0).
+- Provider-specific cloud OAuth/API.
+- Library redesign or archive-format changes.
+
 Unreleased — post-0.6.2 repository baseline
 
 Runtime safety
@@ -23,42 +77,23 @@ Branding
 Unified manual export
 - Added provider-independent ExportPackageService.
 - Library context menu: Упаковать -> Только текст / Текст + кэш.
-- Canonical output format: ZIP.
-- Package contract:
-  manifest.json
-  content.md
-  messages.json
-  media_index.json
-  media/ (Text + Cache only)
-- Package media filenames use stable SHA-256-derived collision-safe prefixes.
-- Missing/not-cached/awaiting-rediscovery media remains visible in manifest/index.
-- Text-only export contains no media bytes.
+- Canonical output: ZIP with manifest.json, content.md, messages.json, media_index.json and optional media/.
+- Missing/not-cached media remains declared instead of silently disappearing.
 - Manual export never changes persistent Library export rules.
-- Added persistent manual_export_path setting and folder picker.
-- Packaging uses staging, validates the ZIP by reopening/testzip/manifest read, then atomically promotes the final file.
-- Failure cleanup prevents false-success ZIP artifacts.
-- Activity gets human-readable manual-export events.
+- Added persistent manual_export_path and folder picker.
+- Packaging uses staging, ZIP validation and atomic final promotion.
 
 Branch management
 - Added branch-scoped media cache clear.
-- Added branch data deletion while preserving structural node and export rule.
-- Added full branch deletion including descendants and export rules.
-- Destructive branch maintenance stops archive/media runtime before mutation and restarts DDS afterwards.
-- Historical capture_imports are intentionally preserved as a dedup boundary so untouched old DDS_Data does not immediately repopulate a deliberately deleted branch; a genuinely updated capture can reappear later.
-- Orphan media registry rows/cache files are removed after data deletion; still-referenced media is preserved.
-- Activity gets human-readable branch-maintenance events.
+- Added branch data deletion while preserving structure/rule.
+- Added full branch deletion including descendants and rules.
+- Destructive branch maintenance stops runtime before mutation and restarts DDS afterwards.
+- Historical capture_imports remain a dedup boundary so untouched old DDS_Data does not instantly repopulate a deliberately deleted branch.
 
 Cloud/sync decision
-- Direct Google Drive OAuth/API integration is not part of DDS.
-- Future automatic sync will write to a user-selected ordinary filesystem folder; external clients such as Google Drive for Desktop/OneDrive/Dropbox/Yandex Disk/etc. may sync it.
-- 0.6.2 itself implements manual ZIP export only; background folder sync is a later layer.
-
-Release direction
-- If automated + real Windows live gates pass, 0.6.2 is the intended first public binary GitHub Release.
-- Planned post-0.6.2 order: Updater -> Tray/Autostart -> Setup/Repair/Installer -> 1.0.
+- Direct Google Drive OAuth/API is not part of DDS.
+- Future automatic sync will target an ordinary filesystem folder for external sync clients.
 
 0.6.2 candidate-r2 — Windows Known Folder correction
-- Fixed the default manual-export directory on Windows when the user's Documents folder has been moved or redirected to another drive.
-- Replaced the naive Path.home()/Documents assumption with the Windows FOLDERID_Documents Known Folder lookup (SHGetKnownFolderPath), with a safe fallback.
-- Portable export behavior remains Data/exports.
-- Added regression coverage for redirected Windows Documents and the Portable default.
+- Fixed default manual-export path when Documents is redirected to another drive.
+- Installed profile resolves FOLDERID_Documents via SHGetKnownFolderPath with safe fallback.

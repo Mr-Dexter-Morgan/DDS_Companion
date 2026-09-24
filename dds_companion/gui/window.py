@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import os
 import sqlite3
 import sys
 import threading
@@ -32,6 +33,10 @@ from dds_companion.services.branch_maintenance_service import BranchMaintenanceS
 from dds_companion.services.export_package_service import ExportPackageService
 from dds_companion.services.media_cache_service import MediaCacheService
 from dds_companion.storage.database import connect_database
+from dds_companion.updater.controller import UpdateController
+from dds_companion.updater.installer_launcher import launch_external_updater
+from dds_companion.updater.paths import build_updater_paths
+from dds_companion.updater.pointer import atomic_write_json, read_json
 
 from .layout_profile import choose_layout_profile
 from .pages import ActivityPage, DashboardPage, HealthPage, LibraryPage, SettingsPage
@@ -46,11 +51,15 @@ class SignalBus(QObject):
     watch_event = Signal(object)
     runtime_error = Signal(str)
     stopped = Signal()
+    runtime_ready = Signal()
     maintenance_done = Signal(object)
     library_messages = Signal(object)
+    update_status = Signal(object)
 
 
 class MainWindow(QMainWindow):
+    startup_ready = Signal()
+
     PAGE_NAMES = ("Dashboard", "Library", "Activity", "Health", "Settings")
     PAGE_LABELS = ("Главная", "Библиотека", "Активность", "Статус", "Настройки")
 
@@ -62,10 +71,19 @@ class MainWindow(QMainWindow):
         self._screen_signals_connected = False
         self._observed_screen = None
         self._startup_foreground_attempted = False
+        self._startup_ready_emitted = False
+        self._update_install_launched = False
 
         self.bus = SignalBus()
         self.paths = build_runtime_paths(dds_data, app_data, portable=portable)
         self.settings_store = SettingsStore(self.paths.settings)
+        self.update_paths = build_updater_paths(self.paths)
+        self.update_controller = UpdateController(
+            paths=self.update_paths,
+            current_version=__version__,
+            settings_getter=lambda: self.settings_store.settings,
+            status_sink=self.bus.update_status.emit,
+        )
         self.media_cache = MediaCacheService(self.paths.media, self.paths.database)
         self._last_diagnostics_report = ""
         self._runtime_kwargs = {
@@ -105,6 +123,7 @@ class MainWindow(QMainWindow):
         self._apply_layout_profile(force=True)
         self._start_runtime()
         self._run_cache_policy_async("startup")
+        QTimer.singleShot(2500, self._maybe_background_update_check)
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -205,6 +224,10 @@ class MainWindow(QMainWindow):
             on_clear_media_cache=self._clear_media_cache,
             on_reset_local_archive=self._reset_local_archive,
             on_choose_export_folder=self._choose_export_folder,
+            on_check_updates=self._check_updates_manual,
+            on_download_update=self._download_update,
+            on_install_update=self._install_update_now,
+            on_cancel_update=self._cancel_update,
             on_run_diagnostics=self._run_diagnostics,
             on_database_check=self._database_quick_check,
             on_copy_report=self._copy_diagnostics_report,
@@ -359,6 +382,64 @@ class MainWindow(QMainWindow):
             # Foreground polish must never destabilize Companion.
             pass
 
+    def capture_update_resume_state(self, path: str | Path) -> Path:
+        geometry = self.geometry()
+        if self.isFullScreen():
+            presentation = "fullscreen"
+        elif self.isMaximized():
+            presentation = "maximized"
+        elif self.isMinimized():
+            presentation = "minimized"
+        elif not self.isVisible():
+            presentation = "hidden"
+        else:
+            presentation = "normal"
+        payload = {
+            "schema": "dds-window-resume-v1",
+            "presentation": presentation,
+            "geometry": {
+                "x": geometry.x(),
+                "y": geometry.y(),
+                "width": geometry.width(),
+                "height": geometry.height(),
+            },
+            "page_index": self.stack.currentIndex(),
+            "hidden_to_tray": False,
+        }
+        return atomic_write_json(path, payload)
+
+    def restore_update_resume_state(self, path: str | Path) -> None:
+        try:
+            payload = read_json(path)
+            if payload.get("schema") != "dds-window-resume-v1":
+                return
+            geometry = payload.get("geometry") or {}
+            width = max(self.minimumWidth(), int(geometry.get("width", self.width())))
+            height = max(self.minimumHeight(), int(geometry.get("height", self.height())))
+            self.setGeometry(
+                int(geometry.get("x", self.x())),
+                int(geometry.get("y", self.y())),
+                width,
+                height,
+            )
+            page_index = int(payload.get("page_index", 0))
+            if 0 <= page_index < self.stack.count():
+                self._select_page(page_index)
+            presentation = str(payload.get("presentation") or "normal")
+            if bool(payload.get("hidden_to_tray")) or presentation == "hidden":
+                self.hide()
+            elif presentation == "fullscreen":
+                self.showFullScreen()
+            elif presentation == "maximized":
+                self.showMaximized()
+            elif presentation == "minimized":
+                self.showMinimized()
+            else:
+                self.showNormal()
+        except Exception:
+            # Resume QoL must never prevent a healthy version from starting.
+            return
+
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         self._apply_layout_profile()
@@ -369,8 +450,10 @@ class MainWindow(QMainWindow):
         self.bus.watch_event.connect(self._on_watch_event)
         self.bus.runtime_error.connect(self._on_runtime_error)
         self.bus.stopped.connect(self._on_runtime_stopped)
+        self.bus.runtime_ready.connect(self._on_runtime_ready)
         self.bus.maintenance_done.connect(self._on_maintenance_done)
         self.bus.library_messages.connect(self.library.set_message_page)
+        self.bus.update_status.connect(self._on_update_status)
 
     def _new_runtime(self) -> GuiRuntime:
         return GuiRuntime(
@@ -380,6 +463,7 @@ class MainWindow(QMainWindow):
             watch_sink=self.bus.watch_event.emit,
             error_sink=self.bus.runtime_error.emit,
             stopped_sink=self.bus.stopped.emit,
+            ready_sink=self.bus.runtime_ready.emit,
             library_message_sink=self.bus.library_messages.emit,
         )
 
@@ -439,6 +523,17 @@ class MainWindow(QMainWindow):
             update = getattr(page, "update_snapshot", None)
             if update:
                 update(snapshot)
+        # A snapshot is also a valid readiness signal, retained as a fallback.
+        self._mark_startup_ready()
+
+    def _on_runtime_ready(self) -> None:
+        self._mark_startup_ready()
+
+    def _mark_startup_ready(self) -> None:
+        if self._startup_ready_emitted:
+            return
+        self._startup_ready_emitted = True
+        self.startup_ready.emit()
 
     def _on_activity(self, event: dict) -> None:
         summary = human_activity_summary(event)
@@ -692,6 +787,78 @@ class MainWindow(QMainWindow):
         )
         runtime.request_refresh()
 
+    @property
+    def startup_is_ready(self) -> bool:
+        return self._startup_ready_emitted
+
+    def _update_relaunch_args(self) -> list[str]:
+        args: list[str] = []
+        if self._runtime_kwargs.get("dds_data"):
+            args += ["--dds-data", str(self._runtime_kwargs["dds_data"])]
+        if self._runtime_kwargs.get("app_data"):
+            args += ["--app-data", str(self._runtime_kwargs["app_data"])]
+        if self._runtime_kwargs.get("portable"):
+            args.append("--portable")
+        args += ["--poll-ms", str(self._runtime_kwargs["poll_ms"])]
+        args += ["--settle-ms", str(self._runtime_kwargs["settle_ms"])]
+        return args
+
+    def _check_updates_manual(self) -> None:
+        self.update_controller.check_async(manual=True)
+
+    def _download_update(self) -> None:
+        self.update_controller.download_async()
+
+    def _install_update_now(self) -> None:
+        self._launch_prepared_update(close_after=True)
+
+    def _cancel_update(self) -> None:
+        if not self.update_controller.cancel_current():
+            self.statusBar().showMessage("Нет активной операции обновления.", 2500)
+
+    def _launch_prepared_update(self, *, close_after: bool) -> bool:
+        prepared = self.update_controller.prepared
+        if prepared is None:
+            QMessageBox.information(self, "DDS", "Сначала загрузите и проверьте обновление.")
+            return False
+        if self._update_install_launched:
+            return True
+        try:
+            resume_state = self.update_paths.workspace / "resume_state.json"
+            self.capture_update_resume_state(resume_state)
+            launch_external_updater(
+                application_dir=self.paths.application_dir,
+                paths=self.update_paths,
+                prepared=prepared,
+                parent_pid=os.getpid(),
+                resume_state_path=resume_state,
+                launch_args=self._update_relaunch_args(),
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "DDS", f"Не удалось запустить updater:\n{type(exc).__name__}: {exc}")
+            return False
+        self._update_install_launched = True
+        self.statusBar().showMessage("Updater запущен. DDS будет перезапущен после установки.", 7000)
+        if close_after:
+            self.close()
+        return True
+
+    def _maybe_background_update_check(self) -> None:
+        if not self._closing:
+            self.update_controller.maybe_check_in_background()
+
+    def _on_update_status(self, payload: dict) -> None:
+        self.settings.set_update_status(payload)
+        state = str(payload.get("state") or "")
+        message = str(payload.get("message") or "")
+        if state in {"AVAILABLE", "STAGED", "ERROR"} and message:
+            self.statusBar().showMessage(message, 6000)
+        if state == "STAGED" and bool(payload.get("auto_install")):
+            self.settings.set_update_status({
+                **payload,
+                "message": message + " Автоустановка выполнится при выходе из DDS.",
+            })
+
     def _on_setting_changed(self, key: str, value) -> None:
         try:
             self.settings_store.update(**{key: value})
@@ -700,6 +867,8 @@ class MainWindow(QMainWindow):
             return
         self.statusBar().showMessage("Настройка сохранена", 2500)
         self._refresh_settings_surface()
+        if key == "update_background_check_enabled" and bool(value):
+            QTimer.singleShot(0, self._maybe_background_update_check)
         if key == "media_autodownload_enabled" and self.runtime is not None:
             self.runtime.request_media_autodownload_change(bool(value))
         if key in {"media_cache_limit_bytes", "media_max_file_bytes", "media_retention_days"}:
@@ -1025,6 +1194,12 @@ class MainWindow(QMainWindow):
         self._open("logs", "Logs")
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        if (
+            not self._update_install_launched
+            and self.update_controller.prepared is not None
+            and self.settings_store.settings.update_auto_install_enabled
+        ):
+            self._launch_prepared_update(close_after=False)
         self._closing = True
         self.status_text.setText("Останавливаю watcher…")
         if self.runtime is not None:

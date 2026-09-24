@@ -19,7 +19,7 @@ from dds_companion.core.identity import (
 
 class DataRoot060Tests(unittest.TestCase):
     def test_061_version_is_bumped(self):
-        self.assertEqual(__version__, "0.6.2")
+        self.assertEqual(__version__, "0.7.0.dev0")
 
     def test_installed_profile_preserves_localappdata_contract(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -97,16 +97,25 @@ class Branding060Tests(unittest.TestCase):
         qapp_call = source.index("QApplication(sys.argv[:1])")
         self.assertLess(identity_call, qapp_call)
 
-    def test_pyinstaller_contract_builds_dds_exe_with_icon_and_version_resource(self):
+    def test_pyinstaller_contract_separates_launcher_runtime_and_updater(self):
         project = Path(__file__).resolve().parents[2]
-        spec = (project / "DDS.spec").read_text(encoding="utf-8")
-        version = (project / "build" / "windows_version_info.txt").read_text(encoding="utf-8")
-        self.assertIn('name="DDS"', spec)
-        self.assertIn('icon=str(ROOT / "assets" / "DDS.ico")', spec)
-        self.assertIn('version=str(ROOT / "build" / "windows_version_info.txt")', spec)
-        self.assertIn("DDS.exe", version)
-        self.assertIn("DDS — Discord Data Snatcher", version)
-        self.assertIn("0.6.2", version)
+        launcher_spec = (project / "DDSLauncher.spec").read_text(encoding="utf-8")
+        app_spec = (project / "DDSApp.spec").read_text(encoding="utf-8")
+        updater_spec = (project / "DDSUpdater.spec").read_text(encoding="utf-8")
+        launcher_version = (project / "build" / "windows_launcher_version_info.txt").read_text(encoding="utf-8")
+        app_version = (project / "build" / "windows_app_version_info.txt").read_text(encoding="utf-8")
+        updater_version = (project / "build" / "windows_updater_version_info.txt").read_text(encoding="utf-8")
+
+        self.assertIn('name="DDS"', launcher_spec)
+        self.assertIn('name="DDSApp"', app_spec)
+        self.assertIn('name="DDSUpdater"', updater_spec)
+        for spec in (launcher_spec, app_spec, updater_spec):
+            self.assertIn('icon=str(ROOT / "assets" / "DDS.ico")', spec)
+        self.assertIn("DDS.exe", launcher_version)
+        self.assertIn("DDSApp.exe", app_version)
+        self.assertIn("DDSUpdater.exe", updater_version)
+        for version in (launcher_version, app_version, updater_version):
+            self.assertIn("0.7.0.dev0", version)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ ActivitySink = Callable[[dict], None]
 WatchSink = Callable[[dict], None]
 ErrorSink = Callable[[str], None]
 StoppedSink = Callable[[], None]
+ReadySink = Callable[[], None]
 LibraryMessageSink = Callable[[dict], None]
 
 
@@ -48,6 +49,7 @@ class GuiRuntime:
         watch_sink: WatchSink | None = None,
         error_sink: ErrorSink | None = None,
         stopped_sink: StoppedSink | None = None,
+        ready_sink: ReadySink | None = None,
         library_message_sink: LibraryMessageSink | None = None,
     ):
         self.paths: RuntimePaths = build_runtime_paths(dds_data, app_data, portable=portable)
@@ -58,6 +60,7 @@ class GuiRuntime:
         self.watch_sink = watch_sink
         self.error_sink = error_sink
         self.stopped_sink = stopped_sink
+        self.ready_sink = ready_sink
         self.library_message_sink = library_message_sink
         self.stop_event = Event()
         self.refresh_event = Event()
@@ -163,6 +166,12 @@ class GuiRuntime:
                 on_heartbeat=monitor.watcher_heartbeat,
             )
             watcher.prime()
+
+            # Updater startup health is a core-runtime milestone, not an archive-size
+            # benchmark. At this point the data root exists, SQLite is open/migrated,
+            # core services are constructed, and the watcher can read DDS_Data.
+            # The initial full import may legitimately take much longer.
+            self._safe(self.ready_sink)
 
             import_result = importer.import_all(self.paths.dds_data)
             if import_result.failed:

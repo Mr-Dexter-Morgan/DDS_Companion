@@ -12,7 +12,7 @@ from pathlib import Path
 
 from dds_companion.gui.runtime import GuiRuntime
 from dds_companion.services.discord_probe import DiscordProbeResult
-from dds_companion.services.import_service import ImportService
+from dds_companion.services.import_service import ImportResult, ImportService
 from dds_companion.services.library_service import LibraryService
 from dds_companion.storage.database import connect_database
 from dds_companion.tests.test_imports import sample_capture
@@ -227,6 +227,37 @@ class GuiRuntimeTests(unittest.TestCase):
         self.addCleanup(thread.join, 5.0)
         self.addCleanup(runtime.stop)
         return thread
+
+    def test_runtime_ready_does_not_wait_for_initial_full_import(self):
+        ready = threading.Event()
+        import_entered = threading.Event()
+        release_import = threading.Event()
+
+        def blocked_import(_service, _dds_root):
+            import_entered.set()
+            release_import.wait(3.0)
+            return ImportResult()
+
+        runtime = GuiRuntime(
+            dds_data=self.dds,
+            app_data=self.app_data,
+            poll_ms=100,
+            settle_ms=50,
+            ready_sink=ready.set,
+        )
+        with patch("dds_companion.gui.runtime.ImportService.import_all", new=blocked_import):
+            thread = self._start_runtime(runtime)
+            try:
+                self.assertTrue(import_entered.wait(2.0), "initial import was not reached")
+                self.assertTrue(
+                    ready.is_set(),
+                    "runtime-ready must be emitted before the potentially long initial import completes",
+                )
+            finally:
+                release_import.set()
+            runtime.stop()
+            thread.join(3.0)
+            self.assertFalse(thread.is_alive())
 
     def test_runtime_emits_real_snapshot_and_stops_cleanly(self):
         snapshots: list[dict] = []
