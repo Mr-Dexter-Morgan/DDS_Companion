@@ -317,19 +317,31 @@ class MainWindow(QMainWindow):
         if self._startup_foreground_attempted:
             return
         self._startup_foreground_attempted = True
+        self._request_foreground()
 
-        # Qt path first: sufficient on most desktops and harmless elsewhere.
-        if self.isMinimized():
-            self.showNormal()
+    def activate_from_secondary_launch(self) -> None:
+        """Activate the existing window when a second DDS launch is attempted."""
+        self._request_foreground()
+
+    def _request_foreground(self) -> None:
+        """Show/restore this window and request foreground without changing its normal mode."""
+        if not self.isVisible():
+            self.show()
+
+        state = self.windowState()
+        if state & Qt.WindowMinimized:
+            # Remove only the minimized bit. Preserve maximized/fullscreen state.
+            self.setWindowState((state & ~Qt.WindowMinimized) | Qt.WindowActive)
+            self.show()
+
         self.raise_()
         self.activateWindow()
 
         if sys.platform != "win32":
             return
 
-        # Windows fallback for the common Explorer -> batch -> pythonw launch.
-        # TOPMOST is toggled only inside this one-shot startup call and removed
-        # immediately; Companion is never kept Always-on-Top.
+        # Windows fallback. TOPMOST is toggled only for the activation request and
+        # removed immediately; Companion is never kept Always-on-Top.
         try:
             hwnd = int(self.winId())
             user32 = ctypes.windll.user32
@@ -344,7 +356,7 @@ class MainWindow(QMainWindow):
             user32.BringWindowToTop(hwnd)
             user32.SetForegroundWindow(hwnd)
         except Exception:
-            # Foreground polish must never make Companion fail to start.
+            # Foreground polish must never destabilize Companion.
             pass
 
     def resizeEvent(self, event: QResizeEvent) -> None:
