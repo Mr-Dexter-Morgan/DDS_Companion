@@ -1,0 +1,33 @@
+name: Cleanup Archived Actions
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  cleanup:
+    if: "${{ startsWith(github.event.head_commit.message, 'Cleanup archived Actions') }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete archived failed workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for id in 36001468393 35998270085 35996468598 36044216808 36044346477 36044347571; do
+            echo "Deleting archived failed run $id"
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$id"
+          done
+
+      - name: Delete merged development branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/dev/0.7.1"
