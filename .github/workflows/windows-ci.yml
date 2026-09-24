@@ -119,3 +119,11 @@ jobs:
             dist/release/DDS-0.7.1-update.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload manual-test Windows bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: DDS-0.7.1-manual-test
+          path: dist/DDS/**
+          if-no-files-found: error
+          retention-days: 14
