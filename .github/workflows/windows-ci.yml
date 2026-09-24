@@ -50,7 +50,7 @@ jobs:
           python -m compileall -q dds_companion
           $version = (python -m dds_companion.app --version).Trim()
           Write-Host $version
-          if ($version -ne "DDS Companion 0.7.0") {
+          if ($version -ne "DDS Companion 0.7.1") {
             throw "Unexpected application version: $version"
           }
 
@@ -67,7 +67,7 @@ jobs:
         shell: pwsh
         run: |
           $root = "dist/DDS"
-          $app = "$root/versions/0.7.0/DDSApp.exe"
+          $app = "$root/versions/0.7.1/DDSApp.exe"
           $launcher = "$root/DDS.exe"
           $updater = "$root/DDSUpdater.exe"
 
@@ -75,16 +75,16 @@ jobs:
             if (-not (Test-Path $exe)) { throw "Missing executable: $exe" }
             $info = (Get-Item $exe).VersionInfo
             Write-Host "$exe FileVersion=$($info.FileVersion) ProductVersion=$($info.ProductVersion)"
-            if ($info.FileVersion -ne "0.7.0") { throw "Unexpected FileVersion: $exe" }
-            if ($info.ProductVersion -ne "0.7.0") { throw "Unexpected ProductVersion: $exe" }
+            if ($info.FileVersion -ne "0.7.1") { throw "Unexpected FileVersion: $exe" }
+            if ($info.ProductVersion -ne "0.7.1") { throw "Unexpected ProductVersion: $exe" }
           }
 
           $current = Get-Content "$root/current.json" -Raw | ConvertFrom-Json
-          if ($current.version -ne "0.7.0") { throw "Unexpected current pointer" }
+          if ($current.version -ne "0.7.1") { throw "Unexpected current pointer" }
 
-          $full = "dist/release/DDS-0.7.0-windows-x64.zip"
-          $update = "dist/release/DDS-0.7.0-update.zip"
-          $manifestPath = "dist/release/DDS-0.7.0-update.json"
+          $full = "dist/release/DDS-0.7.1-windows-x64.zip"
+          $update = "dist/release/DDS-0.7.1-update.zip"
+          $manifestPath = "dist/release/DDS-0.7.1-update.json"
           foreach ($path in @($full, $update, $manifestPath, "$full.sha256", "$update.sha256")) {
             if (-not (Test-Path $path)) { throw "Missing release artifact: $path" }
           }
@@ -102,20 +102,20 @@ jobs:
           if ($updateHash -ne $updateExpected) { throw "Update ZIP SHA-256 mismatch" }
 
           $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-          if ($manifest.version -ne "0.7.0") { throw "Unexpected update manifest version" }
-          if ($manifest.asset -ne "DDS-0.7.0-update.zip") { throw "Unexpected update asset" }
+          if ($manifest.version -ne "0.7.1") { throw "Unexpected update manifest version" }
+          if ($manifest.asset -ne "DDS-0.7.1-update.zip") { throw "Unexpected update asset" }
           if ($manifest.sha256.ToLower() -ne $updateHash) { throw "Manifest SHA-256 mismatch" }
           if ([int64]$manifest.size_bytes -ne (Get-Item $update).Length) { throw "Manifest size mismatch" }
 
       - name: Upload validated Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: DDS-0.7.0-windows-x64
+          name: DDS-0.7.1-windows-x64
           path: |
-            dist/release/DDS-0.7.0-windows-x64.zip
-            dist/release/DDS-0.7.0-windows-x64.zip.sha256
-            dist/release/DDS-0.7.0-update.zip
-            dist/release/DDS-0.7.0-update.zip.sha256
-            dist/release/DDS-0.7.0-update.json
+            dist/release/DDS-0.7.1-windows-x64.zip
+            dist/release/DDS-0.7.1-windows-x64.zip.sha256
+            dist/release/DDS-0.7.1-update.zip
+            dist/release/DDS-0.7.1-update.zip.sha256
+            dist/release/DDS-0.7.1-update.json
           if-no-files-found: error
           retention-days: 14

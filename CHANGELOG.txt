@@ -1,3 +1,22 @@
+DDS Companion 0.7.1 — Patch Candidate
+
+Status
+- Built from the unreleased 0.7.0 freeze after manual pre-release testing.
+- Development lives on dev/0.7.1; main, tags and GitHub Releases remain untouched until the manual test gate passes.
+
+Manual-test fixes
+- Fixed a race where media-cache maintenance could remove a shard directory while storage statistics were walking it, raising WinError 3 and stopping the whole GUI runtime.
+- Filesystem statistics and media-cache maintenance now use a resilient non-symlink walk: disappearing files/directories are skipped as concurrent cache changes, never treated as archive-fatal errors.
+- Update Status now observes the updater's persistent check_state.json instead of a disconnected SQLite telemetry path.
+- Manual update checks persist attempt/success/error separately and force an immediate health snapshot, so Status no longer remains NEVER after a successful check.
+- Update Status interval now matches the real scheduler contract: 24 hours, not the stale 6-hour fallback.
+- 0.7.0 check_state.json remains readable: legacy last_checked_at is migrated as an attempt without falsely claiming success.
+
+Internal patch validation
+- Isolated sandbox regression reproducing a shard directory disappearing during traversal: PASS.
+- Persistent updater-state migration / attempt / success / failure / 24-hour due tests: PASS.
+- Windows CI and user live test are the remaining release gates.
+
 Unreleased - DDS Companion 0.7.0 Safe Updater Foundation (release-ready freeze)
 
 Status
