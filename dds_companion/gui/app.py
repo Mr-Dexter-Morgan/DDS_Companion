@@ -19,6 +19,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - user-facing bootstrap p
 
 from dds_companion import __version__
 from dds_companion.core.identity import APPLICATION_DISPLAY_NAME, APPLICATION_NAME, resource_path, set_windows_app_user_model_id
+from dds_companion.gui.single_instance import SingleInstanceCoordinator
 from dds_companion.gui.theme import APP_STYLESHEET, BG, TEXT
 from dds_companion.gui.window import MainWindow
 
@@ -53,6 +54,17 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName(APPLICATION_NAME)
     app.setApplicationDisplayName(APPLICATION_NAME)
     app.setOrganizationName("DDS")
+
+    instance_guard = SingleInstanceCoordinator()
+    try:
+        is_primary = instance_guard.claim_or_notify()
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 6
+    if not is_primary:
+        return 0
+    app.aboutToQuit.connect(instance_guard.close)
+
     app.setStyle("Fusion")
     app.setStyleSheet(APP_STYLESHEET)
     app_icon = make_app_icon()
@@ -73,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         settle_ms=args.settle_ms,
     )
     window.setWindowIcon(app_icon)
+    instance_guard.activation_requested.connect(window.activate_from_secondary_launch)
     window.show()
     return app.exec()
 
