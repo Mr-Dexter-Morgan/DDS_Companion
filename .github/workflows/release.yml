@@ -1,0 +1,95 @@
+name: Publish Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: startsWith(github.event.head_commit.message, 'Publish DDS Companion ')
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-build.txt
+
+      - name: Install build dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-build.txt
+
+      - name: Resolve release version
+        shell: pwsh
+        run: |
+          $version = (python -c "import dds_companion; print(dds_companion.__version__)").Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Release version must be final semver, got: $version"
+          }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Publishing DDS Companion $version"
+
+      - name: Regression pass 1 of 3
+        run: python -m unittest discover -s dds_companion/tests -p "test_*.py"
+
+      - name: Regression pass 2 of 3
+        run: python -m unittest discover -s dds_companion/tests -p "test_*.py"
+
+      - name: Regression pass 3 of 3
+        run: python -m unittest discover -s dds_companion/tests -p "test_*.py"
+
+      - name: Build native Windows distribution
+        shell: pwsh
+        run: |
+          cmd /c build_windows.bat
+          if ($LASTEXITCODE -ne 0) {
+            throw "build_windows.bat failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Verify release payload
+        shell: pwsh
+        run: |
+          $full = "dist/release/DDS-$env:VERSION-windows-x64.zip"
+          $update = "dist/release/DDS-$env:VERSION-update.zip"
+          $manifest = "dist/release/DDS-$env:VERSION-update.json"
+          foreach ($path in @($full, "$full.sha256", $update, "$update.sha256", $manifest)) {
+            if (-not (Test-Path $path)) { throw "Missing release artifact: $path" }
+          }
+          python -m zipfile -t $full
+          if ($LASTEXITCODE -ne 0) { throw "Full ZIP integrity test failed" }
+          python -m zipfile -t $update
+          if ($LASTEXITCODE -ne 0) { throw "Update ZIP integrity test failed" }
+
+      - name: Publish GitHub Public Preview
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v$env:VERSION"
+          $notes = "RELEASE_NOTES_$env:VERSION.md"
+          if (-not (Test-Path $notes)) { throw "Missing release notes: $notes" }
+
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            throw "Release $tag already exists"
+          }
+
+          $assets = @(
+            "dist/release/DDS-$env:VERSION-windows-x64.zip",
+            "dist/release/DDS-$env:VERSION-windows-x64.zip.sha256",
+            "dist/release/DDS-$env:VERSION-update.zip",
+            "dist/release/DDS-$env:VERSION-update.zip.sha256",
+            "dist/release/DDS-$env:VERSION-update.json"
+          )
+          gh release create $tag @assets --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "DDS Companion $env:VERSION — Public Preview" --notes-file $notes --prerelease
