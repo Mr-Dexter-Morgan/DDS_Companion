@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   publish:
@@ -93,3 +94,26 @@ jobs:
             "dist/release/DDS-$env:VERSION-update.json"
           )
           gh release create $tag @assets --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "DDS Companion $env:VERSION — Public Preview" --notes-file $notes --prerelease
+
+  maintenance:
+    if: startsWith(github.event.head_commit.message, 'Maintenance: cleanup Actions')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete archived failed workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for id in 36001468393 35998270085 35996468598 36044216808; do
+            echo "Deleting failed run $id"
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/runs/$id"
+          done
+
+      - name: Delete merged development branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/dev%2F0.7.1"
