@@ -253,14 +253,6 @@ class DashboardPage(Page):
             lower.setHorizontalSpacing(spacing)
             lower.setVerticalSpacing(spacing)
 
-    @staticmethod
-    def _set_checkbox_value(checkbox: QCheckBox, value: bool) -> None:
-        checkbox.blockSignals(True)
-        try:
-            checkbox.setChecked(bool(value))
-        finally:
-            checkbox.blockSignals(False)
-
     def update_snapshot(self, snapshot: dict) -> None:
         self.latest_snapshot = snapshot
         stats = snapshot.get("stats", {})
@@ -1967,6 +1959,14 @@ class SettingsPage(Page):
                 combo.setCurrentIndex(index)
         finally:
             combo.blockSignals(False)
+
+    @staticmethod
+    def _set_checkbox_value(checkbox: QCheckBox, value: bool) -> None:
+        checkbox.blockSignals(True)
+        try:
+            checkbox.setChecked(bool(value))
+        finally:
+            checkbox.blockSignals(False)
 
     def update_snapshot(self, snapshot: dict) -> None:
         paths = snapshot.get("paths", {})
