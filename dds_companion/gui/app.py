@@ -109,11 +109,12 @@ def main(argv: list[str] | None = None) -> int:
 
     presentation = startup_presentation(
         is_autostart=bool(args.autostart),
-        minimize_on_autostart=window.settings_store.settings.desktop_autostart_minimized_enabled,
+        start_in_tray=window.settings_store.settings.desktop_autostart_minimized_enabled,
+        tray_available=window.tray_available,
     )
-    if presentation == "minimized":
+    if presentation == "tray":
         window.suppress_startup_foreground()
-        window.showMinimized()
+        window.hide()
     else:
         window.show()
 
