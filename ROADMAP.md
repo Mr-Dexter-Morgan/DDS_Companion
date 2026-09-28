@@ -1,6 +1,6 @@
 # DDS Companion Roadmap
 
-Current public baseline: **v0.7.1 Public Preview**. The 0.7 updater foundation is released; 0.8.0 Desktop Lifecycle is next.
+Current public baseline: **v0.8.0 Public Preview**. Desktop Lifecycle is released; 0.9.0 Setup / Repair / Installer is next.
 
 ## Non-negotiable architecture rules
 
@@ -14,7 +14,7 @@ Current public baseline: **v0.7.1 Public Preview**. The 0.7 updater foundation i
 
 ## 0.7.0 - Safe Updater Foundation
 
-Status: released through the 0.7.1 Public Preview patch line after full Windows CI and manual testing.
+Status: released through the 0.7.2 Public Preview patch line after full Windows CI and manual testing.
 
 Implemented:
 - External updater process and stable bootstrap launcher.
@@ -44,13 +44,17 @@ Implemented:
 
 ## 0.8.0 - Desktop Lifecycle
 
-Goal: make DDS unobtrusive for everyday use.
-- Tray lifecycle.
-- Optional autostart.
-- Explicit running/stopped/status behavior.
-- Clean shutdown/restart interactions with archive/media runtime.
-- Reuse the 0.7.0 saved presentation/hidden-to-tray update state.
-- No hidden network dependency.
+Status: released as **v0.8.0 Public Preview** after exact-candidate Windows CI and live validation.
+
+Implemented:
+- System tray lifecycle with open, hide and explicit full exit.
+- Optional Windows autostart through stable root `DDS.exe`.
+- Optional tray-only autostart with no main window, taskbar button or startup focus stealing.
+- Optional close-to-tray behavior without stopping the archive runtime.
+- Single-instance restore of the already running DDS process.
+- Tray tooltip driven by the existing Health state.
+- Safe visible-window fallback when the system tray is unavailable.
+- No hidden network dependency and no Plugin/SQLite/media/updater-protocol ownership change.
 
 ## 0.9.0 - Setup / Repair / Installer
 

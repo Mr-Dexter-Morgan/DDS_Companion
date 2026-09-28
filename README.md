@@ -1,9 +1,9 @@
 # DDS — Discord Data Snatcher
 
-[![Скачать DDS 0.7.2](https://img.shields.io/badge/%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC_DDS-0.7.2-6C63FF?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/download/v0.7.2/DDS-0.7.2-windows-x64.zip)
+[![Скачать DDS 0.8.0](https://img.shields.io/badge/%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC_DDS-0.8.0-6C63FF?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/download/v0.8.0/DDS-0.8.0-windows-x64.zip)
 
 **Готовая сборка для Windows x64. Python устанавливать не нужно.**  
-Текущая версия: **DDS Companion 0.7.2 Public Preview**. До появления полноценного DDS Setup установка выполняется вручную.
+Текущая версия: **DDS Companion 0.8.0 Public Preview**. До появления полноценного DDS Setup установка выполняется вручную.
 
 ## Что такое DDS и зачем он нужен
 
@@ -59,17 +59,17 @@ DDS **не копирует весь Discord-сервер автоматичес
 
 ### 4. Скачайте DDS Companion
 
-Нажмите большую кнопку **СКАЧАТЬ DDS 0.7.2** в самом верху этой страницы.
+Нажмите большую кнопку **СКАЧАТЬ DDS 0.8.0** в самом верху этой страницы.
 
-Или откройте [релиз DDS Companion 0.7.2](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/tag/v0.7.2) и скачайте:
+Или откройте [релиз DDS Companion 0.8.0](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/tag/v0.8.0) и скачайте:
 
-`DDS-0.7.2-windows-x64.zip`
+`DDS-0.8.0-windows-x64.zip`
 
 **Не скачивайте** автоматически созданные GitHub-файлы **Source code (zip)** или **Source code (tar.gz)**, если вам нужно просто запустить программу. Это исходный код для разработчиков.
 
 ### 5. Запустите DDS
 
-1. Полностью распакуйте `DDS-0.7.2-windows-x64.zip` в отдельную папку.
+1. Полностью распакуйте `DDS-0.8.0-windows-x64.zip` в отдельную папку.
 2. Не вытаскивайте из сборки один `DDS.exe` отдельно — оставьте содержимое архива вместе.
 3. Запустите **`DDS.exe`**.
 
@@ -117,9 +117,16 @@ SQLite-архив является основным долговечным хр�
 
 Ниже находится техническая информация о текущей версии, архитектуре, сборке и валидации.
 
-## What 0.7.2 includes
+## What 0.8.0 includes
 
-- Fixes the Diagnostics identity regression from 0.7.1: Companion version, Plugin version and capture contract are populated correctly again.
+- System tray lifecycle with **Открыть DDS**, **Скрыть DDS** and **Выйти из DDS**.
+- Optional Windows autostart through the stable root `DDS.exe`.
+- Optional tray-only autostart: no main window, no taskbar button and no startup focus stealing.
+- Optional close-to-tray behavior with explicit clean exit from the tray menu.
+- Single-instance activation restores the existing DDS process instead of starting a second archive runtime.
+- Tray tooltip follows the existing DDS Health state.
+- Safe fallback to a normal visible window when the system tray is unavailable.
+- The 0.7.x updater/archive foundation remains intact; 0.8.0 does not change Plugin ownership, SQLite schema, media runtime or updater protocol.
 
 - Separate DDSUpdater.exe; the running application never overwrites itself.
 - Stable DDS.exe bootstrap and versioned application payloads under versions/<version>.
@@ -182,13 +189,13 @@ Expected output:
 
 ## Validation
 
-DDS Companion 0.7.2 was validated on exact source commit `5753b93d5806d3e5d89a3e0856cc3b639f344417`: 178 tests × 3 passes, compile/version verification, native Windows build and package verification all passed. The exact full Windows ZIP then passed the user Windows live gate and was published byte-identically as GitHub Public Preview `v0.7.2` (SHA-256 `08bb67ec2d34446cc5d6066c173a19e751526930cf69a657a462c900e963b16d`).
+DDS Companion 0.8.0 was accepted from exact source commit `4b691fe8369cf277e78a78323cb99c96b2fdeae7`. Windows CI passed 184 tests × 3, compile/version verification, native Windows build and package verification. The exact CI manual-test bundle passed the user Windows live gate, including tray-only autostart and clean tray exit. The same accepted CI run produced the published full Windows ZIP (SHA-256 `09d92556d391328cfcf0618b0ab363c843e486bb6ee4bfd7cd97049ee6a7860c`) and verified update package.
 
-Historical validation for earlier 0.7.x builds remains preserved in the project evidence.
+Historical validation for earlier 0.7.x builds and 0.8.0 candidate iterations remains preserved in the project evidence.
 
 ## Roadmap
 
-0.7.2 is the current Public Preview release. The 0.7.x regression tail is closed; next planned layer: 0.8.x Desktop Lifecycle (tray/autostart). See ROADMAP.md.
+0.8.0 is the current Public Preview release. Desktop Lifecycle is released; next planned layer: 0.9.0 Setup / Repair / Installer. See ROADMAP.md.
 
 ## History
 
