@@ -27,6 +27,9 @@ class CompanionSettings:
     update_background_check_enabled: bool = True
     update_auto_download_enabled: bool = False
     update_auto_install_enabled: bool = False
+    desktop_autostart_enabled: bool = False
+    desktop_autostart_minimized_enabled: bool = False
+    desktop_close_to_tray_enabled: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -120,6 +123,9 @@ class SettingsStore:
             "update_background_check_enabled",
             "update_auto_download_enabled",
             "update_auto_install_enabled",
+            "desktop_autostart_enabled",
+            "desktop_autostart_minimized_enabled",
+            "desktop_close_to_tray_enabled",
         ):
             if not isinstance(values[key], bool):
                 raise ValueError(f"{key} must be boolean")
