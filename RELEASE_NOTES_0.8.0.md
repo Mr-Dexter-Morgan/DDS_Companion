@@ -1,32 +1,33 @@
-# DDS Companion 0.8.0 — Public Preview
+# DDS Companion 0.8.0
 
-## Что нового
+Stable release, promoted from the live-validated Public Preview without rebuilding or replacing the accepted artifacts.
 
-- Добавлен системный трей с действиями **Открыть DDS**, **Скрыть DDS** и **Выйти из DDS**.
-- Добавлен автозапуск DDS вместе с Windows через стабильный корневой `DDS.exe`.
-- Добавлен режим автозапуска только в системный трей: без главного окна, без кнопки на панели задач и без перехвата фокуса.
-- Добавлена настройка **Кнопка закрытия → В трей**.
-- Повторный запуск DDS восстанавливает уже запущенный экземпляр вместо запуска второго runtime.
-- Tooltip значка в трее использует текущее Health-состояние DDS.
+## Added
 
-## Надёжность
+- Added a system tray surface with `Open DDS`, `Hide DDS`, and `Exit DDS` actions.
+- Added persistent Windows autostart through the stable root `DDS.exe`.
+- Added optional tray-only autostart: no main window, no taskbar button, and no foreground focus steal.
+- Added optional `Close button -> Tray` behavior.
+- Repeated DDS launches now restore the existing instance instead of starting a second runtime.
+- Tray tooltip now follows the current DDS Health state.
 
-- Полный выход через трей завершает Qt application и runtime чисто.
-- Если системный трей недоступен, DDS запускается обычным видимым окном вместо скрытия без recovery surface.
-- Автозапуск указывает на стабильный `DDS.exe`, а не на версионный `DDSApp.exe`.
-- Архив, SQLite schema, DDS Plugin, media runtime и updater protocol этим релизом не менялись.
+## Reliability
 
-## Проверка
+- Explicit tray exit shuts down the Qt application and DDS runtime cleanly.
+- If the Windows system tray is unavailable, DDS falls back to a normal visible startup.
+- Windows autostart targets the stable root `DDS.exe`, never the versioned `DDSApp.exe`.
 
-Accepted candidate: `4b691fe8369cf277e78a78323cb99c96b2fdeae7`.
+## Validation
 
-- Windows CI: 184 tests × 3 — PASS.
-- Native Windows build/package verification — PASS.
-- Exact candidate live-tested on Windows.
-- Tray-only autostart, close-to-tray, single-instance restore and clean exit validated.
+- Exact accepted source commit: `4b691fe8369cf277e78a78323cb99c96b2fdeae7`.
+- Windows CI: 184 tests × 3 passes, build and package verification passed.
+- Windows live test: PASSED on the exact accepted candidate.
+- Published full ZIP SHA-256: `09d92556d391328cfcf0618b0ab363c843e486bb6ee4bfd7cd97049ee6a7860c`.
+- Published update ZIP SHA-256: `f40b73bb6c8a80fa48063e288b79effe25d26f9df829ab96615afe0cf663149a`.
 
-Published full Windows ZIP SHA-256:
-`09d92556d391328cfcf0618b0ab363c843e486bb6ee4bfd7cd97049ee6a7860c`
+## Compatibility
 
-Published update ZIP SHA-256:
-`f40b73bb6c8a80fa48063e288b79effe25d26f9df829ab96615afe0cf663149a`
+- No archive schema change.
+- No DDS Plugin code change.
+- No user-data migration.
+- No media runtime or updater protocol change.
