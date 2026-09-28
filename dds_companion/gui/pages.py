@@ -1614,13 +1614,13 @@ class SettingsPage(Page):
             control=self.desktop_autostart,
         ))
 
-        self.desktop_autostart_minimized = QCheckBox("Сворачивать")
+        self.desktop_autostart_minimized = QCheckBox("В трей")
         self.desktop_autostart_minimized.toggled.connect(
             lambda value: self._on_setting_changed("desktop_autostart_minimized_enabled", bool(value))
         )
         general_layout.addWidget(SettingRow(
-            "При автозапуске запускать свёрнутым",
-            "Ручной запуск остаётся обычным; настройка действует только при старте вместе с Windows.",
+            "При автозапуске запускать в трее",
+            "Главное окно не показывается; DDS остаётся доступен из системного трея. Ручной запуск остаётся обычным.",
             control=self.desktop_autostart_minimized,
         ))
 
@@ -2066,8 +2066,16 @@ class SettingsPage(Page):
             "" if autostart_supported else "Автозапуск доступен только в собранной Windows-версии DDS."
         )
         self.desktop_autostart_minimized.setEnabled(
-            autostart_supported and bool(settings.get("desktop_autostart_enabled", False))
+            autostart_supported
+            and tray_available
+            and bool(settings.get("desktop_autostart_enabled", False))
         )
+        if not tray_available:
+            self.desktop_autostart_minimized.setToolTip(
+                "Системный трей недоступен; при автозапуске DDS откроется обычным окном."
+            )
+        else:
+            self.desktop_autostart_minimized.setToolTip("")
         self.desktop_close_to_tray.setEnabled(tray_available)
         self.desktop_close_to_tray.setToolTip(
             "" if tray_available else "Windows system tray сейчас недоступен; крестик завершит DDS."
