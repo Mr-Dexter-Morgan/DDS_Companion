@@ -1,6 +1,6 @@
 # DDS Companion Roadmap
 
-Current public baseline: **v0.8.0 Public Preview**. Desktop Lifecycle is released; 0.9.0 Setup / Repair / Installer is next.
+Current public baseline: **v0.8.0 Public Preview**. Desktop Lifecycle is released. The next productization work is the independent **DDS Installer 0.1.x — Setup / Repair** line; this does not advance DDS Companion version.
 
 ## Non-negotiable architecture rules
 
@@ -56,16 +56,20 @@ Implemented:
 - Safe visible-window fallback when the system tray is unavailable.
 - No hidden network dependency and no Plugin/SQLite/media/updater-protocol ownership change.
 
-## 0.9.0 - Setup / Repair / Installer
+## DDS Installer 0.1.x - Setup / Repair / Installer
 
-Goal: make installation/recovery understandable without sacrificing Portable mode.
+Status: **NEXT ACTIVE PRODUCTIZATION LINE / INDEPENDENT INSTALLER SEMVER**.
+
+Goal: make installation/recovery understandable without sacrificing Portable mode. DDS Companion remains on 0.8.x until Companion code itself changes.
 - Setup and repair flow.
 - Preserve DataRoot during repair/update.
 - Correct shortcuts, identity and uninstall behavior.
 - Uninstall removes app-owned files only unless user explicitly removes data.
 - Portable distribution remains supported.
 
-## 1.0 - Stable Contract
+## DDS product 1.0 acceptance gate
+
+This is a project-level acceptance milestone, not a requirement that Plugin, Companion and Installer version numbers match.
 
 - Migration/backward-compatibility review.
 - Recovery/corruption-path testing.
