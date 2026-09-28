@@ -195,7 +195,7 @@ Historical validation for earlier 0.7.x builds and 0.8.0 candidate iterations re
 
 ## Roadmap
 
-0.8.0 is the current Public Preview release. Desktop Lifecycle is released; next planned layer: 0.9.0 Setup / Repair / Installer. See ROADMAP.md.
+0.8.0 is the current Public Preview release. Desktop Lifecycle is released; the next productization work is the independent DDS Installer 0.1.x Setup / Repair line. DDS Companion remains on 0.8.x until Companion code itself changes. See ROADMAP.md.
 
 ## History
 
