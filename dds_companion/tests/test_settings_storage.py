@@ -39,6 +39,18 @@ class SettingsStoreTests(unittest.TestCase):
         store.update(media_autodownload_enabled=True)
         self.assertTrue(SettingsStore(self.path).settings.media_autodownload_enabled)
 
+    def test_desktop_lifecycle_toggles_persist(self):
+        store = SettingsStore(self.path)
+        store.update(
+            desktop_autostart_enabled=True,
+            desktop_autostart_minimized_enabled=True,
+            desktop_close_to_tray_enabled=True,
+        )
+        reloaded = SettingsStore(self.path).settings
+        self.assertTrue(reloaded.desktop_autostart_enabled)
+        self.assertTrue(reloaded.desktop_autostart_minimized_enabled)
+        self.assertTrue(reloaded.desktop_close_to_tray_enabled)
+
     def test_corrupt_json_falls_back_to_defaults(self):
         self.path.parent.mkdir(parents=True)
         self.path.write_text("{bad json", encoding="utf-8")

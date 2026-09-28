@@ -21,6 +21,7 @@ except ModuleNotFoundError as exc:  # pragma: no cover - user-facing bootstrap p
 
 from dds_companion import __version__
 from dds_companion.core.identity import APPLICATION_DISPLAY_NAME, APPLICATION_NAME, resource_path, set_windows_app_user_model_id
+from dds_companion.gui.desktop_lifecycle import startup_presentation
 from dds_companion.gui.single_instance import SingleInstanceCoordinator
 from dds_companion.gui.theme import APP_STYLESHEET, BG, TEXT
 from dds_companion.gui.window import MainWindow
@@ -35,6 +36,7 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--settle-ms", type=int, default=500)
     parser.add_argument("--update-ack", help=argparse.SUPPRESS)
     parser.add_argument("--update-resume-state", help=argparse.SUPPRESS)
+    parser.add_argument("--autostart", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--version", action="version", version=f"DDS Companion {__version__}")
     return parser
 
@@ -97,13 +99,25 @@ def main(argv: list[str] | None = None) -> int:
         settle_ms=args.settle_ms,
     )
     window.setWindowIcon(app_icon)
+    window.setup_desktop_lifecycle(app_icon)
     instance_guard.activation_requested.connect(window.activate_from_secondary_launch)
     if args.update_ack:
         ack_callback = lambda: _write_update_ack(args.update_ack)
         window.startup_ready.connect(ack_callback)
         if window.startup_is_ready:
             QTimer.singleShot(0, ack_callback)
-    window.show()
+
+    presentation = startup_presentation(
+        is_autostart=bool(args.autostart),
+        start_in_tray=window.settings_store.settings.desktop_autostart_minimized_enabled,
+        tray_available=window.tray_available,
+    )
+    if presentation == "tray":
+        window.suppress_startup_foreground()
+        window.hide()
+    else:
+        window.show()
+
     if args.update_resume_state:
         QTimer.singleShot(0, lambda: window.restore_update_resume_state(args.update_resume_state))
     return app.exec()

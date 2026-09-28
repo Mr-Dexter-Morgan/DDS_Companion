@@ -1604,13 +1604,35 @@ class SettingsPage(Page):
             "Технические интервалы Watcher пока доступны только для просмотра.",
             control=self.watcher_policy,
         ))
-        info = QLabel(
-            "Автозапуск, запуск свёрнутым, трей и поведение кнопки закрытия появятся вместе "
-            "с реальной persistent-реализацией в следующих версиях."
+        self.desktop_autostart = QCheckBox("Включено")
+        self.desktop_autostart.toggled.connect(
+            lambda value: self._on_setting_changed("desktop_autostart_enabled", bool(value))
         )
-        info.setObjectName("SectionHint")
-        info.setWordWrap(True)
-        general_layout.addWidget(info)
+        general_layout.addWidget(SettingRow(
+            "Запускать DDS вместе с Windows",
+            "Добавить DDS в автозапуск текущего пользователя через стабильный DDS.exe.",
+            control=self.desktop_autostart,
+        ))
+
+        self.desktop_autostart_minimized = QCheckBox("В трей")
+        self.desktop_autostart_minimized.toggled.connect(
+            lambda value: self._on_setting_changed("desktop_autostart_minimized_enabled", bool(value))
+        )
+        general_layout.addWidget(SettingRow(
+            "При автозапуске запускать в трее",
+            "Главное окно не показывается; DDS остаётся доступен из системного трея. Ручной запуск остаётся обычным.",
+            control=self.desktop_autostart_minimized,
+        ))
+
+        self.desktop_close_to_tray = QCheckBox("В трей")
+        self.desktop_close_to_tray.toggled.connect(
+            lambda value: self._on_setting_changed("desktop_close_to_tray_enabled", bool(value))
+        )
+        general_layout.addWidget(SettingRow(
+            "Кнопка закрытия",
+            "Если включено, крестик скрывает окно в трей. Полный выход всегда доступен через «Выйти из DDS».",
+            control=self.desktop_close_to_tray,
+        ))
         general_layout.addStretch(1)
 
         updates, updates_layout = self._make_scroll_page()
@@ -2023,6 +2045,40 @@ class SettingsPage(Page):
         self._set_checkbox_value(
             self.update_auto_install,
             settings.get("update_auto_install_enabled", False),
+        )
+        self._set_checkbox_value(
+            self.desktop_autostart,
+            settings.get("desktop_autostart_enabled", False),
+        )
+        self._set_checkbox_value(
+            self.desktop_autostart_minimized,
+            settings.get("desktop_autostart_minimized_enabled", False),
+        )
+        self._set_checkbox_value(
+            self.desktop_close_to_tray,
+            settings.get("desktop_close_to_tray_enabled", False),
+        )
+
+        autostart_supported = bool(settings.get("desktop_autostart_supported", True))
+        tray_available = bool(settings.get("desktop_tray_available", True))
+        self.desktop_autostart.setEnabled(autostart_supported)
+        self.desktop_autostart.setToolTip(
+            "" if autostart_supported else "Автозапуск доступен только в собранной Windows-версии DDS."
+        )
+        self.desktop_autostart_minimized.setEnabled(
+            autostart_supported
+            and tray_available
+            and bool(settings.get("desktop_autostart_enabled", False))
+        )
+        if not tray_available:
+            self.desktop_autostart_minimized.setToolTip(
+                "Системный трей недоступен; при автозапуске DDS откроется обычным окном."
+            )
+        else:
+            self.desktop_autostart_minimized.setToolTip("")
+        self.desktop_close_to_tray.setEnabled(tray_available)
+        self.desktop_close_to_tray.setToolTip(
+            "" if tray_available else "Windows system tray сейчас недоступен; крестик завершит DDS."
         )
 
         self.archive_messages.setText(f"{int(stats.get('messages', 0)):,}".replace(",", " "))
