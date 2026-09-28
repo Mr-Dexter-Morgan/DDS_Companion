@@ -8,7 +8,7 @@ import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
-from PySide6.QtGui import QCloseEvent, QGuiApplication, QPixmap, QResizeEvent, QShowEvent
+from PySide6.QtGui import QCloseEvent, QGuiApplication, QIcon, QPixmap, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -17,7 +17,9 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QMenu,
     QStackedWidget,
+    QSystemTrayIcon,
     QStatusBar,
     QVBoxLayout,
     QWidget,
@@ -38,6 +40,7 @@ from dds_companion.updater.installer_launcher import launch_external_updater
 from dds_companion.updater.paths import build_updater_paths
 from dds_companion.updater.pointer import atomic_write_json, read_json
 
+from .desktop_lifecycle import WindowsAutostartManager, should_hide_on_close
 from .layout_profile import choose_layout_profile
 from .pages import ActivityPage, DashboardPage, HealthPage, LibraryPage, SettingsPage
 from .runtime import GuiRuntime
@@ -77,6 +80,16 @@ class MainWindow(QMainWindow):
         self.bus = SignalBus()
         self.paths = build_runtime_paths(dds_data, app_data, portable=portable)
         self.settings_store = SettingsStore(self.paths.settings)
+        self.autostart_manager = WindowsAutostartManager(
+            self.paths.application_dir,
+            portable=portable,
+        )
+        self._tray_icon: QSystemTrayIcon | None = None
+        self._tray_available = False
+        self._explicit_exit = False
+        self._tray_notice_shown = False
+        self._desktop_lifecycle_error: str | None = None
+        self._reconcile_autostart_registration()
         self.update_paths = build_updater_paths(self.paths)
         self.update_controller = UpdateController(
             paths=self.update_paths,
@@ -346,6 +359,74 @@ class MainWindow(QMainWindow):
         """Activate the existing window when a second DDS launch is attempted."""
         self._request_foreground()
 
+    def suppress_startup_foreground(self) -> None:
+        """Prevent an intentional background/autostart launch from stealing focus."""
+        self._startup_foreground_attempted = True
+
+    @property
+    def tray_available(self) -> bool:
+        return self._tray_available
+
+    def setup_desktop_lifecycle(self, app_icon: QIcon) -> bool:
+        """Create the optional tray surface without making it a runtime dependency."""
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            self._tray_available = False
+            return False
+
+        tray = QSystemTrayIcon(app_icon, self)
+        tray.setToolTip(f"{APPLICATION_DISPLAY_NAME} — STARTING")
+        menu = QMenu(self)
+
+        open_action = menu.addAction("Открыть DDS")
+        open_action.triggered.connect(self._request_foreground)
+        hide_action = menu.addAction("Скрыть DDS")
+        hide_action.triggered.connect(self.hide)
+        menu.addSeparator()
+        exit_action = menu.addAction("Выйти из DDS")
+        exit_action.triggered.connect(self._exit_from_tray)
+
+        tray.setContextMenu(menu)
+        tray.activated.connect(self._on_tray_activated)
+        tray.show()
+
+        self._tray_icon = tray
+        self._tray_available = True
+        return True
+
+    def _on_tray_activated(self, reason) -> None:
+        if reason in {
+            QSystemTrayIcon.ActivationReason.Trigger,
+            QSystemTrayIcon.ActivationReason.DoubleClick,
+        }:
+            self._request_foreground()
+
+    def _exit_from_tray(self) -> None:
+        self._explicit_exit = True
+        self.close()
+
+    def _hide_to_tray(self) -> None:
+        self.hide()
+        tray = self._tray_icon
+        if tray is not None and not self._tray_notice_shown:
+            self._tray_notice_shown = True
+            tray.showMessage(
+                APPLICATION_DISPLAY_NAME,
+                "DDS продолжает работать в фоне. Для полного выхода выберите «Выйти из DDS».",
+                QSystemTrayIcon.MessageIcon.Information,
+                3500,
+            )
+
+    def _reconcile_autostart_registration(self) -> None:
+        if not self.autostart_manager.supported:
+            return
+        try:
+            self.autostart_manager.set_enabled(
+                self.settings_store.settings.desktop_autostart_enabled
+            )
+            self._desktop_lifecycle_error = None
+        except Exception as exc:
+            self._desktop_lifecycle_error = f"{type(exc).__name__}: {exc}"
+
     def _request_foreground(self) -> None:
         """Show/restore this window and request foreground without changing its normal mode."""
         if not self.isVisible():
@@ -503,12 +584,18 @@ class MainWindow(QMainWindow):
         snapshot = dict(snapshot)
         settings_snapshot = self.settings_store.snapshot()
         settings_snapshot["effective_manual_export_path"] = str(self._effective_manual_export_path())
+        settings_snapshot["desktop_autostart_supported"] = self.autostart_manager.supported
+        settings_snapshot["desktop_autostart_effective"] = self.autostart_manager.is_enabled()
+        settings_snapshot["desktop_tray_available"] = self._tray_available
+        settings_snapshot["desktop_lifecycle_error"] = self._desktop_lifecycle_error
         snapshot["settings"] = settings_snapshot
         self.latest_snapshot = snapshot
         health = snapshot.get("health", {})
         state = health.get("state", "UNKNOWN")
         self.top_status.setText(state)
         set_state_property(self.top_status, state)
+        if self._tray_icon is not None:
+            self._tray_icon.setToolTip(f"{APPLICATION_DISPLAY_NAME} — {state}")
         if self.stack.currentIndex() != self.PAGE_NAMES.index("Health"):
             detail = health.get("tooltip") or health.get("summary") or state
             self.top_status.setToolTip(f"{detail}\nНажмите, чтобы открыть Статус")
@@ -864,11 +951,34 @@ class MainWindow(QMainWindow):
             })
 
     def _on_setting_changed(self, key: str, value) -> None:
+        previous_autostart = self.settings_store.settings.desktop_autostart_enabled
+        if key == "desktop_autostart_enabled":
+            try:
+                self.autostart_manager.set_enabled(bool(value))
+                self._desktop_lifecycle_error = None
+            except Exception as exc:
+                self._desktop_lifecycle_error = f"{type(exc).__name__}: {exc}"
+                QMessageBox.warning(
+                    self,
+                    "DDS",
+                    "Не удалось изменить автозапуск Windows:\n"
+                    f"{type(exc).__name__}: {exc}",
+                )
+                self._refresh_settings_surface()
+                return
+
         try:
             self.settings_store.update(**{key: value})
         except Exception as exc:
+            if key == "desktop_autostart_enabled":
+                try:
+                    self.autostart_manager.set_enabled(previous_autostart)
+                except Exception:
+                    pass
             QMessageBox.warning(self, "DDS", f"Не удалось сохранить настройку:\n{exc}")
+            self._refresh_settings_surface()
             return
+
         self.statusBar().showMessage("Настройка сохранена", 2500)
         self._refresh_settings_surface()
         if key == "update_background_check_enabled" and bool(value):
@@ -884,6 +994,10 @@ class MainWindow(QMainWindow):
         snapshot = dict(self.latest_snapshot)
         settings_snapshot = self.settings_store.snapshot()
         settings_snapshot["effective_manual_export_path"] = str(self._effective_manual_export_path())
+        settings_snapshot["desktop_autostart_supported"] = self.autostart_manager.supported
+        settings_snapshot["desktop_autostart_effective"] = self.autostart_manager.is_enabled()
+        settings_snapshot["desktop_tray_available"] = self._tray_available
+        settings_snapshot["desktop_lifecycle_error"] = self._desktop_lifecycle_error
         snapshot["settings"] = settings_snapshot
         self.latest_snapshot = snapshot
         self.settings.update_snapshot(snapshot)
@@ -1198,13 +1312,26 @@ class MainWindow(QMainWindow):
         self._open("logs", "Logs")
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        if should_hide_on_close(
+            close_to_tray=self.settings_store.settings.desktop_close_to_tray_enabled,
+            tray_available=self._tray_available,
+            explicit_exit=self._explicit_exit,
+            update_install_launched=self._update_install_launched,
+        ):
+            event.ignore()
+            self._hide_to_tray()
+            return
+
         if (
             not self._update_install_launched
             and self.update_controller.prepared is not None
             and self.settings_store.settings.update_auto_install_enabled
         ):
             self._launch_prepared_update(close_after=False)
+
         self._closing = True
+        if self._tray_icon is not None:
+            self._tray_icon.hide()
         self.status_text.setText("Останавливаю watcher…")
         if self.runtime is not None:
             self.runtime.stop()
