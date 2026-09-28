@@ -10,6 +10,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QIcon, QPixmap, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -403,6 +404,7 @@ class MainWindow(QMainWindow):
     def _exit_from_tray(self) -> None:
         self._explicit_exit = True
         self.close()
+        QApplication.quit()
 
     def _hide_to_tray(self) -> None:
         self.hide()
