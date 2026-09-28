@@ -126,10 +126,39 @@ class DesktopLifecycle080Tests(unittest.TestCase):
             )
         )
 
-    def test_start_minimized_is_scoped_to_autostart(self):
-        self.assertEqual(startup_presentation(is_autostart=False, minimize_on_autostart=True), "normal")
-        self.assertEqual(startup_presentation(is_autostart=True, minimize_on_autostart=False), "normal")
-        self.assertEqual(startup_presentation(is_autostart=True, minimize_on_autostart=True), "minimized")
+    def test_start_in_tray_is_scoped_to_autostart_and_tray_availability(self):
+        self.assertEqual(
+            startup_presentation(
+                is_autostart=False,
+                start_in_tray=True,
+                tray_available=True,
+            ),
+            "normal",
+        )
+        self.assertEqual(
+            startup_presentation(
+                is_autostart=True,
+                start_in_tray=False,
+                tray_available=True,
+            ),
+            "normal",
+        )
+        self.assertEqual(
+            startup_presentation(
+                is_autostart=True,
+                start_in_tray=True,
+                tray_available=False,
+            ),
+            "normal",
+        )
+        self.assertEqual(
+            startup_presentation(
+                is_autostart=True,
+                start_in_tray=True,
+                tray_available=True,
+            ),
+            "tray",
+        )
 
 
 if __name__ == "__main__":
