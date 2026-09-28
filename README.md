@@ -3,7 +3,7 @@
 [![Скачать DDS 0.8.0](https://img.shields.io/badge/%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC_DDS-0.8.0-6C63FF?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/download/v0.8.0/DDS-0.8.0-windows-x64.zip)
 
 **Готовая сборка для Windows x64. Python устанавливать не нужно.**  
-Текущая версия: **DDS Companion 0.8.0 Public Preview**. До появления полноценного DDS Setup установка выполняется вручную.
+Текущая версия: **DDS Companion 0.8.0 Stable Release**. До появления полноценного DDS Setup установка выполняется вручную.
 
 ## Что такое DDS и зачем он нужен
 
@@ -111,7 +111,7 @@ SQLite-архив является основным долговечным хр�
 
 </details>
 
-> **Важно:** DDS пока находится на линии **0.x / Public Preview**. Мы уже используем его как рабочий локальный архив, но установка, Repair и полный Setup ещё не доведены до будущего пользовательского установщика.
+> **Важно:** DDS остаётся на линии **0.x**, но DDS Companion 0.8.0 уже опубликован как стабильный релиз. Установка, Repair и полный DDS Setup развиваются отдельно в линии DDS Installer 0.1.x.
 
 ---
 
@@ -195,7 +195,7 @@ Historical validation for earlier 0.7.x builds and 0.8.0 candidate iterations re
 
 ## Roadmap
 
-0.8.0 is the current Public Preview release. Desktop Lifecycle is released; the next productization work is the independent DDS Installer 0.1.x Setup / Repair line. DDS Companion remains on 0.8.x until Companion code itself changes. See ROADMAP.md.
+0.8.0 is the current stable release. Desktop Lifecycle is released; the next productization work is the independent DDS Installer 0.1.x Setup / Repair line. DDS Companion remains on 0.8.x until Companion code itself changes. See ROADMAP.md.
 
 ## History
 
