@@ -1,9 +1,9 @@
 # DDS — Discord Data Snatcher
 
-[![Скачать DDS 0.7.1](https://img.shields.io/badge/%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC_DDS-0.7.1-6C63FF?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/download/v0.7.1/DDS-0.7.1-windows-x64.zip)
+[![Скачать DDS 0.7.2](https://img.shields.io/badge/%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC_DDS-0.7.2-6C63FF?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/download/v0.7.2/DDS-0.7.2-windows-x64.zip)
 
 **Готовая сборка для Windows x64. Python устанавливать не нужно.**  
-Текущая версия: **DDS Companion 0.7.1 Public Preview**. До появления полноценного DDS Setup установка выполняется вручную.
+Текущая версия: **DDS Companion 0.7.2 Public Preview**. До появления полноценного DDS Setup установка выполняется вручную.
 
 ## Что такое DDS и зачем он нужен
 
@@ -59,17 +59,17 @@ DDS **не копирует весь Discord-сервер автоматичес
 
 ### 4. Скачайте DDS Companion
 
-Нажмите большую кнопку **СКАЧАТЬ DDS 0.7.1** в самом верху этой страницы.
+Нажмите большую кнопку **СКАЧАТЬ DDS 0.7.2** в самом верху этой страницы.
 
-Или откройте [релиз DDS Companion 0.7.1](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/tag/v0.7.1) и скачайте:
+Или откройте [релиз DDS Companion 0.7.2](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/tag/v0.7.2) и скачайте:
 
-`DDS-0.7.1-windows-x64.zip`
+`DDS-0.7.2-windows-x64.zip`
 
 **Не скачивайте** автоматически созданные GitHub-файлы **Source code (zip)** или **Source code (tar.gz)**, если вам нужно просто запустить программу. Это исходный код для разработчиков.
 
 ### 5. Запустите DDS
 
-1. Полностью распакуйте `DDS-0.7.1-windows-x64.zip` в отдельную папку.
+1. Полностью распакуйте `DDS-0.7.2-windows-x64.zip` в отдельную папку.
 2. Не вытаскивайте из сборки один `DDS.exe` отдельно — оставьте содержимое архива вместе.
 3. Запустите **`DDS.exe`**.
 
@@ -117,7 +117,9 @@ SQLite-архив является основным долговечным хр�
 
 Ниже находится техническая информация о текущей версии, архитектуре, сборке и валидации.
 
-## What 0.7.1 includes
+## What 0.7.2 includes
+
+- Fixes the Diagnostics identity regression from 0.7.1: Companion version, Plugin version and capture contract are populated correctly again.
 
 - Separate DDSUpdater.exe; the running application never overwrites itself.
 - Stable DDS.exe bootstrap and versioned application payloads under versions/<version>.
@@ -180,13 +182,13 @@ Expected output:
 
 ## Validation
 
-The 0.7.1 patch line passed the full Windows CI gate on the final development head: three regression passes, compile/version verification, native Windows build, package integrity/SHA verification and artifact upload. Manual pre-release testing also verified the updater/status fixes that motivated 0.7.1.
+DDS Companion 0.7.2 was validated on exact source commit `5753b93d5806d3e5d89a3e0856cc3b639f344417`: 178 tests × 3 passes, compile/version verification, native Windows build and package verification all passed. The exact full Windows ZIP then passed the user Windows live gate and was published byte-identically as GitHub Public Preview `v0.7.2` (SHA-256 `08bb67ec2d34446cc5d6066c173a19e751526930cf69a657a462c900e963b16d`).
 
-Detailed historical validation remains in VALIDATION.txt and the 0.7.0 live-test checklist.
+Historical validation for earlier 0.7.x builds remains preserved in the project evidence.
 
 ## Roadmap
 
-0.7.1 is the current Public Preview release. Next planned layer: 0.8.0 Desktop Lifecycle (tray/autostart). See ROADMAP.md.
+0.7.2 is the current Public Preview release. The 0.7.x regression tail is closed; next planned layer: 0.8.x Desktop Lifecycle (tray/autostart). See ROADMAP.md.
 
 ## History
 
