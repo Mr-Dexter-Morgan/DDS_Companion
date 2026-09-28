@@ -1,6 +1,6 @@
 # DDS Companion Roadmap
 
-Current public baseline: **v0.8.0 Public Preview**. Desktop Lifecycle is released. The next productization work is the independent **DDS Installer 0.1.x — Setup / Repair** line; this does not advance DDS Companion version.
+Current public baseline: **v0.8.0 Stable Release**. Desktop Lifecycle is released. The next productization work is the independent **DDS Installer 0.1.x — Setup / Repair** line; this does not advance DDS Companion version.
 
 ## Non-negotiable architecture rules
 
@@ -44,7 +44,7 @@ Implemented:
 
 ## 0.8.0 - Desktop Lifecycle
 
-Status: released as **v0.8.0 Public Preview** after exact-candidate Windows CI and live validation.
+Status: released as **v0.8.0 Stable Release** after exact-candidate Windows CI and live validation; promoted from Public Preview without rebuilding or replacing accepted artifacts.
 
 Implemented:
 - System tray lifecycle with open, hide and explicit full exit.
