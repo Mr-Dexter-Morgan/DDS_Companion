@@ -17,9 +17,14 @@ def build_autostart_command(application_dir: str | Path, *, portable: bool) -> s
     return subprocess.list2cmdline(args)
 
 
-def startup_presentation(*, is_autostart: bool, minimize_on_autostart: bool) -> str:
-    if is_autostart and minimize_on_autostart:
-        return "minimized"
+def startup_presentation(
+    *,
+    is_autostart: bool,
+    start_in_tray: bool,
+    tray_available: bool,
+) -> str:
+    if is_autostart and start_in_tray and tray_available:
+        return "tray"
     return "normal"
 
 
