@@ -279,7 +279,7 @@ class UiContracts062Tests(unittest.TestCase):
         self.assertIn("self.setWindowTitle(APPLICATION_DISPLAY_NAME)", source)
         self.assertNotIn('setWindowTitle(f"{APPLICATION_DISPLAY_NAME} · v', source)
         self.assertIn('subtitle = QLabel("Discord\\nData\\nSnatcher")', source)
-        self.assertIn("title.setAlignment(Qt.AlignHCenter", source)
+        self.assertIn("title.setAlignment(Qt.AlignLeft", source)
 
     def test_library_context_menu_exposes_manual_package_and_branch_actions(self):
         source = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
