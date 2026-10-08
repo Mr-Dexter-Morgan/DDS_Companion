@@ -10,6 +10,8 @@ analysis = Analysis(
     datas=[
         (str(ROOT / "assets" / "DDS.ico"), "assets"),
         (str(ROOT / "assets" / "DDS_app_icon_master.png"), "assets"),
+        (str(ROOT / "assets" / "DDS_brand_header_v1.png"), "assets"),
+        (str(ROOT / "assets" / "DDS_about_banner_v1.png"), "assets"),
     ],
     hiddenimports=[],
     hookspath=[],
