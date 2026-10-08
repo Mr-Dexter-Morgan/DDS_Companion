@@ -21,7 +21,7 @@ from dds_companion.core.identity import (
 
 class DataRoot060Tests(unittest.TestCase):
     def test_061_version_is_bumped(self):
-        self.assertEqual(__version__, "0.8.0")
+        self.assertEqual(__version__, "0.8.5")
 
     def test_installed_profile_preserves_localappdata_contract(self):
         with tempfile.TemporaryDirectory() as temp:

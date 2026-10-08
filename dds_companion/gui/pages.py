@@ -1647,7 +1647,7 @@ class SettingsPage(Page):
         )
         updates_layout.addWidget(SettingRow(
             "Фоновая проверка",
-            "Проверять GitHub Releases не чаще одного раза в 24 часа. Ошибка сети не влияет на работу DDS.",
+            "Автоматически проверять наличие обновлений не чаще одного раза в сутки.",
             control=self.update_background_check,
         ))
 
@@ -1657,7 +1657,7 @@ class SettingsPage(Page):
         )
         updates_layout.addWidget(SettingRow(
             "Автоматическая загрузка",
-            "Если найдена новая версия, скачать её в staging и проверить SHA-256 без установки.",
+            "Если найдена новая версия, DDS загрузит её заранее и проверит целостность.",
             control=self.update_auto_download,
         ))
 
@@ -1667,7 +1667,7 @@ class SettingsPage(Page):
         )
         updates_layout.addWidget(SettingRow(
             "Автоматическая установка",
-            "Установить уже проверенное обновление безопасным внешним updater-процессом. Включение также включает автозагрузку.",
+            "Автоматически установить уже загруженное и проверенное обновление.",
             control=self.update_auto_install,
         ))
 
@@ -1676,7 +1676,7 @@ class SettingsPage(Page):
         self.check_updates_button.clicked.connect(self._on_check_updates)
         updates_layout.addWidget(SettingRow(
             "Ручная проверка",
-            "Всегда доступна независимо от режима автоматизации.",
+            "Проверить обновления вручную в любой момент.",
             control=self.check_updates_button,
         ))
         action_row = QWidget()
@@ -1720,8 +1720,7 @@ class SettingsPage(Page):
         updates_layout.addWidget(self.update_notes)
 
         update_note = QLabel(
-            "DDS никогда не заменяет работающий DDS.exe самостоятельно. "
-            "Пользовательские данные не входят в update payload."
+            "Обновления устанавливаются безопасно. Ваши данные и настройки сохраняются."
         )
         update_note.setObjectName("SectionHint")
         update_note.setWordWrap(True)
