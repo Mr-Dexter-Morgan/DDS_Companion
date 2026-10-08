@@ -207,9 +207,17 @@ Historical validation for earlier 0.7.x builds and 0.8.0 candidate iterations re
 
 0.8.5 is the current stable release. The next productization work is the independent DDS Installer 0.1.x Setup / Repair line. DDS Companion remains on 0.8.x until Companion code itself changes. See ROADMAP.md.
 
+## Project documentation
+
+- [Roadmap](ROADMAP.md) — current plan and next milestones.
+- [Documentation index](docs/README.md) — release notes, historical validation and technical history.
+- [Release notes](docs/releases/) — archived notes for every published development milestone.
+- [Version history](docs/history/HISTORY.md) — chronological version list.
+- [Engineering changelog](docs/history/CHANGELOG.txt) — preserved technical change log.
+
 ## History
 
-Development snapshots from 0.1.0 onward are documented in HISTORY.md.
+Development snapshots from 0.1.0 onward are documented in [HISTORY](docs/history/HISTORY.md).
 
 ## License
 

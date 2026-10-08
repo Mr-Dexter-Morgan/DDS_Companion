@@ -86,7 +86,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $tag = "v$env:VERSION"
-          $notes = "RELEASE_NOTES_$env:VERSION.md"
+          $notes = "docs/releases/RELEASE_NOTES_$env:VERSION.md"
           if (-not (Test-Path $notes)) { throw "Missing release notes: $notes" }
 
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
