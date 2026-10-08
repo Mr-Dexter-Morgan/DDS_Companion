@@ -32,25 +32,27 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-build.txt
 
-      - name: Regression pass 1 of 3
-        timeout-minutes: 8
-        run: python -m unittest discover -s dds_companion/tests -p "test_*.py"
+      - name: Resolve application version
+        shell: pwsh
+        run: |
+          $version = (python -c "import dds_companion; print(dds_companion.__version__)").Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Application version must be final semver, got: $version"
+          }
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Validating DDS Companion $version"
 
-      - name: Regression pass 2 of 3
-        timeout-minutes: 8
-        run: python -m unittest discover -s dds_companion/tests -p "test_*.py"
-
-      - name: Regression pass 3 of 3
-        timeout-minutes: 8
+      - name: Regression suite
+        timeout-minutes: 12
         run: python -m unittest discover -s dds_companion/tests -p "test_*.py"
 
       - name: Compile and verify application version
         shell: pwsh
         run: |
-          python -m compileall -q dds_companion
+          python -m compileall -q dds_companion dds_companion_patchxx.py
           $version = (python -m dds_companion.app --version).Trim()
           Write-Host $version
-          if ($version -ne "DDS Companion 0.8.0") {
+          if ($version -ne "DDS Companion $env:VERSION") {
             throw "Unexpected application version: $version"
           }
 
@@ -67,7 +69,7 @@ jobs:
         shell: pwsh
         run: |
           $root = "dist/DDS"
-          $app = "$root/versions/0.8.0/DDSApp.exe"
+          $app = "$root/versions/$env:VERSION/DDSApp.exe"
           $launcher = "$root/DDS.exe"
           $updater = "$root/DDSUpdater.exe"
 
@@ -75,16 +77,16 @@ jobs:
             if (-not (Test-Path $exe)) { throw "Missing executable: $exe" }
             $info = (Get-Item $exe).VersionInfo
             Write-Host "$exe FileVersion=$($info.FileVersion) ProductVersion=$($info.ProductVersion)"
-            if ($info.FileVersion -ne "0.8.0") { throw "Unexpected FileVersion: $exe" }
-            if ($info.ProductVersion -ne "0.8.0") { throw "Unexpected ProductVersion: $exe" }
+            if ($info.FileVersion -ne $env:VERSION) { throw "Unexpected FileVersion: $exe" }
+            if ($info.ProductVersion -ne $env:VERSION) { throw "Unexpected ProductVersion: $exe" }
           }
 
           $current = Get-Content "$root/current.json" -Raw | ConvertFrom-Json
-          if ($current.version -ne "0.8.0") { throw "Unexpected current pointer" }
+          if ($current.version -ne $env:VERSION) { throw "Unexpected current pointer" }
 
-          $full = "dist/release/DDS-0.8.0-windows-x64.zip"
-          $update = "dist/release/DDS-0.8.0-update.zip"
-          $manifestPath = "dist/release/DDS-0.8.0-update.json"
+          $full = "dist/release/DDS-$env:VERSION-windows-x64.zip"
+          $update = "dist/release/DDS-$env:VERSION-update.zip"
+          $manifestPath = "dist/release/DDS-$env:VERSION-update.json"
           foreach ($path in @($full, $update, $manifestPath, "$full.sha256", "$update.sha256")) {
             if (-not (Test-Path $path)) { throw "Missing release artifact: $path" }
           }
@@ -102,28 +104,29 @@ jobs:
           if ($updateHash -ne $updateExpected) { throw "Update ZIP SHA-256 mismatch" }
 
           $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
-          if ($manifest.version -ne "0.8.0") { throw "Unexpected update manifest version" }
-          if ($manifest.asset -ne "DDS-0.8.0-update.zip") { throw "Unexpected update asset" }
+          if ($manifest.version -ne $env:VERSION) { throw "Unexpected update manifest version" }
+          if ($manifest.channel -ne "stable") { throw "Unexpected update manifest channel" }
+          if ($manifest.asset -ne "DDS-$env:VERSION-update.zip") { throw "Unexpected update asset" }
           if ($manifest.sha256.ToLower() -ne $updateHash) { throw "Manifest SHA-256 mismatch" }
           if ([int64]$manifest.size_bytes -ne (Get-Item $update).Length) { throw "Manifest size mismatch" }
 
       - name: Upload validated Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: DDS-0.8.0-windows-x64
+          name: DDS-windows-x64
           path: |
-            dist/release/DDS-0.8.0-windows-x64.zip
-            dist/release/DDS-0.8.0-windows-x64.zip.sha256
-            dist/release/DDS-0.8.0-update.zip
-            dist/release/DDS-0.8.0-update.zip.sha256
-            dist/release/DDS-0.8.0-update.json
+            dist/release/DDS-*-windows-x64.zip
+            dist/release/DDS-*-windows-x64.zip.sha256
+            dist/release/DDS-*-update.zip
+            dist/release/DDS-*-update.zip.sha256
+            dist/release/DDS-*-update.json
           if-no-files-found: error
           retention-days: 14
 
       - name: Upload manual-test Windows bundle
         uses: actions/upload-artifact@v4
         with:
-          name: DDS-0.8.0-manual-test
+          name: DDS-manual-test
           path: dist/DDS/**
           if-no-files-found: error
           retention-days: 14

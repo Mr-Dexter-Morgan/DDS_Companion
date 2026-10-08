@@ -1,3 +1,12 @@
+DDS Companion 0.8.5 — stable-source candidate
+================================================
+
+- Reconstructed the accepted local 0.8.5 runtime line in source form from the exact accepted cumulative overlay and assets.
+- Preserved 0.8.1 branding/user-facing update copy, 0.8.2 About/UI baseline, 0.8.3 Media Lifecycle, 0.8.4 Network Recovery QoL and 0.8.5 tetromino visualization.
+- Update manifest channel is now stable.
+- GitHub Windows CI and release workflows are version-dynamic; the release workflow publishes a normal Stable release, not a prerelease.
+- Public publication remains gated on Windows CI and exact source-built live validation.
+
 DDS Companion 0.7.1 — Patch Candidate
 
 Status
