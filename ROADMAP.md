@@ -1,6 +1,6 @@
 # DDS Companion Roadmap
 
-Current public baseline: **v0.8.0 Stable Release**. Desktop Lifecycle is released. The next productization work is the independent **DDS Installer 0.1.x — Setup / Repair** line; this does not advance DDS Companion version.
+Current public baseline: **v0.8.5 Stable Release**. Desktop Lifecycle is released. The next productization work is the independent **DDS Installer 0.1.x — Setup / Repair** line; this does not advance DDS Companion version.
 
 ## Non-negotiable architecture rules
 
@@ -56,9 +56,13 @@ Implemented:
 - Safe visible-window fallback when the system tray is unavailable.
 - No hidden network dependency and no Plugin/SQLite/media/updater-protocol ownership change.
 
+## 0.8.5 - Current Public Stable Release
+
+Status: **RELEASED / STABLE** from the Windows-live-accepted 0.8.5-r1 source. Public tag: `v0.8.5`. The accepted overlay adds the whole-tetromino Home Media Cache renderer and inherits branding/About, Media Lifecycle Reliability, Network Recovery QoL and the 0.8.0 desktop/updater foundation. Plugin and data contracts remain unchanged.
+
 ## DDS Installer 0.1.x - Setup / Repair / Installer
 
-Status: **NEXT ACTIVE PRODUCTIZATION LINE / INDEPENDENT INSTALLER SEMVER**.
+Status: **ACTIVE / 0.1.0-r2 DETECTION FOUNDATION LIVE TESTED / ACCEPTED / INDEPENDENT INSTALLER SEMVER**. Next bounded stage: Acquire / Verify / Stage without Apply.
 
 Goal: make installation/recovery understandable without sacrificing Portable mode. DDS Companion remains on 0.8.x until Companion code itself changes.
 - Setup and repair flow.

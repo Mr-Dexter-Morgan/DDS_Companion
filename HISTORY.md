@@ -28,9 +28,12 @@ This Git history was reconstructed from preserved DDS Companion source snapshots
 | `v0.6.2` | 2026-09-21 | Manual ZIP export + branch management + branding + redirected Documents + Windows recovery hardening |
 | `v0.7.0` | 2026-09-24 | Safe updater foundation + transactional rollback + single-instance/runtime/build hardening |
 | `v0.7.1` | 2026-09-24 | Media-cache race fix + truthful updater status telemetry |
+| `v0.7.2` | 2026-09-27 | Diagnostics identity fix; public preview |
+| `v0.8.0` | 2026-09-29 | Desktop Lifecycle: tray/autostart; stable release |
+| `v0.8.5` | 2026-10-08 | About/branding, media lifecycle/recovery, tetromino Media Cache; current Stable Release |
 
 The archived `CHANGELOG.txt`, validation files, live-test checklists and contracts inside each tagged tree provide the detailed record for that milestone.
 
 `v0.6.2` is tagged on the validated Public Preview release commit. That commit layers release documentation, Windows CI hardening and packaging metadata on top of the preserved candidate-r2 source snapshot.
 
-`v0.7.1` is the current Public Preview release line. It carries the validated 0.7 updater foundation plus the manual-test fixes for media-cache scan races and updater status telemetry.
+`v0.7.1` is a historical Public Preview release line. The current published Stable Release is `v0.8.5`, promoted from Windows-live-accepted r1 source after PR #5 and main Windows CI/release workflow SUCCESS.
