@@ -109,7 +109,7 @@ def main() -> int:
 
     manifest = ReleaseManifest(
         version=__version__,
-        channel="preview",
+        channel="stable",
         asset=update_zip.name,
         sha256=sha256_file(update_zip),
         size_bytes=update_zip.stat().st_size,
