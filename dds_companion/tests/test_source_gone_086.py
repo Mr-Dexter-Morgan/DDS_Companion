@@ -277,12 +277,12 @@ class SourceGone086Tests(unittest.TestCase):
         counts = self.service.counts()
         self.assertEqual(tuple(counts[k] for k in ('total', 'known', 'cached', 'unresolved', 'source_gone')), (147, 141, 29, 0, 6))
 
-    def test_M_authoritative_version_is_086(self):
+    def test_M_authoritative_version_is_087(self):
         import tomllib
         from tools.generate_windows_version_info import render_version_info
         root = Path(__file__).resolve().parents[2]
-        self.assertEqual(__version__, '0.8.6')
+        self.assertEqual(__version__, '0.8.7')
         self.assertEqual(tomllib.loads((root / 'pyproject.toml').read_text())['project']['version'], __version__)
         metadata = render_version_info(description='DDS', internal_name='DDS', filename='DDS.exe')
-        self.assertIn('0.8.6', metadata)
-        self.assertIn('(0, 8, 6, 0)', metadata)
+        self.assertIn('0.8.7', metadata)
+        self.assertIn('(0, 8, 7, 0)', metadata)

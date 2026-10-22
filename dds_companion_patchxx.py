@@ -313,7 +313,7 @@ def main():
     # its UI/core modules and builds snapshots.
     import dds_companion
 
-    dds_companion.__version__ = "0.8.6"
+    dds_companion.__version__ = "0.8.7"
     _patch_media_size_policy()
 
     from PySide6.QtCore import Qt, QTimer, QRectF, QPointF
@@ -333,6 +333,7 @@ def main():
     from dds_companion.gui import app as original_app
     from dds_companion.gui import pages as pages_mod
     from dds_companion.gui import window as window_mod
+    from dds_companion.gui.widgets import IconBadge
 
     OriginalDashboardPage = pages_mod.DashboardPage
     OriginalSettingsPage = pages_mod.SettingsPage
@@ -557,12 +558,24 @@ def main():
             outer.setContentsMargins(16, 15, 16, 15)
             outer.setSpacing(12)
 
+            header = QHBoxLayout()
+            header.setSpacing(10)
+            header.addWidget(IconBadge(
+                "storage", background="#162A4C", border="#2B4F86", size=36, icon_size=19, parent=self
+            ))
+            header_text = QVBoxLayout()
+            header_text.setSpacing(2)
             title = QLabel("Media Cache")
             title.setStyleSheet("font-size:15pt;font-weight:800;color:#F7F8FF;")
             subtitle = QLabel("Заполнение локального медиакэша относительно заданного лимита")
             subtitle.setStyleSheet("color:#8FA6CF;font-size:9.5pt;")
-            outer.addWidget(title)
-            outer.addWidget(subtitle)
+            header_text.addWidget(title)
+            header_text.addWidget(subtitle)
+            header.addLayout(header_text, 1)
+            header.addWidget(IconBadge(
+                "chevron", background="#151D2A", border="#29364F", size=28, icon_size=14, parent=self
+            ), 0, Qt.AlignVCenter)
+            outer.addLayout(header)
 
             content = QHBoxLayout()
             content.setSpacing(14)
@@ -656,41 +669,19 @@ def main():
             super().__init__(*args, **kwargs)
             self._dds_legacy_storage = self.storage_detail
             panel = CacheOverviewPanel(self)
-            idx = self.lower_grid.indexOf(self._dds_legacy_storage)
+            idx = self.dashboard_grid.indexOf(self._dds_legacy_storage)
             if idx >= 0:
-                row, col, row_span, col_span = self.lower_grid.getItemPosition(idx)
-                self.lower_grid.removeWidget(self._dds_legacy_storage)
+                row, col, row_span, col_span = self.dashboard_grid.getItemPosition(idx)
+                self.dashboard_grid.removeWidget(self._dds_legacy_storage)
                 self._dds_legacy_storage.hide()
                 self.storage_detail = panel
-                self.lower_grid.addWidget(panel, row, col, row_span, col_span)
+                self.dashboard_grid.addWidget(panel, row, col, row_span, col_span)
             else:
                 self.storage_detail = panel
-                self.lower_grid.addWidget(panel, 0, 0, 1, 2)
+                self.dashboard_grid.addWidget(panel, 0, 3)
             self._dds_cache_panel = panel
-            self._dds_prefer_cache_first()
             if getattr(self, "latest_snapshot", None):
                 self._dds_cache_panel.update_from_snapshot(self.latest_snapshot)
-
-        def _dds_prefer_cache_first(self):
-            try:
-                ai = self.lower_grid.indexOf(self.activity_card)
-                si = self.lower_grid.indexOf(self.storage_detail)
-                if ai < 0 or si < 0:
-                    return
-                apos = self.lower_grid.getItemPosition(ai)
-                spos = self.lower_grid.getItemPosition(si)
-                if apos[0] < spos[0]:
-                    self.lower_grid.removeWidget(self.activity_card)
-                    self.lower_grid.removeWidget(self.storage_detail)
-                    self.lower_grid.addWidget(self.storage_detail, *apos)
-                    self.lower_grid.addWidget(self.activity_card, *spos)
-            except Exception:
-                pass
-
-        def apply_layout_profile(self, profile):
-            super().apply_layout_profile(profile)
-            if hasattr(self, "_dds_cache_panel"):
-                self._dds_prefer_cache_first()
 
         def update_snapshot(self, snapshot):
             super().update_snapshot(snapshot)
@@ -858,7 +849,7 @@ def main():
             grid = QVBoxLayout(info)
             grid.setContentsMargins(18, 16, 18, 16)
             grid.setSpacing(10)
-            self._dds_about_version = self._dds_info_row(grid, "Версия Companion", "0.8.6")
+            self._dds_about_version = self._dds_info_row(grid, "Версия Companion", "0.8.7")
             self._dds_about_plugin = self._dds_info_row(grid, "Версия Plugin", "—")
             self._dds_about_contract = self._dds_info_row(grid, "Контракт захвата", "—")
             self._dds_info_row(grid, "Авторы", "Mr_Dexter_Morgan · Masya")
@@ -904,7 +895,7 @@ def main():
             return right
 
         def _dds_copy_version_info(self):
-            companion = self._dds_about_version.text() if self._dds_about_version else "0.8.6"
+            companion = self._dds_about_version.text() if self._dds_about_version else "0.8.7"
             plugin = self._dds_about_plugin.text() if self._dds_about_plugin else "—"
             contract = self._dds_about_contract.text() if self._dds_about_contract else "—"
             text = "\n".join((
@@ -919,8 +910,8 @@ def main():
             super().update_snapshot(snapshot)
             try:
                 if self._dds_about_version is not None:
-                    value = self.version_value.text().strip() if hasattr(self, "version_value") else "0.8.6"
-                    self._dds_about_version.setText(value or "0.8.6")
+                    value = self.version_value.text().strip() if hasattr(self, "version_value") else "0.8.7"
+                    self._dds_about_version.setText(value or "0.8.7")
                 if self._dds_about_plugin is not None:
                     value = self.plugin_value.text().strip() if hasattr(self, "plugin_value") else "—"
                     self._dds_about_plugin.setText(value or "—")

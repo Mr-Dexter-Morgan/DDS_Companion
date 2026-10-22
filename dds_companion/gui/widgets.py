@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from dds_companion.core.formatting import human_size, human_storage_delta
+from dds_companion.core.identity import resource_path
 
 from .theme import ACCENT, DANGER, DIM, INFO, MUTED, SUCCESS, TEXT, WARNING
 
@@ -307,6 +308,131 @@ class MetricCard(Card):
         self.hint_label.setObjectName("MetricHint")
         self.hint_label.setWordWrap(True)
         layout.addWidget(self.title_label)
+        layout.addWidget(self.value_label)
+        layout.addWidget(self.hint_label)
+        layout.addStretch(1)
+
+    def set_data(self, value: str, hint: str | None = None) -> None:
+        self.value_label.setText(value)
+        if hint is not None:
+            self.hint_label.setText(hint)
+
+
+class IconBadge(QFrame):
+    """Small local-vector icon chip used by the 0.8.7-r2 dashboard."""
+
+    def __init__(
+        self,
+        icon_name: str,
+        *,
+        background: str = "#17243A",
+        border: str = "#263C61",
+        size: int = 42,
+        icon_size: int = 22,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+        self.setStyleSheet(
+            f"background:{background};border:1px solid {border};border-radius:{max(9, size // 3)}px;"
+        )
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        label = QLabel()
+        label.setAlignment(Qt.AlignCenter)
+        label.setStyleSheet("background:transparent;border:none;")
+        icon = QIcon(str(resource_path(f"assets/icons/{icon_name}.svg")))
+        if icon.isNull():
+            label.setText("•")
+            label.setStyleSheet("background:transparent;border:none;color:#DDE7FF;font-weight:800;")
+        else:
+            label.setPixmap(icon.pixmap(icon_size, icon_size))
+        layout.addWidget(label)
+
+
+class SummaryMetricCard(Card):
+    """Calmer top-row metric: one icon and one text stack instead of three boxed rows."""
+
+    def __init__(
+        self,
+        title: str,
+        value: str = "—",
+        hint: str = "",
+        *,
+        icon_name: str,
+        icon_background: str,
+        icon_border: str,
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(14)
+        self.icon_badge = IconBadge(
+            icon_name, background=icon_background, border=icon_border, size=46, icon_size=24, parent=self
+        )
+        layout.addWidget(self.icon_badge, 0, Qt.AlignVCenter)
+        texts = QVBoxLayout()
+        texts.setSpacing(3)
+        self.title_label = QLabel(title.upper())
+        self.title_label.setObjectName("CardEyebrow")
+        self.value_label = QLabel(value)
+        self.value_label.setObjectName("SummaryMetricValue")
+        self.hint_label = QLabel(hint)
+        self.hint_label.setObjectName("MetricHint")
+        self.hint_label.setWordWrap(True)
+        texts.addWidget(self.title_label)
+        texts.addWidget(self.value_label)
+        texts.addWidget(self.hint_label)
+        layout.addLayout(texts, 1)
+
+    def set_data(self, value: str, hint: str | None = None) -> None:
+        self.value_label.setText(value)
+        if hint is not None:
+            self.hint_label.setText(hint)
+
+
+class LifecycleMetricCard(Card):
+    """Compact lifecycle tile with a quiet accent and a local vector icon."""
+
+    def __init__(
+        self,
+        title: str,
+        value: str = "—",
+        hint: str = "",
+        *,
+        icon_name: str,
+        accent: str,
+        icon_background: str,
+        icon_border: str,
+        card_border: str = "#263148",
+        parent: QWidget | None = None,
+    ):
+        super().__init__(parent)
+        self.setProperty("dashboardMini", True)
+        self.setStyleSheet(
+            f'QFrame[dashboardMini="true"]{{background:#111722;border:1px solid {card_border};border-radius:12px;}}'
+            f'QFrame[dashboardMini="true"]:hover{{background:#131B28;border-color:{icon_border};}}'
+        )
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(13, 12, 13, 12)
+        layout.setSpacing(7)
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        self.icon_badge = IconBadge(
+            icon_name, background=icon_background, border=icon_border, size=31, icon_size=17, parent=self
+        )
+        self.title_label = QLabel(title)
+        self.title_label.setWordWrap(True)
+        self.title_label.setStyleSheet(f"color:{accent};font-size:8.5pt;font-weight:700;")
+        head.addWidget(self.icon_badge)
+        head.addWidget(self.title_label, 1)
+        layout.addLayout(head)
+        self.value_label = QLabel(value)
+        self.value_label.setObjectName("LifecycleMetricValue")
+        self.hint_label = QLabel(hint)
+        self.hint_label.setObjectName("LifecycleMetricHint")
+        self.hint_label.setWordWrap(True)
         layout.addWidget(self.value_label)
         layout.addWidget(self.hint_label)
         layout.addStretch(1)

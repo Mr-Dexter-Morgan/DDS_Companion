@@ -72,6 +72,17 @@ QFrame[card="true"] {{
     border-radius: 14px;
 }}
 QFrame[card="true"]:hover {{ border-color: #30394d; }}
+QFrame[dashboardGroup="true"] {{
+    background: #101620;
+    border: 1px solid #27344d;
+    border-radius: 14px;
+}}
+QFrame[dashboardGroup="true"]:hover {{ border-color: #31415f; }}
+QFrame[dashboardInset="true"] {{
+    background: #0f151f;
+    border: 1px solid #222f45;
+    border-radius: 11px;
+}}
 QLabel#BrandMark {{
     color: white;
     background: transparent;
@@ -136,12 +147,12 @@ QPushButton[ghost="true"] {{
 }}
 QPushButton[ghost="true"]:hover {{ color: {TEXT}; background: #151a25; }}
 QPushButton:disabled {{ color: #555e6e; background: #141821; border-color: #1c2230; }}
-QTabWidget#SettingsTabs::pane, QTabWidget#HealthTabs::pane {{
+QTabWidget#SettingsTabs::pane, QTabWidget#LibraryTabs::pane {{
     border: none;
     background: transparent;
     top: -1px;
 }}
-QTabWidget#SettingsTabs QTabBar::tab, QTabWidget#HealthTabs QTabBar::tab {{
+QTabWidget#SettingsTabs QTabBar::tab, QTabWidget#LibraryTabs QTabBar::tab {{
     color: {MUTED};
     background: #10151f;
     border: 1px solid #1b2230;
@@ -152,12 +163,12 @@ QTabWidget#SettingsTabs QTabBar::tab, QTabWidget#HealthTabs QTabBar::tab {{
     border-top-right-radius: 8px;
     font-weight: 650;
 }}
-QTabWidget#SettingsTabs QTabBar::tab:hover, QTabWidget#HealthTabs QTabBar::tab:hover {{
+QTabWidget#SettingsTabs QTabBar::tab:hover, QTabWidget#LibraryTabs QTabBar::tab:hover {{
     color: {TEXT};
     background: #171e2a;
     border-color: #2b3548;
 }}
-QTabWidget#SettingsTabs QTabBar::tab:selected, QTabWidget#HealthTabs QTabBar::tab:selected {{
+QTabWidget#SettingsTabs QTabBar::tab:selected, QTabWidget#LibraryTabs QTabBar::tab:selected {{
     color: white;
     background: #27263d;
     border-color: #6668f1;
@@ -207,6 +218,12 @@ QLabel#PageTitle {{ font-size: 19pt; font-weight: 750; color: {TEXT}; }}
 QLabel#PageSubtitle {{ font-size: 9.5pt; color: {MUTED}; }}
 QLabel#CardEyebrow {{ font-size: 8.5pt; font-weight: 650; color: {MUTED}; }}
 QLabel#MetricValue {{ font-size: 22pt; font-weight: 760; color: {TEXT}; }}
+QLabel#SummaryMetricValue {{ font-size: 19pt; font-weight: 780; color: {TEXT}; }}
+QLabel#LifecycleMetricValue {{ font-size: 20pt; font-weight: 780; color: {TEXT}; }}
+QLabel#LifecycleMetricHint {{ font-size: 8.4pt; color: #8593ad; }}
+QLabel#SessionMetricValue {{ font-size: 14pt; font-weight: 780; color: {TEXT}; }}
+QLabel#SessionMetricCaption {{ font-size: 9.2pt; color: {TEXT}; }}
+QLabel#SessionMetricSub {{ font-size: 8.2pt; color: {MUTED}; }}
 QLabel#MetricHint {{ font-size: 9pt; color: {MUTED}; }}
 QLabel#SectionTitle {{ font-size: 11pt; font-weight: 700; color: {TEXT}; }}
 QLabel#SectionHint {{ font-size: 9pt; color: {MUTED}; }}
