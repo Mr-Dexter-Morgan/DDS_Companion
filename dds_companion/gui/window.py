@@ -7,7 +7,7 @@ import sys
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QTimer, Qt, Signal
+from PySide6.QtCore import QObject, QSize, QTimer, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QIcon, QPixmap, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -182,10 +182,13 @@ class MainWindow(QMainWindow):
         side.addSpacing(22)
 
         self.nav_buttons: list[QPushButton] = []
+        nav_icons = ("home", "library", "activity", "status", "settings")
         for index, name in enumerate(self.PAGE_LABELS):
             button = QPushButton(name)
             button.setCheckable(True)
             button.setProperty("nav", True)
+            button.setIcon(QIcon(str(resource_path(f"assets/icons/{nav_icons[index]}.svg"))))
+            button.setIconSize(QSize(18, 18))
             button.clicked.connect(lambda checked=False, i=index: self._select_page(i))
             self.nav_buttons.append(button)
             side.addWidget(button)

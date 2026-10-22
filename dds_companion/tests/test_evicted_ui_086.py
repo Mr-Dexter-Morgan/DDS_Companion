@@ -104,13 +104,13 @@ class EvictedUi086Tests(unittest.TestCase):
         self.assertIn("Кэш очищен: 113", page._media_tooltip(summary))
         page.close()
 
-    def test_health_page_shows_separate_evicted_counter_for_real_case(self):
+    def test_dashboard_shows_separate_evicted_counter_for_real_case(self):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         from PySide6.QtWidgets import QApplication
-        from dds_companion.gui.pages import HealthPage
+        from dds_companion.gui.pages import DashboardPage
 
         app = QApplication.instance() or QApplication([])
-        page = HealthPage()
+        page = DashboardPage()
         page.update_snapshot({
             "health": {
                 "state": "RUNNING",
@@ -139,11 +139,11 @@ class EvictedUi086Tests(unittest.TestCase):
 
         self.assertEqual(page.media_known_card.value_label.text(), "143")
         self.assertEqual(page.media_cached_card.value_label.text(), "30")
-        self.assertEqual(page.media_evicted_card.title_label.text(), "КЭШ ОЧИЩЕН")
+        self.assertEqual(page.media_evicted_card.title_label.text(), "Кэш очищен")
         self.assertEqual(page.media_evicted_card.value_label.text(), "113")
         self.assertIn("метаданные сохранены", page.media_evicted_card.hint_label.text())
-        self.assertIn("кэш очищен: 113", page.media_runtime_summary.text())
-        self.assertIn("ждёт переобнаружения: 6", page.media_runtime_summary.text())
+        self.assertEqual(page.media_unresolved_card.value_label.text(), "6")
+        self.assertEqual(page.media_source_gone_card.value_label.text(), "0")
         page.close()
 
     def test_runtime_health_summary_mentions_evicted_counter(self):

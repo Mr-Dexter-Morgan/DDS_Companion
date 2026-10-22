@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QMenu,
     QPushButton,
     QScrollArea,
-    QSplitter,
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
@@ -38,7 +37,10 @@ from .theme import ACCENT, BORDER, DANGER, INFO, MUTED, SUCCESS, TEXT, WARNING
 from .widgets import (
     Card,
     HealthRow,
+    IconBadge,
+    LifecycleMetricCard,
     MetricCard,
+    SummaryMetricCard,
     PathRow,
     SectionHeader,
     SettingRow,
@@ -122,7 +124,7 @@ class DashboardPage(Page):
     def __init__(self, parent=None):
         super().__init__(
             "Главная",
-            "Состояние архива, активность и использование хранилища — без технического шума.",
+            "Состояние архива, жизненный цикл медиа и текущая активность — без технического шума.",
             parent,
             scrollable=True,
         )
@@ -132,10 +134,22 @@ class DashboardPage(Page):
         metrics = self.metrics_grid
         metrics.setHorizontalSpacing(12)
         metrics.setVerticalSpacing(12)
-        self.storage_card = MetricCard("Общее хранилище", "—", "архив + локальные служебные данные")
-        self.messages_card = MetricCard("Сообщения", "—", "накопительный архив")
-        self.context_card = MetricCard("Структура", "—", "серверы · каналы · треды")
-        self.media_card = MetricCard("Медиа", "—", "Найдено / Стырено")
+        self.storage_card = SummaryMetricCard(
+            "Общее хранилище", "—", "архив + локальные служебные данные",
+            icon_name="storage", icon_background="#132A4E", icon_border="#24518D",
+        )
+        self.messages_card = SummaryMetricCard(
+            "Сообщения", "—", "накопительный архив",
+            icon_name="messages", icon_background="#251C49", icon_border="#4D3A82",
+        )
+        self.context_card = SummaryMetricCard(
+            "Структура", "—", "серверы · каналы · треды",
+            icon_name="structure", icon_background="#12372D", icon_border="#235E4B",
+        )
+        self.media_card = SummaryMetricCard(
+            "Медиа", "—", "Найдено / Стырено",
+            icon_name="media", icon_background="#3A2B17", icon_border="#654B24",
+        )
         metrics.addWidget(self.storage_card, 0, 0)
         metrics.addWidget(self.messages_card, 0, 1)
         metrics.addWidget(self.context_card, 0, 2)
@@ -144,26 +158,80 @@ class DashboardPage(Page):
             metrics.setColumnStretch(col, 1)
         self.body.addLayout(metrics)
 
-        self.lower_grid = QGridLayout()
-        lower = self.lower_grid
-        lower.setHorizontalSpacing(12)
-        lower.setVerticalSpacing(12)
+        self.dashboard_grid = QGridLayout()
+        self.dashboard_grid.setHorizontalSpacing(12)
+        self.dashboard_grid.setVerticalSpacing(12)
 
-        self.activity_card = Card()
-        activity_layout = QVBoxLayout(self.activity_card)
-        activity_layout.setContentsMargins(16, 14, 16, 14)
-        activity_layout.setSpacing(10)
-        activity_layout.addWidget(SectionHeader("Последняя активность", "Что Companion делал последним"))
-        self.current_activity = QLabel("Ожидание первого события…")
-        self.current_activity.setStyleSheet(f"color:{TEXT};font-size:11pt;font-weight:650;")
-        self.current_activity.setWordWrap(True)
-        self.activity_meta = QLabel("—")
-        self.activity_meta.setObjectName("SectionHint")
-        self.activity_meta.setWordWrap(True)
-        activity_layout.addWidget(self.current_activity)
-        activity_layout.addWidget(self.activity_meta)
-        activity_layout.addStretch(1)
+        # One visual group instead of eight equal-weight dashboard sensors.
+        self.lifecycle_panel = Card()
+        self.lifecycle_panel.setProperty("dashboardGroup", True)
+        lifecycle_layout = QVBoxLayout(self.lifecycle_panel)
+        lifecycle_layout.setContentsMargins(16, 15, 16, 16)
+        lifecycle_layout.setSpacing(12)
+        lifecycle_header = QHBoxLayout()
+        lifecycle_header.setSpacing(10)
+        lifecycle_header.addWidget(IconBadge(
+            "play", background="#132A4E", border="#24518D", size=36, icon_size=19, parent=self.lifecycle_panel
+        ))
+        lifecycle_header.addWidget(SectionHeader(
+            "Жизненный цикл медиа",
+            "Текущее состояние медиафайлов в локальном архиве и какие этапы требуют внимания.",
+        ), 1)
+        lifecycle_layout.addLayout(lifecycle_header)
 
+        self.lifecycle_grid = QGridLayout()
+        self.lifecycle_grid.setHorizontalSpacing(9)
+        self.lifecycle_grid.setVerticalSpacing(9)
+        self.media_total_card = LifecycleMetricCard(
+            "Всего вложений", "—", "все вложения, которые архив когда-либо видел",
+            icon_name="all", accent="#AFC9FF", icon_background="#162A4C", icon_border="#2B4F86", card_border="#263854",
+        )
+        self.media_known_card = LifecycleMetricCard(
+            "Известно", "—", "доступны сейчас для работы или уже сохранены",
+            icon_name="known", accent="#69DDA7", icon_background="#12362C", icon_border="#235D4A", card_border="#214238",
+        )
+        self.media_cached_card = LifecycleMetricCard(
+            "Кэшировано", "—", "локальные файлы медиакэша",
+            icon_name="cached", accent="#B99BFF", icon_background="#271D47", icon_border="#4D397B", card_border="#382A59",
+        )
+        self.media_evicted_card = LifecycleMetricCard(
+            "Кэш очищен", "—", "локальный файл удалён; метаданные сохранены",
+            icon_name="evicted", accent="#70CFFF", icon_background="#122F45", icon_border="#24536F", card_border="#234154",
+        )
+        self.media_attention_card = LifecycleMetricCard(
+            "Требует внимания", "—", "нужна ручная проверка или решение",
+            icon_name="attention", accent="#FF7A91", icon_background="#3A1B26", icon_border="#6A3040", card_border="#522B37",
+        )
+        self.media_ignored_card = LifecycleMetricCard(
+            "Обработано", "—", "осознанно обработаны пользователем",
+            icon_name="processed", accent="#64C8FF", icon_background="#153047", icon_border="#26556F", card_border="#244154",
+        )
+        self.media_unresolved_card = LifecycleMetricCard(
+            "Ждёт переобнаружения", "—", "ждут новой ссылки Discord",
+            icon_name="rediscover", accent="#F2BC61", icon_background="#382817", icon_border="#654A24", card_border="#4C3924",
+        )
+        self.media_source_gone_card = LifecycleMetricCard(
+            "Источник удалён", "—", "удаление источника подтверждено",
+            icon_name="gone", accent="#A8B7D7", icon_background="#202A3E", icon_border="#3A4A69", card_border="#303B53",
+        )
+        self.lifecycle_cards = [
+            self.media_total_card,
+            self.media_known_card,
+            self.media_cached_card,
+            self.media_evicted_card,
+            self.media_attention_card,
+            self.media_ignored_card,
+            self.media_unresolved_card,
+            self.media_source_gone_card,
+        ]
+        for i, card in enumerate(self.lifecycle_cards):
+            self.lifecycle_grid.addWidget(card, i // 4, i % 4)
+        for col in range(4):
+            self.lifecycle_grid.setColumnStretch(col, 1)
+        lifecycle_layout.addLayout(self.lifecycle_grid)
+
+        # Legacy storage widget stays as the stable replacement anchor for the
+        # runtime Media Cache overlay.  The overlay swaps this widget in-place.
         self.storage_detail = Card()
         storage_layout = QVBoxLayout(self.storage_detail)
         storage_layout.setContentsMargins(16, 14, 16, 14)
@@ -187,55 +255,134 @@ class DashboardPage(Page):
         self.session_card = Card()
         session_layout = QVBoxLayout(self.session_card)
         session_layout.setContentsMargins(16, 14, 16, 14)
-        session_layout.setSpacing(8)
-        session_layout.addWidget(SectionHeader("Текущая сессия", "Изменения после запуска Companion"))
-        self.session_messages = QLabel("+0 сообщений")
-        self.session_messages.setStyleSheet(f"color:{TEXT};font-size:14pt;font-weight:750;")
-        self.session_imports = QLabel("+0 импортов")
-        self.session_events = QLabel("+0 событий активности")
-        self.session_imports.setObjectName("SectionHint")
-        self.session_events.setObjectName("SectionHint")
-        session_layout.addWidget(self.session_messages)
-        session_layout.addWidget(self.session_imports)
-        session_layout.addWidget(self.session_events)
-        session_layout.addStretch(1)
+        session_layout.setSpacing(10)
+        session_head = QHBoxLayout()
+        session_head.setSpacing(10)
+        session_head.addWidget(IconBadge(
+            "session", background="#132A4E", border="#24518D", size=36, icon_size=19, parent=self.session_card
+        ))
+        session_head.addWidget(SectionHeader("Текущая сессия", "Изменения после запуска Companion"), 1)
+        session_layout.addLayout(session_head)
 
-        lower.addWidget(self.activity_card, 0, 0)
-        lower.addWidget(self.storage_detail, 0, 1)
-        lower.addWidget(self.session_card, 1, 0, 1, 2)
-        lower.setColumnStretch(0, 1)
-        lower.setColumnStretch(1, 1)
-        self.body.addLayout(lower, 1)
+        session_strip = QFrame()
+        session_strip.setProperty("dashboardInset", True)
+        strip = QHBoxLayout(session_strip)
+        strip.setContentsMargins(14, 11, 14, 11)
+        strip.setSpacing(0)
+
+        def add_session_metric(icon_name: str, value_label: QLabel, caption: str, subcaption: str, bg: str, border: str):
+            cell = QWidget()
+            cell_layout = QHBoxLayout(cell)
+            cell_layout.setContentsMargins(8, 0, 12, 0)
+            cell_layout.setSpacing(9)
+            cell_layout.addWidget(IconBadge(icon_name, background=bg, border=border, size=31, icon_size=17, parent=cell))
+            texts = QVBoxLayout()
+            texts.setSpacing(1)
+            value_label.setObjectName("SessionMetricValue")
+            caption_label = QLabel(caption)
+            caption_label.setObjectName("SessionMetricCaption")
+            sub = QLabel(subcaption)
+            sub.setObjectName("SessionMetricSub")
+            texts.addWidget(value_label)
+            texts.addWidget(caption_label)
+            texts.addWidget(sub)
+            cell_layout.addLayout(texts, 1)
+            strip.addWidget(cell, 1)
+
+        self.session_messages = QLabel("+0")
+        self.session_imports = QLabel("+0")
+        self.session_events = QLabel("+0")
+        add_session_metric("messages", self.session_messages, "сообщений", "за эту сессию", "#122F45", "#24536F")
+        add_session_metric("import", self.session_imports, "импортов", "за эту сессию", "#12362C", "#235D4A")
+        add_session_metric("events", self.session_events, "событий активности", "за эту сессию", "#162A4C", "#2B4F86")
+        session_layout.addWidget(session_strip)
+
+        self.activity_card = Card()
+        activity_layout = QVBoxLayout(self.activity_card)
+        activity_layout.setContentsMargins(16, 14, 16, 14)
+        activity_layout.setSpacing(10)
+        activity_head = QHBoxLayout()
+        activity_head.setSpacing(10)
+        activity_head.addWidget(IconBadge(
+            "recent", background="#132A4E", border="#24518D", size=36, icon_size=19, parent=self.activity_card
+        ))
+        activity_head.addWidget(SectionHeader("Последняя активность", "Что Companion делал последним"), 1)
+        activity_layout.addLayout(activity_head)
+
+        activity_strip = QFrame()
+        activity_strip.setProperty("dashboardInset", True)
+        activity_row = QHBoxLayout(activity_strip)
+        activity_row.setContentsMargins(13, 11, 13, 11)
+        activity_row.setSpacing(10)
+        activity_row.addWidget(IconBadge(
+            "file", background="#202A3E", border="#3A4A69", size=31, icon_size=17, parent=activity_strip
+        ))
+        activity_text = QVBoxLayout()
+        activity_text.setSpacing(3)
+        self.current_activity = QLabel("Ожидание первого события…")
+        self.current_activity.setStyleSheet(f"color:{TEXT};font-size:10.5pt;font-weight:650;")
+        self.current_activity.setWordWrap(True)
+        self.activity_meta = QLabel("—")
+        self.activity_meta.setObjectName("SectionHint")
+        self.activity_meta.setWordWrap(True)
+        activity_text.addWidget(self.current_activity)
+        activity_text.addWidget(self.activity_meta)
+        activity_row.addLayout(activity_text, 1)
+        activity_row.addWidget(IconBadge(
+            "chevron", background="#151D2A", border="#29364F", size=28, icon_size=14, parent=activity_strip
+        ), 0, Qt.AlignVCenter)
+        activity_layout.addWidget(activity_strip)
+
+        # Wide layout: lifecycle is one grouped visual object; Media Cache remains
+        # its peer; session and activity share the bottom row 50/50.
+        self.dashboard_grid.addWidget(self.lifecycle_panel, 0, 0, 1, 3)
+        self.dashboard_grid.addWidget(self.storage_detail, 0, 3)
+        self.dashboard_grid.addWidget(self.session_card, 1, 0, 1, 2)
+        self.dashboard_grid.addWidget(self.activity_card, 1, 2, 1, 2)
+        for col in range(4):
+            self.dashboard_grid.setColumnStretch(col, 1)
+        self.body.addLayout(self.dashboard_grid, 1)
 
     def apply_layout_profile(self, profile: str) -> None:
         super().apply_layout_profile(profile)
 
         metrics = self.metrics_grid
-        lower = self.lower_grid
+        grid = self.dashboard_grid
         for widget in (self.storage_card, self.messages_card, self.context_card, self.media_card):
             metrics.removeWidget(widget)
-        for widget in (self.activity_card, self.storage_detail, self.session_card):
-            lower.removeWidget(widget)
+        for widget in (self.lifecycle_panel, self.storage_detail, self.session_card, self.activity_card):
+            grid.removeWidget(widget)
 
         if profile == "compact":
-            metric_positions = (
+            positions = (
                 (self.storage_card, 0, 0),
                 (self.messages_card, 0, 1),
                 (self.context_card, 1, 0),
                 (self.media_card, 1, 1),
             )
-            for widget, row, col in metric_positions:
+            for widget, row, col in positions:
                 metrics.addWidget(widget, row, col)
             for col in range(4):
                 metrics.setColumnStretch(col, 1 if col < 2 else 0)
 
-            lower.addWidget(self.activity_card, 0, 0)
-            lower.addWidget(self.storage_detail, 1, 0)
-            lower.addWidget(self.session_card, 2, 0)
-            lower.setColumnStretch(0, 1)
-            lower.setColumnStretch(1, 0)
-            lower.setHorizontalSpacing(0)
-            lower.setVerticalSpacing(10)
+            for card in self.lifecycle_cards:
+                self.lifecycle_grid.removeWidget(card)
+            for i, card in enumerate(self.lifecycle_cards):
+                self.lifecycle_grid.addWidget(card, i // 2, i % 2)
+            self.lifecycle_grid.setColumnStretch(0, 1)
+            self.lifecycle_grid.setColumnStretch(1, 1)
+            self.lifecycle_grid.setColumnStretch(2, 0)
+            self.lifecycle_grid.setColumnStretch(3, 0)
+
+            grid.addWidget(self.lifecycle_panel, 0, 0)
+            grid.addWidget(self.storage_detail, 1, 0)
+            grid.addWidget(self.session_card, 2, 0)
+            grid.addWidget(self.activity_card, 3, 0)
+            grid.setColumnStretch(0, 1)
+            for col in range(1, 4):
+                grid.setColumnStretch(col, 0)
+            grid.setHorizontalSpacing(0)
+            grid.setVerticalSpacing(10)
         else:
             metrics.addWidget(self.storage_card, 0, 0)
             metrics.addWidget(self.messages_card, 0, 1)
@@ -244,14 +391,22 @@ class DashboardPage(Page):
             for col in range(4):
                 metrics.setColumnStretch(col, 1)
 
-            lower.addWidget(self.activity_card, 0, 0)
-            lower.addWidget(self.storage_detail, 0, 1)
-            lower.addWidget(self.session_card, 1, 0, 1, 2)
-            lower.setColumnStretch(0, 1)
-            lower.setColumnStretch(1, 1)
+            for card in self.lifecycle_cards:
+                self.lifecycle_grid.removeWidget(card)
+            for i, card in enumerate(self.lifecycle_cards):
+                self.lifecycle_grid.addWidget(card, i // 4, i % 4)
+            for col in range(4):
+                self.lifecycle_grid.setColumnStretch(col, 1)
+
+            grid.addWidget(self.lifecycle_panel, 0, 0, 1, 3)
+            grid.addWidget(self.storage_detail, 0, 3)
+            grid.addWidget(self.session_card, 1, 0, 1, 2)
+            grid.addWidget(self.activity_card, 1, 2, 1, 2)
+            for col in range(4):
+                grid.setColumnStretch(col, 1)
             spacing = 16 if profile == "large" else 12
-            lower.setHorizontalSpacing(spacing)
-            lower.setVerticalSpacing(spacing)
+            grid.setHorizontalSpacing(spacing)
+            grid.setVerticalSpacing(spacing)
 
     def update_snapshot(self, snapshot: dict) -> None:
         self.latest_snapshot = snapshot
@@ -280,6 +435,25 @@ class DashboardPage(Page):
             ),
         )
 
+        media_info = (health.get("subsystems", {}) or {}).get("media", {}) or {}
+        media_details = media_info.get("details", {}) or {}
+        total_media = int(media_details.get("total", stats.get("total_media", 0)) or 0)
+        known = int(media_details.get("known", stats.get("known_media", 0)) or 0)
+        cached = int(media_details.get("cached", stats.get("cached_media_files", 0)) or 0)
+        evicted = int(media_details.get("evicted", stats.get("media_evicted", 0)) or 0)
+        attention = int(media_details.get("attention_count", media_details.get("attention", stats.get("media_attention", 0))) or 0)
+        ignored = int(media_details.get("ignored", stats.get("media_ignored", 0)) or 0)
+        unresolved = int(media_details.get("unresolved", stats.get("media_unresolved", 0)) or 0)
+        source_gone = int(media_details.get("source_gone", stats.get("media_source_gone", 0)) or 0)
+        self.media_total_card.set_data(str(total_media), "все вложения, которые архив когда-либо видел")
+        self.media_known_card.set_data(str(known), "доступны сейчас для работы или уже сохранены")
+        self.media_cached_card.set_data(str(cached), "локальные файлы медиакэша")
+        self.media_evicted_card.set_data(str(evicted), "локальный файл удалён; метаданные сохранены")
+        self.media_attention_card.set_data(str(attention), "нужна ручная проверка или решение")
+        self.media_ignored_card.set_data(str(ignored), "осознанно обработаны пользователем")
+        self.media_unresolved_card.set_data(str(unresolved), "ждут новой ссылки Discord")
+        self.media_source_gone_card.set_data(str(source_gone), "удаление источника подтверждено")
+
         total = max(1, int(stats.get("total_known_storage_bytes", 0)))
         for key, row in self.storage_rows.items():
             value = int(stats.get(key, 0))
@@ -295,9 +469,9 @@ class DashboardPage(Page):
             ("Логи", int(stats.get("logs_bytes", 0)), MUTED),
         ])
         self.session_storage.setText(human_storage_delta(stats.get("session_storage_delta_bytes", 0)))
-        self.session_messages.setText(f"+{stats.get('session_messages_added', 0)} сообщений")
-        self.session_imports.setText(f"+{stats.get('session_imports_added', 0)} импортов")
-        self.session_events.setText(f"+{stats.get('session_activity_events_added', 0)} событий активности")
+        self.session_messages.setText(f"+{stats.get('session_messages_added', 0)}")
+        self.session_imports.setText(f"+{stats.get('session_imports_added', 0)}")
+        self.session_events.setText(f"+{stats.get('session_activity_events_added', 0)}")
 
         if activity:
             latest = activity[0]
@@ -341,15 +515,32 @@ class LibraryPage(Page):
     ):
         super().__init__(
             "Библиотека",
-            "Просмотр накопленного архива по серверам, каналам и темам.",
+            "Навигация по архиву и просмотр сообщений разделены: выбирай источник, затем работай с содержимым на полной ширине.",
             parent,
         )
         self.on_messages_requested = on_messages_requested
         self.on_export_rule_changed = on_export_rule_changed
         self.on_scope_action = on_scope_action
 
-        self.splitter = QSplitter(Qt.Horizontal)
-        self.splitter.setChildrenCollapsible(False)
+        self.library_tabs = QTabWidget()
+        self.library_tabs.setObjectName("LibraryTabs")
+        self.body.addWidget(self.library_tabs, 1)
+
+        self.navigation_tab = QWidget()
+        navigation_layout = QVBoxLayout(self.navigation_tab)
+        navigation_layout.setContentsMargins(0, 8, 0, 0)
+        navigation_layout.setSpacing(12)
+
+        nav_metrics = QGridLayout()
+        nav_metrics.setHorizontalSpacing(12)
+        nav_metrics.setVerticalSpacing(12)
+        self.nav_messages_card = MetricCard("Сообщения", "—", "во всём архиве")
+        self.nav_media_card = MetricCard("Медиа", "—", "известно / всего")
+        nav_metrics.addWidget(self.nav_messages_card, 0, 0)
+        nav_metrics.addWidget(self.nav_media_card, 0, 1)
+        nav_metrics.setColumnStretch(0, 1)
+        nav_metrics.setColumnStretch(1, 1)
+        navigation_layout.addLayout(nav_metrics)
 
         tree_card = Card()
         tree_layout = QVBoxLayout(tree_card)
@@ -363,40 +554,38 @@ class LibraryPage(Page):
         self.tree.setAlternatingRowColors(True)
         self.tree.setUniformRowHeights(False)
         self.tree.setSelectionMode(QAbstractItemView.NoSelection)
-        # The archive tree is a click target, not a hover-driven menu.  Native
-        # QTreeWidget selection/current-state painting can follow the mouse on
-        # Windows when rows contain embedded combo widgets, even though no content
-        # navigation signal is emitted.  Disable native selection entirely and
-        # paint only the last explicitly clicked row ourselves.
-        # Keep the geometry stable and never let a stale horizontal scroll offset
-        # make the first column look selected/cropped when the pointer returns.
         self.tree.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
         self.tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.tree.header().setSectionResizeMode(2, QHeaderView.Interactive)
-        self.tree.header().resizeSection(2, 225)
+        self.tree.header().resizeSection(2, 260)
         self.tree.header().setSectionResizeMode(3, QHeaderView.Fixed)
-        self.tree.header().resizeSection(3, 150)
-        # Content navigation must be click-driven.  Binding the preview to
-        # currentItemChanged made the right-hand pane follow transient Qt
-        # "current index" changes while the pointer moved across embedded
-        # widgets.  Keep hover/current/selection presentation separate from the
-        # explicit user action that opens a channel/thread.
+        self.tree.header().resizeSection(3, 160)
         self.tree.itemClicked.connect(self._item_clicked)
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._show_context_menu)
         tree_layout.addWidget(self.tree, 1)
+        navigation_layout.addWidget(tree_card, 1)
+
+        self.viewer_tab = QWidget()
+        viewer_layout = QVBoxLayout(self.viewer_tab)
+        viewer_layout.setContentsMargins(0, 8, 0, 0)
+        viewer_layout.setSpacing(12)
 
         content_card = Card()
         content_layout = QVBoxLayout(content_card)
         content_layout.setContentsMargins(14, 14, 14, 14)
         content_layout.setSpacing(10)
 
+        self.breadcrumb = QLabel("Навигация → выберите канал или тему")
+        self.breadcrumb.setObjectName("SectionHint")
+        self.breadcrumb.setWordWrap(True)
         self.content_title = QLabel("Выберите канал или тему")
         self.content_title.setObjectName("SectionTitle")
-        self.content_hint = QLabel("Сообщения выбранного раздела появятся здесь.")
+        self.content_hint = QLabel("После выбора конечного источника DDS автоматически откроет его здесь.")
         self.content_hint.setObjectName("SectionHint")
         self.content_hint.setWordWrap(True)
+        content_layout.addWidget(self.breadcrumb)
         content_layout.addWidget(self.content_title)
         content_layout.addWidget(self.content_hint)
 
@@ -414,20 +603,18 @@ class LibraryPage(Page):
         self.message_layout = QVBoxLayout(self.message_host)
         self.message_layout.setContentsMargins(0, 0, 6, 0)
         self.message_layout.setSpacing(8)
-        self.message_empty = QLabel("Выберите канал или тему слева.")
+        self.message_empty = QLabel("Выберите канал или тему во вкладке «НАВИГАЦИЯ».")
         self.message_empty.setObjectName("SectionHint")
         self.message_empty.setWordWrap(True)
         self.message_layout.addWidget(self.message_empty)
         self.message_layout.addStretch(1)
         self.message_scroll.setWidget(self.message_host)
         content_layout.addWidget(self.message_scroll, 1)
+        viewer_layout.addWidget(content_card, 1)
 
-        self.splitter.addWidget(tree_card)
-        self.splitter.addWidget(content_card)
-        self.splitter.setStretchFactor(0, 2)
-        self.splitter.setStretchFactor(1, 5)
-        self.splitter.setSizes([620, 900])
-        self.body.addWidget(self.splitter, 1)
+        self.library_tabs.addTab(self.navigation_tab, "НАВИГАЦИЯ")
+        self.library_tabs.addTab(self.viewer_tab, "ПРОСМОТР")
+        self.library_tabs.setCurrentWidget(self.navigation_tab)
 
         self._library: list[dict] = []
         self._media_root = Path()
@@ -451,6 +638,18 @@ class LibraryPage(Page):
         self.rebuild()
 
     def rebuild(self) -> None:
+        total_messages = sum(int(guild.get("message_count", 0) or 0) for guild in self._library)
+        total_media = sum(int(guild.get("media_count", 0) or 0) for guild in self._library)
+        known_media = sum(int(guild.get("media_known", 0) or 0) for guild in self._library)
+        self.nav_messages_card.set_data(
+            f"{total_messages:,}".replace(",", " "),
+            f"{len(self._library)} серверов",
+        )
+        self.nav_media_card.set_data(
+            f"{known_media:,}".replace(",", " "),
+            f"из {total_media:,} вложений".replace(",", " "),
+        )
+
         expanded_ids: set[str] = set()
         root = self.tree.invisibleRootItem()
         for i in range(root.childCount()):
@@ -464,12 +663,16 @@ class LibraryPage(Page):
         selected_item = None
         for guild in self._library:
             guild_detail = self._detail("guild", guild)
+            guild_detail["breadcrumb"] = str(guild.get("name") or "Без названия")
             g = self._tree_item(guild["name"], guild, guild_detail, bold=True)
             self.tree.addTopLevelItem(g)
             self._install_rule_combo(g, guild_detail)
 
             for channel in guild.get("channels", []):
                 channel_detail = self._detail("channel", channel)
+                channel_detail["breadcrumb"] = (
+                    f"{guild_detail['name']} → # {channel_detail['name']}"
+                )
                 c = self._tree_item(f"# {channel['name']}", channel, channel_detail)
                 c.setForeground(0, QColor("#cdd5e7"))
                 g.addChild(c)
@@ -477,6 +680,9 @@ class LibraryPage(Page):
 
                 for thread in channel.get("threads", []):
                     thread_detail = self._detail("thread", thread)
+                    thread_detail["breadcrumb"] = (
+                        f"{guild_detail['name']} → # {channel_detail['name']} → {thread_detail['name']}"
+                    )
                     t = self._tree_item(f"↳ {thread['name']}", thread, thread_detail)
                     t.setForeground(0, QColor(MUTED))
                     c.addChild(t)
@@ -513,7 +719,7 @@ class LibraryPage(Page):
             self._show_empty_messages("Архив пока пуст.")
         else:
             self._paint_explicit_selection(None)
-            self._show_empty_messages("Выберите канал или тему слева.")
+            self._show_empty_messages("Выберите канал или тему во вкладке «НАВИГАЦИЯ».")
         self.tree.blockSignals(False)
         self.tree.setUpdatesEnabled(True)
         QTimer.singleShot(0, lambda value=tree_scroll: self.tree.verticalScrollBar().setValue(
@@ -668,8 +874,9 @@ class LibraryPage(Page):
         self._update_content_heading(detail)
 
         if detail.get("kind") == "guild":
-            self._show_empty_messages("Сообщения сервера не смешиваются в одну ленту.")
+            self._show_empty_messages("Сообщения сервера не смешиваются в одну ленту. Выберите канал или тему.")
             return
+        self.library_tabs.setCurrentWidget(self.viewer_tab)
         self._request_messages(reset=True)
 
     def _show_context_menu(self, position) -> None:
@@ -711,6 +918,7 @@ class LibraryPage(Page):
             self.on_scope_action(action, dict(detail))
 
     def _update_content_heading(self, detail: dict) -> None:
+        self.breadcrumb.setText(str(detail.get("breadcrumb") or detail.get("name") or "Архив"))
         if detail.get("kind") == "guild":
             self.content_title.setText(detail.get("name") or "Сервер")
             self.content_hint.setText("Выберите канал или тему этого сервера.")
@@ -802,7 +1010,7 @@ class LibraryPage(Page):
                 and int(detail.get("direct_message_count", 0)) == 0
                 and int(detail.get("thread_count", 0)) > 0
             ):
-                empty_text = "В самом канале сообщений нет. Выберите тему слева — сообщения находятся внутри неё."
+                empty_text = "В самом канале сообщений нет. Вернись в «НАВИГАЦИЮ» и выбери тему — сообщения находятся внутри неё."
             else:
                 empty_text = "В этом разделе пока нет сохранённых сообщений."
             self.message_empty = QLabel(empty_text)
@@ -1073,9 +1281,9 @@ class HealthPage(Page):
     ):
         super().__init__(
             "Статус",
-            "Состояние подсистем и жизненный цикл медиа — раздельно и без смешивания технических сигналов.",
+            "Состояние подсистем, загрузки медиа и проблемных файлов — в одном диагностическом экране.",
             parent,
-            scrollable=False,
+            scrollable=True,
         )
         self.on_media_retry = on_media_retry
         self.on_media_ignore = on_media_ignore
@@ -1085,15 +1293,6 @@ class HealthPage(Page):
         self._media_attention_count = 0
         self._media_ignored_count = 0
         self._media_issue_fingerprint: tuple = ()
-
-        self.tabs = QTabWidget()
-        self.tabs.setObjectName("HealthTabs")
-        self.body.addWidget(self.tabs, 1)
-
-        status, status_layout = self._make_scroll_tab()
-        lifecycle, lifecycle_layout = self._make_scroll_tab()
-        self.tabs.addTab(status, "Статус")
-        self.tabs.addTab(lifecycle, "Жизненный цикл медиа")
 
         self.overall = Card()
         o = QHBoxLayout(self.overall)
@@ -1110,7 +1309,7 @@ class HealthPage(Page):
         set_state_property(self.overall_pill, "STARTING")
         o.addLayout(texts, 1)
         o.addWidget(self.overall_pill)
-        status_layout.addWidget(self.overall)
+        self.body.addWidget(self.overall)
 
         grid = QGridLayout()
         grid.setSpacing(12)
@@ -1152,58 +1351,16 @@ class HealthPage(Page):
             self.cards[key] = (card, state, summary, updated)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
-        status_layout.addLayout(grid)
-
-        err = Card()
-        err_layout = QVBoxLayout(err)
-        err_layout.setContentsMargins(16, 14, 16, 14)
-        err_layout.addWidget(SectionHeader(
-            "Последняя критическая ошибка",
-            "Проблемы отдельных медиафайлов находятся на вкладке «Жизненный цикл медиа».",
-        ))
-        self.last_error = QLabel("Критических ошибок нет")
-        self.last_error.setWordWrap(True)
-        self.last_error.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.last_error.setStyleSheet(f"color:{MUTED};")
-        err_layout.addWidget(self.last_error)
-        status_layout.addWidget(err)
-        status_layout.addStretch(1)
-
-        lifecycle_layout.addWidget(SectionHeader(
-            "Жизненный цикл медиа",
-            "Discord-ссылки не вечные: здесь видно, что известно сейчас, что закэшировано, что очищено и что ждёт новой ссылки.",
-        ))
-        lifecycle_metrics = QGridLayout()
-        lifecycle_metrics.setHorizontalSpacing(12)
-        lifecycle_metrics.setVerticalSpacing(12)
-        self.media_total_card = MetricCard("Всего вложений", "—", "стабильные записи архива")
-        self.media_known_card = MetricCard("Известно", "—", "есть рабочая ссылка или локальная копия")
-        self.media_cached_card = MetricCard("Кэшировано", "—", "файл сохранён локально")
-        self.media_evicted_card = MetricCard("Кэш очищен", "—", "локальный файл удалён; метаданные сохранены")
-        self.media_attention_card = MetricCard("Требует внимания", "—", "ошибка или протухшая ссылка")
-        self.media_ignored_card = MetricCard("Обработано", "—", "игнорируется до очистки")
-        self.media_unresolved_card = MetricCard("Ждёт переобнаружения", "—", "нужна свежая ссылка Discord")
-        lifecycle_cards = [
-            self.media_total_card,
-            self.media_known_card,
-            self.media_cached_card,
-            self.media_evicted_card,
-            self.media_attention_card,
-            self.media_ignored_card,
-            self.media_unresolved_card,
-        ]
-        for i, card in enumerate(lifecycle_cards):
-            lifecycle_metrics.addWidget(card, i // 3, i % 3)
-        for col in range(3):
-            lifecycle_metrics.setColumnStretch(col, 1)
-        lifecycle_layout.addLayout(lifecycle_metrics)
+        self.body.addLayout(grid)
 
         runtime_card = Card()
         runtime_layout = QVBoxLayout(runtime_card)
         runtime_layout.setContentsMargins(16, 14, 16, 14)
         runtime_layout.setSpacing(8)
         runtime_top = QHBoxLayout()
-        runtime_top.addWidget(QLabel("Загрузка медиа"))
+        runtime_title = QLabel("Загрузка медиа")
+        runtime_title.setObjectName("SectionTitle")
+        runtime_top.addWidget(runtime_title)
         runtime_top.addStretch(1)
         self.media_runtime_state = QLabel("UNKNOWN")
         self.media_runtime_state.setStyleSheet(f"color:{MUTED};font-weight:750;")
@@ -1213,7 +1370,21 @@ class HealthPage(Page):
         self.media_runtime_summary.setWordWrap(True)
         runtime_layout.addLayout(runtime_top)
         runtime_layout.addWidget(self.media_runtime_summary)
-        lifecycle_layout.addWidget(runtime_card)
+        self.body.addWidget(runtime_card)
+
+        err = Card()
+        err_layout = QVBoxLayout(err)
+        err_layout.setContentsMargins(16, 14, 16, 14)
+        err_layout.addWidget(SectionHeader(
+            "Последняя критическая ошибка",
+            "Критические ошибки локального архива и подсистем DDS.",
+        ))
+        self.last_error = QLabel("Критических ошибок нет")
+        self.last_error.setWordWrap(True)
+        self.last_error.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.last_error.setStyleSheet(f"color:{MUTED};")
+        err_layout.addWidget(self.last_error)
+        self.body.addWidget(err)
 
         self.media_attention = Card()
         media_attention_layout = QVBoxLayout(self.media_attention)
@@ -1261,8 +1432,8 @@ class HealthPage(Page):
         media_actions.addStretch(1)
         media_actions.addWidget(self.media_clear_processed_button)
         media_attention_layout.addLayout(media_actions)
-        lifecycle_layout.addWidget(self.media_attention)
-        lifecycle_layout.addStretch(1)
+        self.body.addWidget(self.media_attention)
+        self.body.addStretch(1)
         self._update_media_action_state()
 
     @staticmethod
@@ -1424,14 +1595,7 @@ class HealthPage(Page):
 
         self._media_attention_count = attention_count
         self._media_ignored_count = ignored_count
-        self.media_total_card.set_data(str(total), "все вложения, которые архив когда-либо видел")
-        self.media_known_card.set_data(str(known), "доступны сейчас для работы или уже сохранены")
-        self.media_cached_card.set_data(str(cached), "локальные файлы медиакэша")
-        self.media_evicted_card.set_data(str(evicted_count), "локальный файл удалён; метаданные сохранены")
-        self.media_attention_card.set_data(str(attention_count), "нужна ручная проверка или решение")
-        self.media_ignored_card.set_data(str(ignored_count), "осознанно обработаны пользователем")
         source_gone_count = int(media_details.get("source_gone", stats.get("media_source_gone", 0)) or 0)
-        self.media_unresolved_card.set_data(str(unresolved_count), f"ждут новой ссылки · Источник удалён: {source_gone_count}")
         media_state = str(media_info.get("state") or "UNKNOWN")
         runtime_state_text = media_state
         if unresolved_count:

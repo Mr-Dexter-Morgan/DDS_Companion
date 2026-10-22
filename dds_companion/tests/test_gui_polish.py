@@ -90,9 +90,10 @@ class GuiPolishSourceContractTests(unittest.TestCase):
         self.assertIn('("updates", "Обновления")', pages)
         self.assertIn('("media", "Загрузка медиа")', pages)
         health = pages[pages.index("class HealthPage"):pages.index("class SettingsPage")]
-        self.assertIn('self.tabs.setObjectName("HealthTabs")', health)
-        self.assertIn('self.tabs.addTab(status, "Статус")', health)
-        self.assertIn('self.tabs.addTab(lifecycle, "Жизненный цикл медиа")', health)
+        self.assertNotIn('HealthTabs', health)
+        self.assertNotIn('addTab(lifecycle', health)
+        self.assertIn('self.body.addWidget(runtime_card)', health)
+        self.assertIn('self.body.addWidget(self.media_attention)', health)
         self.assertIn('Последняя попытка:', pages)
 
     def test_045_startup_foreground_is_one_shot_and_not_persistent_topmost(self):
@@ -219,7 +220,9 @@ class LibraryUx054SourceContractTests(unittest.TestCase):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         library = pages[pages.index("class LibraryPage"):pages.index("class ActivityPage")]
         self.assertIn('self.tree.setHeaderLabels(["Раздел", "Сообщений", "Медиа: известно / всего", "Выгрузка"])', library)
-        self.assertIn('QSplitter(Qt.Horizontal)', library)
+        self.assertNotIn('QSplitter(Qt.Horizontal)', library)
+        self.assertIn('self.library_tabs.addTab(self.navigation_tab, "НАВИГАЦИЯ")', library)
+        self.assertIn('self.library_tabs.addTab(self.viewer_tab, "ПРОСМОТР")', library)
         self.assertIn('QPushButton("Показать ещё")', library)
         self.assertIn('PAGE_SIZE = 50', library)
         self.assertNotIn('Поиск по серверу, каналу или теме…', library)
@@ -281,7 +284,11 @@ class LibraryUx054SourceContractTests(unittest.TestCase):
         pages = (self.root / "dds_companion/gui/pages.py").read_text(encoding="utf-8")
         window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
         health = pages[pages.index("class HealthPage"):pages.index("class SettingsPage")]
-        self.assertIn('"Жизненный цикл медиа"', health)
+        self.assertNotIn('Жизненный цикл медиа', health)
+        dashboard = pages[pages.index("class DashboardPage"):pages.index("class LibraryPage")]
+        self.assertIn('LifecycleMetricCard(', dashboard)
+        self.assertIn('"Источник удалён"', dashboard)
+        self.assertIn('i // 4, i % 4', dashboard)
         self.assertIn('QPushButton("Игнорировать всё")', health)
         self.assertIn('QPushButton("Очистить обработанные")', health)
         self.assertIn("on_media_ignore_all", health)

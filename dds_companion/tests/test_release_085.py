@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class Release085SourceContractTests(unittest.TestCase):
     def test_current_version_is_086(self):
-        self.assertEqual(__version__, "0.8.6")
+        self.assertEqual(__version__, "0.8.7")
 
     def test_accepted_overlay_is_the_runtime_boot_hook(self):
         launcher = (ROOT / "run_companion.pyw").read_text(encoding="utf-8")
