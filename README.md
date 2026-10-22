@@ -1,11 +1,9 @@
 # DDS — Discord Data Snatcher
 
-[![Скачать DDS 0.8.5](https://img.shields.io/badge/%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC_DDS-0.8.5-6C63FF?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/download/v0.8.5/DDS-0.8.5-windows-x64.zip)
+[![Скачать DDS 0.8.7](https://img.shields.io/badge/%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC_DDS-0.8.7-6C63FF?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/download/v0.8.7/DDS-0.8.7-windows-x64.zip)
 
 **Готовая сборка для Windows x64. Python устанавливать не нужно.**  
-Текущая версия: **DDS Companion 0.8.5 Stable Release**. До появления полноценного DDS Setup установка выполняется вручную.
-
-> **Development baseline:** `main` contains the accepted DDS Companion **0.8.6** source (SOURCE_GONE + Cache Cleared UI). Public Stable download remains **0.8.5**; this sync does not publish a GitHub Release.
+Текущая версия: **DDS Companion 0.8.7 Stable Release**. До появления полноценного DDS Setup установка выполняется вручную.
 
 ## Что такое DDS и зачем он нужен
 
@@ -42,10 +40,10 @@ DDS **не копирует весь Discord-сервер автоматичес
 
 ### 3. Установите DDS Plugin
 
-Текущая рекомендуемая версия плагина: **DDS Plugin 0.5.3**.
+Текущая рекомендуемая версия плагина: **DDS Plugin 0.5.4**.
 
-**[Скачать DDS.plugin.js](https://github.com/Mr-Dexter-Morgan/DDS_BD_Plugin/releases/download/v0.5.3/DDS.plugin.js)**  
-[Страница релиза DDS Plugin 0.5.3](https://github.com/Mr-Dexter-Morgan/DDS_BD_Plugin/releases/tag/v0.5.3)
+**[Скачать DDS.plugin.js](https://github.com/Mr-Dexter-Morgan/DDS_BD_Plugin/releases/download/v0.5.4/DDS.plugin.js)**  
+[Страница релиза DDS Plugin 0.5.4](https://github.com/Mr-Dexter-Morgan/DDS_BD_Plugin/releases/tag/v0.5.4)
 
 После загрузки:
 
@@ -61,17 +59,17 @@ DDS **не копирует весь Discord-сервер автоматичес
 
 ### 4. Скачайте DDS Companion
 
-Нажмите большую кнопку **СКАЧАТЬ DDS 0.8.5** в самом верху этой страницы.
+Нажмите большую кнопку **СКАЧАТЬ DDS 0.8.7** в самом верху этой страницы.
 
-Или откройте [релиз DDS Companion 0.8.5](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/tag/v0.8.5) и скачайте:
+Или откройте [релиз DDS Companion 0.8.7](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/tag/v0.8.7) и скачайте:
 
-`DDS-0.8.5-windows-x64.zip`
+`DDS-0.8.7-windows-x64.zip`
 
 **Не скачивайте** автоматически созданные GitHub-файлы **Source code (zip)** или **Source code (tar.gz)**, если вам нужно просто запустить программу. Это исходный код для разработчиков.
 
 ### 5. Запустите DDS
 
-1. Полностью распакуйте `DDS-0.8.5-windows-x64.zip` в отдельную папку.
+1. Полностью распакуйте `DDS-0.8.7-windows-x64.zip` в отдельную папку.
 2. Не вытаскивайте из сборки один `DDS.exe` отдельно — оставьте содержимое архива вместе.
 3. Запустите **`DDS.exe`**.
 
@@ -113,20 +111,21 @@ SQLite-архив является основным долговечным хр�
 
 </details>
 
-> **Важно:** DDS остаётся на линии **0.x**, но DDS Companion 0.8.5 опубликован как текущий стабильный релиз. Установка, Repair и полный DDS Setup развиваются отдельно в линии DDS Installer 0.1.x.
+> **Важно:** DDS остаётся на линии **0.x**, но DDS Companion 0.8.7 опубликован как текущий стабильный релиз. Установка, Repair и полный DDS Setup развиваются отдельно в линии DDS Installer 0.1.x.
 
 ---
 
 Ниже находится техническая информация о текущей версии, архитектуре, сборке и валидации.
 
-## What's new in 0.8.5
+## What's new in 0.8.7
 
-- Dedicated **О программе** tab, product branding and clearer Updates settings.
-- Media lifecycle reliability, passive rediscovery and targeted WebP metadata-size recovery.
-- Network Recovery QoL: human-facing connection errors, **Повторить всё**, and bounded 30-minute automatic re-arm.
-- Home Media Cache with 50 full I/O/T/L/J/S/Z tetrominoes, connected shapes, falling-piece startup animation and truthful numeric capacity.
-- Previously accepted 0.8.0 Desktop Lifecycle and 0.7.x updater/archive safety remain intact.
-
+- Redesigned **Главная** with clearer information hierarchy, local SVG icons and balanced summary cards.
+- Eight media lifecycle states are visible directly on Home in a 2×4 layout, including **Кэш очищен** and terminal **Источник удалён**.
+- **Библиотека** now uses full-width **НАВИГАЦИЯ | ПРОСМОТР** modes instead of a permanently split tree/view layout.
+- **Статус** is consolidated into one diagnostic page with media loading summary, critical error state and attention items.
+- SOURCE_GONE integration is live-accepted with DDS Plugin 0.5.4: positive Discord `CHANNEL_DELETE` evidence can terminalize uncached/unresolved media while cached media remains valid.
+- Current Session and Last Activity were compacted to reduce visual noise without removing data.
+- The accepted 0.8.7-r2 runtime UI was preserved; the only post-live CI correction changed an outdated test expectation from `КЭШ ОЧИЩЕН` to the accepted label `Кэш очищен`.
 ## Preserved desktop/updater foundation from 0.8.0
 
 - System tray lifecycle with **Открыть DDS**, **Скрыть DDS** and **Выйти из DDS**.
@@ -201,13 +200,21 @@ Expected output:
 
 DDS Companion 0.8.0 was accepted from exact source commit `4b691fe8369cf277e78a78323cb99c96b2fdeae7`. Windows CI passed 184 tests × 3, compile/version verification, native Windows build and package verification. The exact CI manual-test bundle passed the user Windows live gate, including tray-only autostart and clean tray exit. The same accepted CI run produced the published full Windows ZIP (SHA-256 `09d92556d391328cfcf0618b0ab363c843e486bb6ee4bfd7cd97049ee6a7860c`) and verified update package.
 
-DDS Companion **0.8.5** was promoted from Windows-live-tested local candidate r1. The accepted implementation overlay is byte-identical to the Drive archived 0.8.5 overlay; the exact accepted candidate ZIP SHA-256 is `bca3633a5d38a254621ee161af6d058de29eb5bf81ad7e8a706e7dc14f358d57`. PR #5 Windows CI and the main publication workflows passed; release/tag source commit is `66e730de44a60e531b00f7e981b62ec6c6bb27f8`. The separately CI-built published full ZIP SHA-256 is `6d44b1dd1c8a8d12e3013a05a263dd83bd5742bf0b09259234fb176fc69a5d02` and the update ZIP SHA-256 is `62ee08337fa9e2290697847f7aff76d3fff88b43f7130a86f785fc99d0b637e1`.
+DDS Companion **0.8.7** was promoted from Windows-live-tested local candidate r1. The accepted implementation overlay is byte-identical to the Drive archived 0.8.7 overlay; the exact accepted candidate ZIP SHA-256 is `bca3633a5d38a254621ee161af6d058de29eb5bf81ad7e8a706e7dc14f358d57`. PR #5 Windows CI and the main publication workflows passed; release/tag source commit is `66e730de44a60e531b00f7e981b62ec6c6bb27f8`. The separately CI-built published full ZIP SHA-256 is `6d44b1dd1c8a8d12e3013a05a263dd83bd5742bf0b09259234fb176fc69a5d02` and the update ZIP SHA-256 is `62ee08337fa9e2290697847f7aff76d3fff88b43f7130a86f785fc99d0b637e1`.
+
+DDS Companion **0.8.7** was promoted from the user-live-accepted **0.8.7-r2** candidate. PR #7 Windows CI run `39850305855` passed regression, compile/version checks, native Windows build, package verification and artifact upload. The stable publication workflow run `39850816081` passed regression, native build, payload verification and GitHub Release publication.
+
+Release/tag target commit: `0df1244375f9c40aafc3e9f1d4803f317148ecb3`.
+Accepted r2 source candidate SHA-256: `3070da0a1a3ba7a6ff578af033f0b7e3376f24f5092f00a706154335568f5d44`.
+Published full Windows ZIP SHA-256: `292c2fb0532d155302c0dc32c19f75def77c5bc1d27812003482ba7554305fc0`.
+Published update ZIP SHA-256: `d107b0a8b17c61ac5ca9a309a75dd32517b6cf05f7cdef0c1515d0643aa3837a`.
+Plugin integration baseline: DDS Plugin `0.5.4`, released and user-accepted.
 
 Historical validation for earlier 0.7.x builds and 0.8.0 candidate iterations remains preserved in the project evidence.
 
 ## Roadmap
 
-0.8.5 is the current stable release. The next productization work is the independent DDS Installer 0.1.x Setup / Repair line. DDS Companion remains on 0.8.x until Companion code itself changes. See ROADMAP.md.
+0.8.7 is the current stable release. The independent DDS Installer line continues separately; future Companion work remains on its own semver and must pass the same sandbox → live-test → explicit acceptance → GitHub release gate. See ROADMAP.md.
 
 ## Project documentation
 
