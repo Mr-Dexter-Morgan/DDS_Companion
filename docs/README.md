@@ -7,14 +7,16 @@ This directory keeps historical documentation out of the repository root without
 - [ROADMAP](../ROADMAP.md) — current engineering direction and release gates.
 
 ## Release history
-- [Release notes 0.8.5](releases/RELEASE_NOTES_0.8.5.md) — current Stable Release.
+- [Release notes 0.8.7](releases/RELEASE_NOTES_0.8.7.md) — current Stable Release.
+- [Release notes 0.8.5](releases/RELEASE_NOTES_0.8.5.md) — previous Stable Release.
 - [Release notes 0.8.0](releases/RELEASE_NOTES_0.8.0.md) — previous Stable Release.
 - [Release notes 0.7.1](releases/RELEASE_NOTES_0.7.1.md) — historical Public Preview.
 - [Release notes 0.7.0](releases/RELEASE_NOTES_0.7.0.md) — frozen, not published as a standalone Release.
 - [Release notes 0.6.2](releases/RELEASE_NOTES_0.6.2.md) — first public Windows binary release.
 
 ## Validation evidence
-- [0.8.6 SOURCE_GONE validation](validation/0.8.6/VALIDATION_0.8.6.md) — accepted development baseline evidence.
+- [0.8.7 final validation](validation/0.8.7/VALIDATION_0.8.7.md) — user-accepted r2, Windows CI PASS and stable release publication.
+- [0.8.6 SOURCE_GONE validation](validation/0.8.6/VALIDATION_0.8.6.md) — development baseline evidence.
 - [0.8.6 EVICTED UI validation](validation/0.8.6/VALIDATION_EVICTED_UI_R1.md) — Cache Cleared UI-r1, 209/209 Windows regression PASS.
 - [0.7.0 final validation](validation/0.7.0/VALIDATION.txt).
 - [0.7.0 Windows live checklist](validation/0.7.0/LIVE_TEST_CHECKLIST.txt).
