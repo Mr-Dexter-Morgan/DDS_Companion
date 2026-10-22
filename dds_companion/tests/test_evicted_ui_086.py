@@ -139,7 +139,7 @@ class EvictedUi086Tests(unittest.TestCase):
 
         self.assertEqual(page.media_known_card.value_label.text(), "143")
         self.assertEqual(page.media_cached_card.value_label.text(), "30")
-        self.assertEqual(page.media_evicted_card.title_label.text(), "КЭШ ОЧИЩЕН")
+        self.assertEqual(page.media_evicted_card.title_label.text(), "Кэш очищен")
         self.assertEqual(page.media_evicted_card.value_label.text(), "113")
         self.assertIn("метаданные сохранены", page.media_evicted_card.hint_label.text())
         self.assertEqual(page.media_unresolved_card.value_label.text(), "6")
