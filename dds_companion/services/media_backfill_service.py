@@ -181,6 +181,9 @@ class MediaBackfillService:
         stamp = stamp_dt.isoformat()
         recovered = self._recover_abandoned(stamp_dt)
         healed = self.registry.reconcile_cached_files(self.media_root)
+        from dds_companion.services.source_evidence_service import SourceEvidenceService
+        with self.connection:
+            SourceEvidenceService(self.connection).apply_verified()
 
         queued = skipped = too_large = retry_promoted = 0
         safe_limit = max(1, min(int(limit), 2000))
@@ -349,6 +352,7 @@ class MediaBackfillService:
             "evicted": counts.get("EVICTED", 0),
             "ignored": counts.get("IGNORED", 0),
             "unresolved": unresolved,
+            "source_gone": counts.get("SOURCE_GONE", 0),
             "attention": attention,
         }
 
@@ -696,6 +700,11 @@ class MediaBackfillService:
                     ),
                 )
 
+            if state == "UNRESOLVED":
+                from dds_companion.services.source_evidence_service import SourceEvidenceService
+                SourceEvidenceService(self.connection).apply_verified()
+                row = self.connection.execute("SELECT state FROM media_objects WHERE media_key=?", (outcome.media_key,)).fetchone()
+                state = row["state"] if row else state
         self._publish_outcome(outcome, effective_state=state, next_retry_at=next_retry_at)
 
     def _publish_outcome(self, outcome: DownloadOutcome, *, effective_state: str, next_retry_at: str | None) -> None:
@@ -715,12 +724,13 @@ class MediaBackfillService:
             )
             return
 
-        level = "WARNING"
+        level = "INFO" if effective_state == "SOURCE_GONE" else "WARNING"
         if effective_state in {"FAILED_PERMANENT"}:
             level = "ERROR"
         event_type = {
             "STALE_URL": "media_url_stale",
             "UNRESOLVED": "media_awaiting_rediscovery",
+            "SOURCE_GONE": "media_source_gone",
             "FAILED_RETRYABLE": "media_retry_scheduled",
             "FAILED_PERMANENT": "media_failed_permanent",
             "TOO_LARGE": "media_skipped_too_large",

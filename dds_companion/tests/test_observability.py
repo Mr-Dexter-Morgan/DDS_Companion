@@ -363,7 +363,7 @@ class ObservabilityTests(unittest.TestCase):
         )
         legacy.commit()
         apply_migrations(legacy)
-        self.assertEqual(legacy.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0], "4")
+        self.assertEqual(legacy.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0], "5")
         self.assertEqual(legacy.execute("SELECT name FROM guilds WHERE id='1'").fetchone()[0], "keep-me")
         tables = {row[0] for row in legacy.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         self.assertIn("activity_events", tables)

@@ -125,6 +125,8 @@ class ExportPackageService:
                 else:
                     if state in {"UNRESOLVED", "STALE_URL"}:
                         package_state = "awaiting_rediscovery"
+                    elif state == "SOURCE_GONE":
+                        package_state = "source_gone"
                     elif state == "CACHED" and source is None:
                         package_state = "cache_file_missing"
                     elif mode == "TEXT_ONLY":

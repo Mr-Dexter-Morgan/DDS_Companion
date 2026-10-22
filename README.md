@@ -5,6 +5,8 @@
 **Готовая сборка для Windows x64. Python устанавливать не нужно.**  
 Текущая версия: **DDS Companion 0.8.5 Stable Release**. До появления полноценного DDS Setup установка выполняется вручную.
 
+> **Development baseline:** `main` contains the accepted DDS Companion **0.8.6** source (SOURCE_GONE + Cache Cleared UI). Public Stable download remains **0.8.5**; this sync does not publish a GitHub Release.
+
 ## Что такое DDS и зачем он нужен
 
 **DDS — Discord Data Snatcher** — локальный архиватор Discord.

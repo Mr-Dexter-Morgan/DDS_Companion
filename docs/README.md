@@ -14,6 +14,8 @@ This directory keeps historical documentation out of the repository root without
 - [Release notes 0.6.2](releases/RELEASE_NOTES_0.6.2.md) — first public Windows binary release.
 
 ## Validation evidence
+- [0.8.6 SOURCE_GONE validation](validation/0.8.6/VALIDATION_0.8.6.md) — accepted development baseline evidence.
+- [0.8.6 EVICTED UI validation](validation/0.8.6/VALIDATION_EVICTED_UI_R1.md) — Cache Cleared UI-r1, 209/209 Windows regression PASS.
 - [0.7.0 final validation](validation/0.7.0/VALIDATION.txt).
 - [0.7.0 Windows live checklist](validation/0.7.0/LIVE_TEST_CHECKLIST.txt).
 - [0.6.2 Windows live checklist](validation/0.6.2/LIVE_TEST_CHECKLIST.txt).

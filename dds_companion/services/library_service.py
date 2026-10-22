@@ -140,9 +140,11 @@ class LibraryService:
         return {
             "media_known": int(counts.get("known", 0)),
             "media_cached": int(counts.get("cached", 0)),
+            "media_evicted": int(counts.get("evicted", 0)),
             "media_attention": int(counts.get("attention", 0)),
             "media_ignored": int(counts.get("ignored", 0)),
             "media_unresolved": int(counts.get("unresolved", 0)),
+            "media_source_gone": int(counts.get("source_gone", 0)),
         }
 
     def _media_lifecycle_by_scope(self) -> dict[tuple[str, str], dict[str, int]]:
@@ -168,14 +170,16 @@ class LibraryService:
         def bump(scope: tuple[str, str], state: str, current_url: str | None) -> None:
             counts = result.setdefault(
                 scope,
-                {"known": 0, "cached": 0, "attention": 0, "ignored": 0, "unresolved": 0},
+                {"known": 0, "cached": 0, "evicted": 0, "attention": 0, "ignored": 0, "unresolved": 0, "source_gone": 0},
             )
             normalized = str(state or "").upper()
             has_url = bool(str(current_url or "").strip())
             if normalized == "CACHED":
                 counts["cached"] += 1
+            elif normalized == "EVICTED":
+                counts["evicted"] += 1
             if normalized == "CACHED" or (
-                has_url and normalized not in {"STALE_URL", "IGNORED", "UNRESOLVED"}
+                has_url and normalized not in {"STALE_URL", "IGNORED", "UNRESOLVED", "SOURCE_GONE"}
             ):
                 counts["known"] += 1
             if normalized == "FAILED_PERMANENT":
@@ -184,6 +188,8 @@ class LibraryService:
                 counts["ignored"] += 1
             elif normalized in {"UNRESOLVED", "STALE_URL"}:
                 counts["unresolved"] += 1
+            elif normalized == "SOURCE_GONE":
+                counts["source_gone"] += 1
 
         for row in rows:
             guild_id = str(row["guild_id"] or "")
@@ -331,8 +337,8 @@ class LibraryService:
             f"""
             SELECT a.message_id, a.position, a.attachment_id, a.filename, a.title,
                    a.description, a.content_type, a.size, a.width, a.height,
-                   mr.media_key, mo.state AS media_state, mo.local_relpath,
-                   mo.local_size
+                   mr.media_key, mo.state AS media_state, mo.failure_class AS media_failure_class,
+                   mo.local_relpath, mo.local_size
             FROM attachments a
             LEFT JOIN media_refs mr
                    ON mr.message_id=a.message_id AND mr.position=a.position
@@ -356,6 +362,7 @@ class LibraryService:
                     "height": row["height"],
                     "media_key": row["media_key"],
                     "media_state": row["media_state"] or "KNOWN",
+                    "media_failure_class": row["media_failure_class"],
                     "local_relpath": row["local_relpath"],
                     "local_size": row["local_size"],
                 }
