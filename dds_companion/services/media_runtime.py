@@ -214,7 +214,7 @@ class MediaBackfillRuntime:
                     state = "LIMITED" if limited else "RUNNING"
                     summary = (
                         f"Всего: {counts['total']} · известно: {counts['known']} · кэшировано: {counts['cached']}"
-                        f" · очередь: {counts['queued']} · загрузка: {counts['downloading']}"
+                        f" · кэш очищен: {counts['evicted']} · очередь: {counts['queued']} · загрузка: {counts['downloading']}"
                     )
                     if attention_count:
                         summary += f" · требует внимания: {attention_count}"

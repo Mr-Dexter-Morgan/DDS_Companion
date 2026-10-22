@@ -313,7 +313,7 @@ def main():
     # its UI/core modules and builds snapshots.
     import dds_companion
 
-    dds_companion.__version__ = "0.8.5"
+    dds_companion.__version__ = "0.8.6"
     _patch_media_size_policy()
 
     from PySide6.QtCore import Qt, QTimer, QRectF, QPointF
@@ -522,6 +522,7 @@ def main():
             self.available = self._row(root, "Доступно", "#46E6A5")
             self.unresolved = self._row(root, "Ждут переобнаружения", "#FFC84A")
             self.attention = self._row(root, "Требуют внимания", "#FF5F75")
+            self.source_gone = self._row(root, "Источник удалён", "#8FA6CF")
             line = QFrame()
             line.setFrameShape(QFrame.HLine)
             line.setStyleSheet("color:#29364F;")
@@ -613,6 +614,7 @@ def main():
             self.state.available.setText(_fmt_count(stats.get("cached_media_files")))
             self.state.unresolved.setText(_fmt_count(stats.get("media_unresolved")))
             self.state.attention.setText(_fmt_count(stats.get("media_attention")))
+            self.state.source_gone.setText(_fmt_count(stats.get("media_source_gone")))
             self.field.set_percent(percent)
 
     class AboutBanner(QWidget):
@@ -856,7 +858,7 @@ def main():
             grid = QVBoxLayout(info)
             grid.setContentsMargins(18, 16, 18, 16)
             grid.setSpacing(10)
-            self._dds_about_version = self._dds_info_row(grid, "Версия Companion", "0.8.5")
+            self._dds_about_version = self._dds_info_row(grid, "Версия Companion", "0.8.6")
             self._dds_about_plugin = self._dds_info_row(grid, "Версия Plugin", "—")
             self._dds_about_contract = self._dds_info_row(grid, "Контракт захвата", "—")
             self._dds_info_row(grid, "Авторы", "Mr_Dexter_Morgan · Masya")
@@ -902,7 +904,7 @@ def main():
             return right
 
         def _dds_copy_version_info(self):
-            companion = self._dds_about_version.text() if self._dds_about_version else "0.8.5"
+            companion = self._dds_about_version.text() if self._dds_about_version else "0.8.6"
             plugin = self._dds_about_plugin.text() if self._dds_about_plugin else "—"
             contract = self._dds_about_contract.text() if self._dds_about_contract else "—"
             text = "\n".join((
@@ -917,8 +919,8 @@ def main():
             super().update_snapshot(snapshot)
             try:
                 if self._dds_about_version is not None:
-                    value = self.version_value.text().strip() if hasattr(self, "version_value") else "0.8.5"
-                    self._dds_about_version.setText(value or "0.8.5")
+                    value = self.version_value.text().strip() if hasattr(self, "version_value") else "0.8.6"
+                    self._dds_about_version.setText(value or "0.8.6")
                 if self._dds_about_plugin is not None:
                     value = self.plugin_value.text().strip() if hasattr(self, "plugin_value") else "—"
                     self._dds_about_plugin.setText(value or "—")

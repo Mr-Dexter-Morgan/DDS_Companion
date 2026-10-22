@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from dataclasses import dataclass
@@ -68,7 +69,7 @@ class ImportService:
         guilds = root / "guilds"
         if not guilds.is_dir():
             return []
-        return sorted(guilds.glob("**/capture.json"))
+        return sorted(guilds.glob("**/capture.json")) + sorted(guilds.glob("*/channels/*/source_evidence.json"))
 
     def import_all(self, dds_data_root: str | Path) -> ImportResult:
         result = ImportResult()
@@ -84,6 +85,12 @@ class ImportService:
     def import_file(self, path: str | Path) -> ImportResult:
         if self._before_reset_boundary(path):
             return ImportResult(skipped_before_boundary=1)
+        if Path(path).name == "source_evidence.json":
+            from dds_companion.services.source_evidence_service import SourceEvidenceService
+            with self.connection:
+                changed = SourceEvidenceService(self.connection).import_file(Path(path))
+                self._resolve_failures_for_target(str(Path(path).resolve()), utc_now())
+            return ImportResult(imported=int(changed), skipped_unchanged=int(not changed))
         parsed = parse_capture(path)
         if self._already_imported(parsed):
             return ImportResult(skipped_unchanged=1)
@@ -346,6 +353,8 @@ class ImportService:
                     ),
                 )
 
+                from dds_companion.services.source_evidence_service import SourceEvidenceService
+                SourceEvidenceService(self.connection).apply_verified()
                 self._set_state("last_successful_import", now)
                 self._resolve_failures_for_target(str(parsed.path.resolve()), now)
 

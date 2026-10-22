@@ -20,6 +20,7 @@ MEDIA_STATES = {
     "EVICTED",
     "IGNORED",
     "UNRESOLVED",
+    "SOURCE_GONE",
 }
 
 
@@ -163,7 +164,7 @@ class MediaRegistryService:
             expected_size = None
 
         previous = self.connection.execute(
-            "SELECT state, current_url, local_relpath FROM media_objects WHERE media_key=?",
+            "SELECT state, current_url, local_relpath, updated_at FROM media_objects WHERE media_key=?",
             (media_key,),
         ).fetchone()
 
@@ -187,6 +188,15 @@ class MediaRegistryService:
                 state = "CACHED"
                 reset_attempts = False
                 preserve_cache = True
+            elif previous_state == "SOURCE_GONE":
+                from dds_companion.services.source_evidence_service import SourceEvidenceService
+                if SourceEvidenceService(self.connection).can_recover(media_key, str(message_id), current_url, stamp, previous["current_url"], previous["updated_at"]):
+                    state = "KNOWN"
+                else:
+                    state = "SOURCE_GONE"
+                    reset_attempts = False
+                    # Replaying an older capture must not replace the retained URL.
+                    current_url = previous["current_url"] or current_url
             elif (previous["current_url"] or None) == current_url:
                 # Preserve a meaningful existing lifecycle state when the capture
                 # merely repeats the same attachment metadata.
@@ -219,7 +229,8 @@ class MediaRegistryService:
                 url_observed_at=excluded.url_observed_at,
                 state=?,
                 last_seen_at=excluded.last_seen_at,
-                updated_at=excluded.updated_at,
+                updated_at=CASE WHEN media_objects.state='SOURCE_GONE' AND excluded.state='SOURCE_GONE'
+                    THEN media_objects.updated_at ELSE excluded.updated_at END,
                 attempt_count=CASE WHEN ? THEN 0 ELSE media_objects.attempt_count END,
                 next_retry_at=CASE WHEN ? THEN NULL ELSE media_objects.next_retry_at END,
                 last_attempt_at=CASE WHEN ? THEN NULL ELSE media_objects.last_attempt_at END,
@@ -310,7 +321,7 @@ class MediaRegistryService:
                    OR (
                         mo.current_url IS NOT NULL
                         AND TRIM(mo.current_url) <> ''
-                        AND mo.state NOT IN ('STALE_URL', 'IGNORED', 'UNRESOLVED')
+                        AND mo.state NOT IN ('STALE_URL', 'IGNORED', 'UNRESOLVED', 'SOURCE_GONE')
                    )
                 """
             ).fetchone()[0]

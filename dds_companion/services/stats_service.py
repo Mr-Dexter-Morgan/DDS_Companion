@@ -66,6 +66,7 @@ class StatsSnapshot:
     media_evicted: int
     media_ignored: int
     media_unresolved: int
+    media_source_gone: int
     media_attention: int
     sqlite_bytes: int
     dds_json_bytes: int
@@ -194,7 +195,7 @@ class StatsService:
                    OR (
                         mo.current_url IS NOT NULL
                         AND TRIM(mo.current_url) <> ''
-                        AND mo.state NOT IN ('STALE_URL', 'IGNORED', 'UNRESOLVED')
+                        AND mo.state NOT IN ('STALE_URL', 'IGNORED', 'UNRESOLVED', 'SOURCE_GONE')
                    )
                 """
             ).fetchone()[0]
@@ -227,6 +228,7 @@ class StatsService:
             "media_evicted": media_states.get("EVICTED", 0),
             "media_ignored": media_states.get("IGNORED", 0),
             "media_unresolved": media_unresolved,
+            "media_source_gone": media_states.get("SOURCE_GONE", 0),
             "media_attention": media_attention,
             "last_successful_import": last_import_row[0] if last_import_row else None,
             **storage,

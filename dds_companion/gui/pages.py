@@ -533,9 +533,11 @@ class LibraryPage(Page):
             "media_count": int(data.get("media_count", 0)),
             "media_known": int(data.get("media_known", 0)),
             "media_cached": int(data.get("media_cached", 0)),
+            "media_evicted": int(data.get("media_evicted", 0)),
             "media_attention": int(data.get("media_attention", 0)),
             "media_ignored": int(data.get("media_ignored", 0)),
             "media_unresolved": int(data.get("media_unresolved", 0)),
+            "media_source_gone": int(data.get("media_source_gone", 0)),
             "export_rule": str(data.get("export_rule") or "DEFAULT"),
             "default_export_rule": str(data.get("default_export_rule") or "EXCLUDE"),
             "effective_export_rule": str(data.get("effective_export_rule") or "EXCLUDE"),
@@ -546,16 +548,21 @@ class LibraryPage(Page):
         total = int(data.get("media_count", 0) or 0)
         known = int(data.get("media_known", 0) or 0)
         cached = int(data.get("media_cached", 0) or 0)
+        evicted = int(data.get("media_evicted", 0) or 0)
         attention = int(data.get("media_attention", 0) or 0)
         unresolved = int(data.get("media_unresolved", 0) or 0)
         ignored = int(data.get("media_ignored", 0) or 0)
         parts = [f"{known}/{total} изв.", f"{cached} кэш"]
+        if evicted:
+            parts.append(f"{evicted} кэш очищен")
         if attention:
             parts.append(f"{attention} внимание")
         if ignored:
             parts.append(f"{ignored} обработано")
         if unresolved:
             parts.append(f"{unresolved} ждёт")
+        if data.get("media_source_gone"):
+            parts.append(f"{data['media_source_gone']} · Источник удалён")
         return " · ".join(parts)
 
     @staticmethod
@@ -564,9 +571,11 @@ class LibraryPage(Page):
             f"Всего вложений: {int(data.get('media_count', 0) or 0)}\n"
             f"Известно сейчас: {int(data.get('media_known', 0) or 0)}\n"
             f"Кэшировано: {int(data.get('media_cached', 0) or 0)}\n"
+            f"Кэш очищен: {int(data.get('media_evicted', 0) or 0)}\n"
             f"Требует внимания: {int(data.get('media_attention', 0) or 0)}\n"
             f"Обработано: {int(data.get('media_ignored', 0) or 0)}\n"
-            f"Ждёт переобнаружения: {int(data.get('media_unresolved', 0) or 0)}"
+            f"Ждёт переобнаружения: {int(data.get('media_unresolved', 0) or 0)}\n"
+            f"Источник удалён: {int(data.get('media_source_gone', 0) or 0)}"
         )
 
     def _tree_item(self, label: str, data: dict, detail: dict, *, bold: bool = False) -> QTreeWidgetItem:
@@ -718,6 +727,8 @@ class LibraryPage(Page):
             media += f" · {detail.get('media_attention', 0)} требуют внимания"
         if int(detail.get("media_unresolved", 0)):
             media += f" · {detail.get('media_unresolved', 0)} ждут ссылку"
+        if int(detail.get("media_source_gone", 0)):
+            media += f" · Источник удалён: {detail['media_source_gone']}"
         if detail.get("kind") == "channel":
             direct = int(detail.get("direct_message_count", 0))
             total = int(detail.get("message_count", 0))
@@ -869,7 +880,18 @@ class LibraryPage(Page):
         if size is not None:
             details.append(human_size(int(size)))
         state = str(attachment.get("media_state") or "KNOWN")
-        details.append("сохранено локально" if state == "CACHED" else "не сохранено локально")
+        failure_class = str(attachment.get("media_failure_class") or "")
+        availability = {"CACHED": "сохранено локально", "SOURCE_GONE": "Источник удалён"}
+        if state == "EVICTED":
+            if failure_class == "evicted_policy":
+                availability_text = "кэш очищен по настройкам хранения"
+            elif failure_class == "evicted_manual_clear":
+                availability_text = "кэш очищен вручную"
+            else:
+                availability_text = "локальный кэш очищен"
+        else:
+            availability_text = availability.get(state, "не сохранено локально")
+        details.append(availability_text)
         meta = QLabel(" · ".join(details))
         meta.setObjectName("SectionHint")
         layout.addWidget(meta)
@@ -1149,7 +1171,7 @@ class HealthPage(Page):
 
         lifecycle_layout.addWidget(SectionHeader(
             "Жизненный цикл медиа",
-            "Discord-ссылки не вечные: здесь видно, что известно сейчас, что уже закэшировано и что ждёт новой ссылки.",
+            "Discord-ссылки не вечные: здесь видно, что известно сейчас, что закэшировано, что очищено и что ждёт новой ссылки.",
         ))
         lifecycle_metrics = QGridLayout()
         lifecycle_metrics.setHorizontalSpacing(12)
@@ -1157,6 +1179,7 @@ class HealthPage(Page):
         self.media_total_card = MetricCard("Всего вложений", "—", "стабильные записи архива")
         self.media_known_card = MetricCard("Известно", "—", "есть рабочая ссылка или локальная копия")
         self.media_cached_card = MetricCard("Кэшировано", "—", "файл сохранён локально")
+        self.media_evicted_card = MetricCard("Кэш очищен", "—", "локальный файл удалён; метаданные сохранены")
         self.media_attention_card = MetricCard("Требует внимания", "—", "ошибка или протухшая ссылка")
         self.media_ignored_card = MetricCard("Обработано", "—", "игнорируется до очистки")
         self.media_unresolved_card = MetricCard("Ждёт переобнаружения", "—", "нужна свежая ссылка Discord")
@@ -1164,6 +1187,7 @@ class HealthPage(Page):
             self.media_total_card,
             self.media_known_card,
             self.media_cached_card,
+            self.media_evicted_card,
             self.media_attention_card,
             self.media_ignored_card,
             self.media_unresolved_card,
@@ -1391,6 +1415,7 @@ class HealthPage(Page):
         total = int(media_details.get("total", stats.get("total_media", 0)) or 0)
         known = int(media_details.get("known", stats.get("known_media", 0)) or 0)
         cached = int(media_details.get("cached", stats.get("cached_media_files", 0)) or 0)
+        evicted_count = int(media_details.get("evicted", stats.get("media_evicted", 0)) or 0)
         attention_count = int(media_details.get("attention_count", media_details.get("attention", stats.get("media_attention", 0))) or 0)
         ignored_count = int(media_details.get("ignored", stats.get("media_ignored", 0)) or 0)
         unresolved_count = int(media_details.get("unresolved", stats.get("media_unresolved", 0)) or 0)
@@ -1402,9 +1427,11 @@ class HealthPage(Page):
         self.media_total_card.set_data(str(total), "все вложения, которые архив когда-либо видел")
         self.media_known_card.set_data(str(known), "доступны сейчас для работы или уже сохранены")
         self.media_cached_card.set_data(str(cached), "локальные файлы медиакэша")
+        self.media_evicted_card.set_data(str(evicted_count), "локальный файл удалён; метаданные сохранены")
         self.media_attention_card.set_data(str(attention_count), "нужна ручная проверка или решение")
         self.media_ignored_card.set_data(str(ignored_count), "осознанно обработаны пользователем")
-        self.media_unresolved_card.set_data(str(unresolved_count), "ждут новой ссылки из Discord")
+        source_gone_count = int(media_details.get("source_gone", stats.get("media_source_gone", 0)) or 0)
+        self.media_unresolved_card.set_data(str(unresolved_count), f"ждут новой ссылки · Источник удалён: {source_gone_count}")
         media_state = str(media_info.get("state") or "UNKNOWN")
         runtime_state_text = media_state
         if unresolved_count:
@@ -1412,9 +1439,9 @@ class HealthPage(Page):
         self.media_runtime_state.setText(runtime_state_text)
         self.media_runtime_state.setStyleSheet(f"color:{state_color(media_state)};font-weight:750;")
         self.media_runtime_summary.setText(
-            f"Известно: {known} из {total} · кэшировано: {cached} · очередь: {queued} · "
+            f"Известно: {known} из {total} · кэшировано: {cached} · кэш очищен: {evicted_count} · очередь: {queued} · "
             f"загружается: {downloading} · внимание: {attention_count} · обработано: {ignored_count} · "
-            f"ждёт переобнаружения: {unresolved_count}"
+            f"ждёт переобнаружения: {unresolved_count} · Источник удалён: {source_gone_count}"
         )
 
         issues = list(media_details.get("attention_items") or [])

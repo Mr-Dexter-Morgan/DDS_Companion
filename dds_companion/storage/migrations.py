@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 BASE_SCHEMA_SQL = r"""
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -270,16 +270,31 @@ CREATE INDEX IF NOT EXISTS idx_archive_export_rules_mode
 """
 
 
+V5_SCHEMA_SQL = r"""
+CREATE TABLE IF NOT EXISTS source_channel_evidence (
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    channel_type INTEGER NOT NULL,
+    deleted_at TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    audit_entry_id TEXT NOT NULL,
+    evidence_json TEXT NOT NULL,
+    PRIMARY KEY(guild_id, channel_id)
+);
+"""
+
+
 def apply_migrations(connection: sqlite3.Connection) -> None:
     """Apply additive migrations in place.
 
-    Migrations are additive. 0.5.4 adds future-export selection rules without
-    rewriting archive/message/media tables, so older verified databases upgrade in place.
+    Migrations are additive. V5 stores source deletion proof separately without
+    rewriting archive/message/media tables or guessing any old lifecycle state.
     """
     connection.executescript(BASE_SCHEMA_SQL)
     connection.executescript(V2_SCHEMA_SQL)
     connection.executescript(V3_SCHEMA_SQL)
     connection.executescript(V4_SCHEMA_SQL)
+    connection.executescript(V5_SCHEMA_SQL)
     connection.execute(
         "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",

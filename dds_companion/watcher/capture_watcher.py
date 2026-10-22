@@ -83,7 +83,7 @@ class CaptureWatcher:
             return {}
 
         found: dict[Path, FileSignature] = {}
-        for path in guilds.glob("**/capture.json"):
+        for path in self.importer.discover_capture_files(self.dds_data_root):
             try:
                 stat = path.stat()
             except OSError:
