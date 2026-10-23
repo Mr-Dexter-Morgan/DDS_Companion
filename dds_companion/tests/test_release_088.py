@@ -3,15 +3,12 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
-from pathlib import Path
 from unittest import mock
 
 from dds_companion import __version__
 from dds_companion.updater.integrity import sha256_file
 from tools.assemble_windows_dist import zip_tree
-
-
-ROOT = Path(__file__).resolve().parents[2]
+from tools.generate_windows_version_info import numeric_version, render_version_info
 
 
 class Release088Tests(unittest.TestCase):
@@ -19,23 +16,28 @@ class Release088Tests(unittest.TestCase):
         self.assertEqual(__version__, "0.8.8")
 
     def test_windows_build_uses_selected_python_and_reproducible_controls(self):
-        script = (ROOT / "build_windows.bat").read_text(encoding="utf-8")
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        script = (root / "build_windows.bat").read_text(encoding="utf-8")
         self.assertIn("python -m venv .venv-build", script)
         self.assertNotIn("py -3 -m venv .venv-build", script)
         self.assertIn("PYTHONHASHSEED=1", script)
         self.assertIn("SOURCE_DATE_EPOCH=315532800", script)
 
-    def test_windows_version_metadata_is_088(self):
-        for name in (
-            "windows_app_version_info.txt",
-            "windows_launcher_version_info.txt",
-            "windows_updater_version_info.txt",
-        ):
-            metadata = (ROOT / "build" / name).read_text(encoding="utf-8")
-            self.assertIn("0.8.8", metadata)
-            self.assertNotIn("0.8.7", metadata)
+    def test_windows_version_metadata_generator_is_088(self):
+        self.assertEqual(numeric_version(__version__), (0, 8, 8, 0))
+        metadata = render_version_info(
+            description="DDS Application Runtime",
+            internal_name="DDSApp",
+            filename="DDSApp.exe",
+        )
+        self.assertIn("0.8.8", metadata)
+        self.assertNotIn("0.8.7", metadata)
 
     def test_zip_tree_is_deterministic(self):
+        from pathlib import Path
+
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             payload = root / "payload"

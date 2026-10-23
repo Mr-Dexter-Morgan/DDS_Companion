@@ -1,97 +1,67 @@
 # DDS Companion Roadmap
 
-Current public baseline: **v0.8.7 Stable Release**. Home/Status/Library UI reorganization and SOURCE_GONE integration are released and user-accepted. DDS Installer continues as an independent product line and does not advance DDS Companion version.
+Current public baseline: **v0.8.8 Stable Release / User Accepted**.
 
-## Non-negotiable architecture rules
+## Неподвижные правила архитектуры
 
-- SQLite/local archive remains the source of truth.
-- Media cache, ZIP packages and future sync output are derived/rebuildable layers.
-- The BetterDiscord plugin stays lightweight; Companion owns archive, media, export, update and desktop UX.
-- Optional/network layers must never make the local archive unreadable.
-- Installed and Portable modes share application code; only DataRoot/lifecycle integration may differ.
-- Migrations stay additive and transactional.
-- User archive data, settings, cache, exports and DDS_Data must survive application updates.
+- SQLite/local archive остаётся долговечным источником истины.
+- Медиакэш, экспортированные ZIP и update-пакеты являются производными слоями.
+- BetterDiscord Plugin остаётся лёгким сборщиком; архив, media lifecycle, export, updater и desktop UX принадлежат Companion.
+- Сетевые и optional-функции не должны блокировать чтение локального архива.
+- Миграции остаются additive/transactional и обязаны быть безопасными при повторном и параллельном startup.
+- Обновления не должны повреждать DataRoot, settings, cache, exports или DDS_Data.
 
-## 0.7.0 - Safe Updater Foundation
+## Текущий стабильный baseline — 0.8.8
 
-Status: released through the 0.7.2 Public Preview patch line after full Windows CI and manual testing.
+Выпущено и принято пользователем:
 
-Implemented:
-- External updater process and stable bootstrap launcher.
-- GitHub Release metadata and versioned manifest contract.
-- Verified download/staging with SHA-256, exact size and ZIP validation.
-- Protected user-data boundary and byte-identical regression checks.
-- Transactional current/previous/pending version pointers.
-- Startup ACK tied to core runtime readiness.
-- Automatic rollback on crash/startup timeout.
-- Power-loss-safe/idempotent startup commit and orphan-version recovery.
-- Durable journal and updater-specific log.
-- OS-backed cross-process update lock and free-space preflight.
-- Bounded retry/cancel behavior.
-- Windows process-tree termination and failed-version cleanup.
-- Manual update UI, optional once-per-day background checks, optional auto-download and opt-in auto-install at natural exit.
-- Window/presentation state capture for update restart.
-- Single-instance GUI boundary.
-- Windows build metadata generated from the source version on every build.
-- Fail-closed build/dist cleanup with bounded retry.
-- Whole-pipeline Windows build mutex; concurrent builds are rejected before shared state is touched.
-- Bounded transient ZIP-read retry plus completed-archive integrity validation.
-- Real Windows EXE happy-path, final 0.7.0 update smoke and forced-timeout rollback validation.
+- Home / Library / Status UI baseline.
+- SOURCE_GONE lifecycle.
+- Manual Re-cache / «Скачать снова».
+- Persisted re-cache intent через expired URL → rediscovery.
+- Binary-safe Discord process probe.
+- SQLite startup/migration race hardening.
+- Safe external updater + rollback.
+- Single-instance / tray lifecycle.
+- Square 16×12 Tetris-style Media Cache.
+- Unlimited-cache adaptive display scale.
+- Python 3.11 reproducible Windows release pipeline.
 
-0.7.1 patch follow-up:
-- Fixed media-cache/statistics traversal races that could terminate the GUI runtime on WinError 3.
-- Unified updater Status with the updater's persistent check state and corrected the 24-hour scheduler display.
+## Следующий Companion release
 
-## 0.8.0 - Desktop Lifecycle
+Версия повышается только при реальном изменении Companion.
 
-Status: released as **v0.8.0 Stable Release** after exact-candidate Windows CI and live validation; promoted from Public Preview without rebuilding or replacing accepted artifacts.
+Перед релизом обязательны:
 
-Implemented:
-- System tray lifecycle with open, hide and explicit full exit.
-- Optional Windows autostart through stable root `DDS.exe`.
-- Optional tray-only autostart with no main window, taskbar button or startup focus stealing.
-- Optional close-to-tray behavior without stopping the archive runtime.
-- Single-instance restore of the already running DDS process.
-- Tray tooltip driven by the existing Health state.
-- Safe visible-window fallback when the system tray is unavailable.
-- No hidden network dependency and no Plugin/SQLite/media/updater-protocol ownership change.
+1. sandbox regression;
+2. Windows CI;
+3. native Windows build/package verification;
+4. live validation, если затронуты GUI, Windows integration, Discord/BetterDiscord или updater;
+5. explicit user acceptance;
+6. GitHub stable release gate.
 
-## 0.8.7 - Current Public Stable Release
+## DDS Installer
 
-Status: **RELEASED / STABLE / USER ACCEPTED**. Public tag: `v0.8.7`.
+DDS Installer развивается в отдельном репозитории и по собственной semver-линии. Он не определяет версию Companion.
 
-Implemented:
-- Home dashboard visual hierarchy refresh with local SVG icons.
-- Eight media lifecycle states on Home in a 2×4 layout.
-- Separate **Кэш очищен** and terminal **Источник удалён / SOURCE_GONE** visibility.
-- Full-width Library **НАВИГАЦИЯ | ПРОСМОТР** workflow.
-- Consolidated Status page with media loading and attention diagnostics.
-- Preserved cache priority and retry blocking for SOURCE_GONE.
-- Verified integration with DDS Plugin 0.5.4 positive deletion evidence.
-- Windows CI and stable release workflow PASS.
-## DDS Installer 0.1.x - Setup / Repair / Installer
+Его ответственность:
+- install / repair;
+- shortcuts and ownership;
+- preservation of user data;
+- uninstall app-owned files only unless data removal explicitly requested.
 
-Status: **ACTIVE / 0.1.0-r2 DETECTION FOUNDATION LIVE TESTED / ACCEPTED / INDEPENDENT INSTALLER SEMVER**. Next bounded stage: Acquire / Verify / Stage without Apply.
+## DDS 1.0 acceptance gate
 
-Goal: make installation/recovery understandable without sacrificing Portable mode. DDS Companion remains on 0.8.x until Companion code itself changes.
-- Setup and repair flow.
-- Preserve DataRoot during repair/update.
-- Correct shortcuts, identity and uninstall behavior.
-- Uninstall removes app-owned files only unless user explicitly removes data.
-- Portable distribution remains supported.
+Перед продуктовым 1.0:
 
-## DDS product 1.0 acceptance gate
+- migration/backward-compatibility review;
+- recovery/corruption-path tests;
+- installer + companion + plugin integration gate;
+- documentation/release-process review;
+- full Windows CI + live acceptance.
 
-This is a project-level acceptance milestone, not a requirement that Plugin, Companion and Installer version numbers match.
+## Позже
 
-- Migration/backward-compatibility review.
-- Recovery/corruption-path testing.
-- Documentation and release-process cleanup.
-- Full Windows CI plus interactive live gate.
-- Versioned guarantees for archive readability and update safety.
-
-## Later / deliberately unscheduled
-
-- Automatic export/sync to a user-selected normal filesystem folder.
-- External clients may sync that folder.
-- Direct provider-specific OAuth/API is not part of current DDS direction.
+- автоматический export/sync в выбранную пользователем обычную папку;
+- внешняя синхронизация этой папки сторонними клиентами;
+- provider-specific OAuth/API не входит в текущий DDS baseline.
