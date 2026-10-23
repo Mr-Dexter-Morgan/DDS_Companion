@@ -49,25 +49,30 @@ class GuiPolishSourceContractTests(unittest.TestCase):
     def setUpClass(cls):
         cls.root = Path(__file__).resolve().parents[2]
 
-    def test_normal_launcher_uses_pythonw_and_debug_launcher_uses_python(self):
-        normal = (self.root / "run_companion.bat").read_text(encoding="utf-8")
-        debug = (self.root / "run_companion_debug.bat").read_text(encoding="utf-8")
-        self.assertIn("pythonw.exe", normal)
-        self.assertIn("run_companion.pyw", normal)
-        self.assertIn("DDS Companion - Development Launcher", normal)
-        self.assertIn("python -m dds_companion.gui.app", debug)
-        self.assertIn("DDS Companion 0.5.8", debug)
+    def test_packaging_keeps_only_required_python_entrypoints(self):
+        app_spec = (self.root / "DDSApp.spec").read_text(encoding="utf-8")
+        launcher_spec = (self.root / "DDSLauncher.spec").read_text(encoding="utf-8")
+        updater_spec = (self.root / "DDSUpdater.spec").read_text(encoding="utf-8")
+        self.assertIn('run_companion.pyw', app_spec)
+        self.assertIn('run_launcher.pyw', launcher_spec)
+        self.assertIn('run_updater.py', updater_spec)
+        for name in ("run_companion.pyw", "run_launcher.pyw", "run_updater.py"):
+            self.assertTrue((self.root / name).is_file())
+        for name in (
+            "run_companion.bat",
+            "run_companion_debug.bat",
+            "run_cli.bat",
+            "run_once.bat",
+            "install_gui_dependencies.bat",
+        ):
+            self.assertFalse((self.root / name).exists())
 
-    def test_050_first_run_gui_dependency_bootstrap_is_automatic(self):
-        normal = (self.root / "run_companion.bat").read_text(encoding="utf-8")
-        installer = (self.root / "install_gui_dependencies.bat").read_text(encoding="utf-8")
-        self.assertIn("goto bootstrap_gui", normal)
-        self.assertIn("install_gui_dependencies.bat --no-pause", normal)
-        self.assertIn("No user action is required", normal)
-        self.assertNotIn("choice /C", normal)
-        self.assertNotIn("Install it now?", normal)
-        self.assertIn("pip install --disable-pip-version-check -r requirements-gui.txt", installer)
-        self.assertNotIn("pip install --upgrade", installer)
+    def test_source_build_dependencies_are_minimal_and_explicit(self):
+        requirements = (self.root / "requirements-build.txt").read_text(encoding="utf-8")
+        self.assertIn("PyInstaller>=6.10,<7", requirements)
+        self.assertIn("PySide6>=6.7,<7", requirements)
+        self.assertNotIn("-r requirements-gui.txt", requirements)
+        self.assertFalse((self.root / "requirements-gui.txt").exists())
 
     def test_duplicate_library_buttons_are_removed_from_topbar_and_dashboard(self):
         window = (self.root / "dds_companion/gui/window.py").read_text(encoding="utf-8")
