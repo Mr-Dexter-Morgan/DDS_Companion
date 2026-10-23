@@ -93,6 +93,8 @@ _ACTIVITY_EVENTS = {
     "media_cache_maintenance": "Обслуживание кэша",
     "media_manual_clear_requeued": "Повторная постановка",
     "media_user_retry": "Повтор загрузки",
+    "media_user_recache": "Скачать снова",
+    "media_user_recache_scope": "Скачать очищенные снова",
     "media_user_ignored": "Проблема обработана",
     "media_user_ignored_all": "Проблемы обработаны",
     "media_processed_cleared": "Обработанные очищены",
@@ -195,6 +197,10 @@ def human_activity_summary(event: dict | None) -> str:
         return "Проблема медиа отмечена как обработанная"
     if event_type == "media_user_retry":
         return "Запущена ручная повторная загрузка медиа"
+    if event_type == "media_user_recache":
+        return "Запрошено повторное скачивание очищенного файла"
+    if event_type == "media_user_recache_scope":
+        return f"Повторно запрошено очищенных медиа: {int(details.get('changed') or 0)}"
     if event_type == "media_cache_maintenance":
         removed = int(details.get("files_removed") or 0)
         errors = int(details.get("errors") or 0)

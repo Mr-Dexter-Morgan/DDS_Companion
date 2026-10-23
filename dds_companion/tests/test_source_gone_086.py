@@ -177,7 +177,7 @@ class SourceGone086Tests(unittest.TestCase):
         self.conn.close()
         self.conn = connect_database(self.db)
         self.assertEqual(self.conn.execute('SELECT state FROM media_objects').fetchone()[0], 'SOURCE_GONE')
-        self.assertEqual(self.conn.execute('SELECT value FROM schema_meta WHERE key="schema_version"').fetchone()[0], '5')
+        self.assertEqual(self.conn.execute('SELECT value FROM schema_meta WHERE key="schema_version"').fetchone()[0], '6')
         self.assertEqual(self.conn.execute('SELECT COUNT(*) FROM attachments').fetchone()[0], 1)
 
     def test_evidence_before_expiry_and_before_capture_is_order_independent(self):
@@ -281,8 +281,8 @@ class SourceGone086Tests(unittest.TestCase):
         import tomllib
         from tools.generate_windows_version_info import render_version_info
         root = Path(__file__).resolve().parents[2]
-        self.assertEqual(__version__, '0.8.7')
+        self.assertEqual(__version__, '0.8.8')
         self.assertEqual(tomllib.loads((root / 'pyproject.toml').read_text())['project']['version'], __version__)
         metadata = render_version_info(description='DDS', internal_name='DDS', filename='DDS.exe')
-        self.assertIn('0.8.7', metadata)
-        self.assertIn('(0, 8, 7, 0)', metadata)
+        self.assertIn('0.8.8', metadata)
+        self.assertIn('(0, 8, 8, 0)', metadata)

@@ -98,7 +98,7 @@ class SourceEvidenceService:
         """
         cursor = self.connection.execute("""
             UPDATE media_objects AS mo
-            SET state='SOURCE_GONE', next_retry_at=NULL,
+            SET state='SOURCE_GONE', next_retry_at=NULL, manual_recache_requested=0,
                 last_error='Источник удалён', failure_class='source_gone',
                 updated_at=strftime('%Y-%m-%dT%H:%M:%f+00:00', 'now'),
                 current_url=COALESCE(current_url, (

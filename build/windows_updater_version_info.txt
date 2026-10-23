@@ -18,7 +18,7 @@ VSVersionInfo(
          StringStruct(u'FileVersion', u'0.8.8'),
          StringStruct(u'InternalName', u'DDSUpdater'),
          StringStruct(u'OriginalFilename', u'DDSUpdater.exe'),
-         StringStruct(u'ProductName', u'DDS — Discord Data Snatcher'),
+         StringStruct(u'ProductName', u'DDS \u2014 Discord Data Snatcher'),
          StringStruct(u'ProductVersion', u'0.8.8')]
       )
     ]),

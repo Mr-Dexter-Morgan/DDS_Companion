@@ -74,7 +74,7 @@ class Ui087SourceContracts(unittest.TestCase):
 
     def test_runtime_overlay_is_087_and_uses_new_dashboard_grid(self):
         overlay = (self.root / "dds_companion_patchxx.py").read_text(encoding="utf-8")
-        self.assertIn('dds_companion.__version__ = "0.8.7"', overlay)
+        self.assertIn('dds_companion.__version__ = "0.8.8"', overlay)
         self.assertIn("self.dashboard_grid.indexOf", overlay)
         self.assertNotIn("self.lower_grid", overlay)
 

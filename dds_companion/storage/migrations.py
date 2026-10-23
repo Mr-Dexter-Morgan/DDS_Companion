@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 BASE_SCHEMA_SQL = r"""
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -284,17 +284,55 @@ CREATE TABLE IF NOT EXISTS source_channel_evidence (
 """
 
 
+
+def _media_object_columns(connection: sqlite3.Connection) -> set[str]:
+    return {
+        str(row[1])
+        for row in connection.execute("PRAGMA table_info(media_objects)").fetchall()
+    }
+
+
+def _apply_v6(connection: sqlite3.Connection) -> None:
+    """Persist explicit manual re-cache intent across URL rediscovery/restarts.
+
+    GUI startup can open the archive from more than one worker at nearly the
+    same time. Two connections may therefore both observe the pre-v6 schema
+    before either ALTER TABLE commits. SQLite has no ADD COLUMN IF NOT EXISTS,
+    so the losing connection must treat a concurrent duplicate-column result
+    as success after verifying that the expected column now exists.
+    """
+    if "manual_recache_requested" not in _media_object_columns(connection):
+        try:
+            connection.execute(
+                "ALTER TABLE media_objects ADD COLUMN "
+                "manual_recache_requested INTEGER NOT NULL DEFAULT 0"
+            )
+        except sqlite3.OperationalError as exc:
+            # Another DDS connection may have won the migration race while
+            # this connection was waiting on SQLite's schema/write lock. Only
+            # suppress the error when the exact target column is now present;
+            # every other ALTER failure remains fatal.
+            if "manual_recache_requested" not in _media_object_columns(connection):
+                raise
+            if "duplicate column name" not in str(exc).lower():
+                raise
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_media_objects_manual_recache "
+        "ON media_objects(manual_recache_requested, state)"
+    )
+
 def apply_migrations(connection: sqlite3.Connection) -> None:
     """Apply additive migrations in place.
 
-    Migrations are additive. V5 stores source deletion proof separately without
-    rewriting archive/message/media tables or guessing any old lifecycle state.
+    Migrations are additive. V5 stores source deletion proof; V6 adds only the
+    explicit manual re-cache intent bit and does not rewrite lifecycle state.
     """
     connection.executescript(BASE_SCHEMA_SQL)
     connection.executescript(V2_SCHEMA_SQL)
     connection.executescript(V3_SCHEMA_SQL)
     connection.executescript(V4_SCHEMA_SQL)
     connection.executescript(V5_SCHEMA_SQL)
+    _apply_v6(connection)
     connection.execute(
         "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",

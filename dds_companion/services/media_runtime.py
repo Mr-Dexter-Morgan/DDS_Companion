@@ -120,6 +120,30 @@ class MediaBackfillRuntime:
                                 ),
                                 details={"media_key": media_key, "outcome": outcome.to_dict() if outcome else None},
                             )
+                        elif action == "recache" and media_key:
+                            outcome = service.recache_media_once(media_key, settings_store.load())
+                            control_changed = control_changed or outcome is not None
+                            activity.publish(
+                                level="INFO" if outcome is not None else "WARNING",
+                                subsystem="media",
+                                event_type="media_user_recache",
+                                summary=(
+                                    f"User requested media re-cache: {media_key}"
+                                    if outcome is not None
+                                    else f"Media re-cache ignored; item is no longer evicted: {media_key}"
+                                ),
+                                details={"media_key": media_key, "outcome": outcome.to_dict() if outcome else None},
+                            )
+                        elif action == "recache_scope":
+                            scope_kind = str(command.get("scope_kind") or "")
+                            scope_id = str(command.get("scope_id") or "")
+                            changed = service.request_recache_scope(scope_kind, scope_id)
+                            control_changed = control_changed or bool(changed)
+                            activity.publish(
+                                level="INFO", subsystem="media", event_type="media_user_recache_scope",
+                                summary=f"User requested re-cache for {changed} evicted media item(s)",
+                                details={"scope_kind": scope_kind, "scope_id": scope_id, "changed": int(changed)},
+                            )
                         elif action == "ignore" and media_key:
                             changed = service.ignore_issue(media_key)
                             control_changed = control_changed or bool(changed)
@@ -156,6 +180,12 @@ class MediaBackfillRuntime:
                 settings = settings_store.load()
                 enabled = bool(settings.media_autodownload_enabled)
                 if not enabled:
+                    # Explicit "download again" intent is independent of automatic
+                    # backfill. Continue only those persisted requests while auto mode
+                    # remains off; ordinary KNOWN media is never planned here.
+                    manual_cycle = service.process_manual_recache_pending(settings)
+                    if manual_cycle.claimed or manual_cycle.planned.queued:
+                        control_changed = True
                     # External config edits still get truthful state even when no
                     # GUI command was queued. GUI changes were already logged above.
                     if last_enabled is True:
