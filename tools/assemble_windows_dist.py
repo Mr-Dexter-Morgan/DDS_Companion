@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import time
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,12 +52,21 @@ def zip_tree(
         (item for item in source.rglob("*") if item.is_file()),
         key=lambda p: str(p).casefold(),
     )
+    epoch = int(os.environ.get("SOURCE_DATE_EPOCH", "315532800"))
+    stamp = datetime.fromtimestamp(max(315532800, epoch), tz=timezone.utc)
+    fixed_date_time = (stamp.year, stamp.month, stamp.day, stamp.hour, stamp.minute, stamp.second - stamp.second % 2)
+
     with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in files:
             arcname = path.relative_to(source).as_posix()
             for attempt in range(1, max(1, attempts) + 1):
                 try:
-                    archive.write(path, arcname)
+                    payload = path.read_bytes()
+                    info = zipfile.ZipInfo(arcname, fixed_date_time)
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                    info.create_system = 0
+                    info.external_attr = 0
+                    archive.writestr(info, payload, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
                     break
                 except (FileNotFoundError, PermissionError) as exc:
                     if attempt >= attempts:
