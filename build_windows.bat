@@ -7,15 +7,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\run_locked_build
 exit /b %errorlevel%
 
 :locked_build
-where py >nul 2>nul
+rem Reproducible-build controls. Callers may override SOURCE_DATE_EPOCH,
+rem but the fallback stays ZIP-safe (1980-01-01 UTC).
+if not defined PYTHONHASHSEED set "PYTHONHASHSEED=1"
+if not defined SOURCE_DATE_EPOCH set "SOURCE_DATE_EPOCH=315532800"
+
+where python >nul 2>nul
 if errorlevel 1 (
-  echo [DDS] Python launcher ^(py^) not found.
+  echo [DDS] Python interpreter ^(python^) not found.
   exit /b 2
 )
 
 if not exist ".venv-build\Scripts\python.exe" (
-  echo [DDS] Creating isolated build environment...
-  py -3 -m venv .venv-build || exit /b 3
+  echo [DDS] Creating isolated build environment from selected Python...
+  python -m venv .venv-build || exit /b 3
 )
 
 call ".venv-build\Scripts\activate.bat" || exit /b 4

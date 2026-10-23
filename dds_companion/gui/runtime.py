@@ -88,6 +88,18 @@ class GuiRuntime:
         self.media_control_queue.put({"action": "retry", "media_key": str(media_key)})
         self.media_wake_event.set()
 
+    def request_media_recache(self, media_key: str) -> None:
+        self.media_control_queue.put({"action": "recache", "media_key": str(media_key)})
+        self.media_wake_event.set()
+
+    def request_media_recache_scope(self, scope_kind: str, scope_id: str) -> None:
+        self.media_control_queue.put({
+            "action": "recache_scope",
+            "scope_kind": str(scope_kind),
+            "scope_id": str(scope_id),
+        })
+        self.media_wake_event.set()
+
     def request_media_ignore(self, media_key: str) -> None:
         self.media_control_queue.put({"action": "ignore", "media_key": str(media_key)})
         self.media_wake_event.set()

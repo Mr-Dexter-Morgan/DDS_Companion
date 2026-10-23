@@ -57,6 +57,7 @@ class MediaRegistryRecord:
     next_retry_at: str | None
     last_error: str | None
     failure_class: str | None
+    manual_recache_requested: bool
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> "MediaRegistryRecord":
@@ -76,6 +77,7 @@ class MediaRegistryRecord:
             next_retry_at=row["next_retry_at"],
             last_error=row["last_error"],
             failure_class=row["failure_class"],
+            manual_recache_requested=bool(row["manual_recache_requested"]),
         )
 
 
@@ -164,7 +166,7 @@ class MediaRegistryService:
             expected_size = None
 
         previous = self.connection.execute(
-            "SELECT state, current_url, local_relpath, updated_at FROM media_objects WHERE media_key=?",
+            "SELECT state, current_url, local_relpath, updated_at, manual_recache_requested FROM media_objects WHERE media_key=?",
             (media_key,),
         ).fetchone()
 
@@ -368,6 +370,83 @@ class MediaRegistryService:
             for row in rows
         ]
 
+    def prepare_manual_recache(self, media_key: str) -> bool:
+        """Persist an explicit user request to download one evicted item again.
+
+        The request survives an expired/missing signed URL.  A usable URL moves the
+        object straight to QUEUED; otherwise it waits in UNRESOLVED until a fresh
+        Plugin observation restores the URL.
+        """
+        stamp = utc_now()
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE media_objects
+                SET state=CASE
+                        WHEN current_url IS NULL OR TRIM(current_url)='' THEN 'UNRESOLVED'
+                        ELSE 'QUEUED'
+                    END,
+                    manual_recache_requested=1, updated_at=?, attempt_count=0,
+                    next_retry_at=NULL, last_attempt_at=NULL, last_http_status=NULL,
+                    last_error=CASE
+                        WHEN current_url IS NULL OR TRIM(current_url)=''
+                        THEN 'ожидает повторного обнаружения ссылки Discord' ELSE NULL END,
+                    failure_class=CASE
+                        WHEN current_url IS NULL OR TRIM(current_url)=''
+                        THEN 'awaiting_rediscovery' ELSE NULL END
+                WHERE media_key=? AND state='EVICTED'
+                  AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
+                """,
+                (stamp, str(media_key)),
+            )
+        return bool(cursor.rowcount)
+
+    def prepare_manual_recache_scope(self, scope_kind: str, scope_id: str) -> int:
+        """Persist explicit re-cache intent for all evicted media in one archive scope."""
+        scope_kind = str(scope_kind or "").strip().lower()
+        scope_id = str(scope_id or "").strip()
+        where = {
+            "guild": "m.guild_id=?",
+            "channel": "m.parent_channel_id=?",
+            "thread": "m.thread_id=?",
+        }.get(scope_kind)
+        if where is None:
+            raise ValueError(f"unsupported media re-cache scope: {scope_kind}")
+        if not scope_id:
+            raise ValueError("media re-cache scope id is empty")
+        stamp = utc_now()
+        with self.connection:
+            cursor = self.connection.execute(
+                f"""
+                UPDATE media_objects AS mo
+                SET state=CASE
+                        WHEN current_url IS NULL OR TRIM(current_url)='' THEN 'UNRESOLVED'
+                        ELSE 'QUEUED'
+                    END,
+                    manual_recache_requested=1, updated_at=?, attempt_count=0,
+                    next_retry_at=NULL, last_attempt_at=NULL, last_http_status=NULL,
+                    last_error=CASE
+                        WHEN current_url IS NULL OR TRIM(current_url)=''
+                        THEN 'ожидает повторного обнаружения ссылки Discord' ELSE NULL END,
+                    failure_class=CASE
+                        WHEN current_url IS NULL OR TRIM(current_url)=''
+                        THEN 'awaiting_rediscovery' ELSE NULL END
+                WHERE mo.state='EVICTED'
+                  AND EXISTS(
+                    SELECT 1 FROM media_refs mr
+                    JOIN messages m ON m.id=mr.message_id
+                    WHERE mr.media_key=mo.media_key AND {where}
+                  )
+                """,
+                (stamp, scope_id),
+            )
+        return int(cursor.rowcount or 0)
+
+    def manual_recache_pending_count(self) -> int:
+        return int(self.connection.execute(
+            "SELECT COUNT(*) FROM media_objects WHERE manual_recache_requested=1"
+        ).fetchone()[0])
+
     def prepare_manual_retry(self, media_key: str) -> bool:
         """Re-arm one acknowledged/terminal media row for an explicit retry."""
         stamp = utc_now()
@@ -521,7 +600,8 @@ class MediaRegistryService:
                     UPDATE media_objects
                     SET state='EVICTED', local_relpath=NULL, local_size=NULL, sha256=NULL,
                         cached_at=NULL, last_access_at=NULL, updated_at=?,
-                        last_error=NULL, failure_class=?, next_retry_at=NULL
+                        last_error=NULL, failure_class=?, next_retry_at=NULL,
+                        manual_recache_requested=0
                     WHERE local_relpath=? AND state='CACHED'
                     """,
                     (stamp, failure_class, relpath),

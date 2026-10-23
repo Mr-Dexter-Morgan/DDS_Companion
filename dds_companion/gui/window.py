@@ -228,6 +228,7 @@ class MainWindow(QMainWindow):
             on_messages_requested=self._request_library_messages,
             on_export_rule_changed=self._change_export_rule,
             on_scope_action=self._library_scope_action,
+            on_media_recache=self._recache_media,
         )
         self.activity = ActivityPage()
         self.health = HealthPage(
@@ -713,6 +714,13 @@ class MainWindow(QMainWindow):
             mode = "TEXT_ONLY" if action == "package_text" else "TEXT_AND_CACHE"
             self._package_scope(kind, scope_id, name, mode)
             return
+        if action == "recache_evicted_media":
+            runtime = self.runtime
+            if runtime is not None:
+                runtime.request_media_recache_scope(kind, scope_id)
+                runtime.request_refresh()
+                self.statusBar().showMessage(f"Повторное скачивание очищенных файлов запрошено: «{name}»", 4500)
+            return
 
         if self._branch_maintenance_in_progress or self._archive_reset_in_progress:
             self.statusBar().showMessage("Сначала дождись завершения текущего обслуживания DDS", 4000)
@@ -844,6 +852,14 @@ class MainWindow(QMainWindow):
                         pass
 
         threading.Thread(target=worker, name="dds-branch-maintenance", daemon=True).start()
+
+    def _recache_media(self, media_key: str) -> None:
+        runtime = self.runtime
+        if not media_key or runtime is None:
+            return
+        runtime.request_media_recache(media_key)
+        self.statusBar().showMessage("Скачивание очищенного файла запрошено…", 3500)
+        runtime.request_refresh()
 
     def _retry_media_issue(self, media_key: str) -> None:
         runtime = self.runtime

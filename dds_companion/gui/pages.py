@@ -512,6 +512,7 @@ class LibraryPage(Page):
         on_messages_requested: Callable[[dict], None] | None = None,
         on_export_rule_changed: Callable[[str, str, str], None] | None = None,
         on_scope_action: Callable[[str, dict], None] | None = None,
+        on_media_recache: Callable[[str], None] | None = None,
     ):
         super().__init__(
             "Библиотека",
@@ -521,6 +522,7 @@ class LibraryPage(Page):
         self.on_messages_requested = on_messages_requested
         self.on_export_rule_changed = on_export_rule_changed
         self.on_scope_action = on_scope_action
+        self.on_media_recache = on_media_recache
 
         self.library_tabs = QTabWidget()
         self.library_tabs.setObjectName("LibraryTabs")
@@ -897,6 +899,8 @@ class LibraryPage(Page):
         text_cache = package.addAction("Текст + кэш")
         menu.addSeparator()
         clear_cache = menu.addAction("Очистить медиакэш этой ветки")
+        recache_evicted = menu.addAction("Скачать очищенные снова")
+        recache_evicted.setEnabled(int(detail.get("media_evicted", 0) or 0) > 0)
         delete_data = menu.addAction("Удалить данные ветки")
         delete_branch = menu.addAction("Полностью удалить ветку")
 
@@ -910,6 +914,8 @@ class LibraryPage(Page):
             action = "package_text_cache"
         elif chosen is clear_cache:
             action = "clear_branch_media"
+        elif chosen is recache_evicted:
+            action = "recache_evicted_media"
         elif chosen is delete_data:
             action = "delete_branch_data"
         elif chosen is delete_branch:
@@ -1089,6 +1095,7 @@ class LibraryPage(Page):
             details.append(human_size(int(size)))
         state = str(attachment.get("media_state") or "KNOWN")
         failure_class = str(attachment.get("media_failure_class") or "")
+        manual_recache_requested = bool(attachment.get("manual_recache_requested"))
         availability = {"CACHED": "сохранено локально", "SOURCE_GONE": "Источник удалён"}
         if state == "EVICTED":
             if failure_class == "evicted_policy":
@@ -1097,12 +1104,26 @@ class LibraryPage(Page):
                 availability_text = "кэш очищен вручную"
             else:
                 availability_text = "локальный кэш очищен"
+        elif manual_recache_requested and state == "UNRESOLVED":
+            availability_text = "повторное скачивание запрошено · ждёт свежую ссылку"
+        elif manual_recache_requested and state in {"QUEUED", "DOWNLOADING", "KNOWN", "FAILED_RETRYABLE"}:
+            availability_text = "повторное скачивание запрошено"
         else:
             availability_text = availability.get(state, "не сохранено локально")
         details.append(availability_text)
         meta = QLabel(" · ".join(details))
         meta.setObjectName("SectionHint")
         layout.addWidget(meta)
+
+        media_key = str(attachment.get("media_key") or "")
+        if state == "EVICTED" and media_key and self.on_media_recache is not None:
+            recache_button = QPushButton("Скачать снова")
+            recache_button.setProperty("secondary", True)
+            recache_button.setObjectName("MediaRecacheButton")
+            recache_button.clicked.connect(
+                lambda _checked=False, key=media_key: self.on_media_recache(key)
+            )
+            layout.addWidget(recache_button, 0, Qt.AlignLeft)
 
         description = str(attachment.get("description") or "").strip()
         if description:

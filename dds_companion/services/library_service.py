@@ -338,7 +338,7 @@ class LibraryService:
             SELECT a.message_id, a.position, a.attachment_id, a.filename, a.title,
                    a.description, a.content_type, a.size, a.width, a.height,
                    mr.media_key, mo.state AS media_state, mo.failure_class AS media_failure_class,
-                   mo.local_relpath, mo.local_size
+                   mo.manual_recache_requested, mo.local_relpath, mo.local_size
             FROM attachments a
             LEFT JOIN media_refs mr
                    ON mr.message_id=a.message_id AND mr.position=a.position
@@ -363,6 +363,7 @@ class LibraryService:
                     "media_key": row["media_key"],
                     "media_state": row["media_state"] or "KNOWN",
                     "media_failure_class": row["media_failure_class"],
+                    "manual_recache_requested": bool(row["manual_recache_requested"]),
                     "local_relpath": row["local_relpath"],
                     "local_size": row["local_size"],
                 }

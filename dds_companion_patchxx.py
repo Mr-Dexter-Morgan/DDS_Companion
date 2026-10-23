@@ -37,6 +37,32 @@ def _fmt_count(value) -> str:
 
 
 
+
+def _unlimited_cache_display_scale(media_bytes: int) -> int:
+    """Return a human-friendly virtual ceiling for unlimited cache visualization.
+
+    Unlimited mode has no real capacity denominator.  The Tetris field therefore
+    uses a display-only rolling scale (1 GiB, 2 GiB, 4 GiB, ...).
+    The label explicitly calls it a scale, never a limit.
+    """
+    used = max(0, _safe_int(media_bytes, 0))
+    scale = 1024**3
+    while used > scale:
+        scale *= 2
+    return scale
+
+
+def _cache_visual_percent(media_bytes: int, limit) -> tuple[float, int | None]:
+    """Return field occupancy percent and optional unlimited display scale."""
+    used = max(0, _safe_int(media_bytes, 0))
+    if limit is not None:
+        limit_int = _safe_int(limit, 0)
+        if limit_int > 0:
+            return max(0.0, min(100.0, used * 100.0 / limit_int)), None
+    scale = _unlimited_cache_display_scale(used)
+    return max(0.0, min(100.0, used * 100.0 / scale)), scale
+
+
 _NETWORK_RETRY_INTERVAL_SECONDS = 30 * 60
 _TRANSIENT_NETWORK_MARKERS = (
     "timed out",
@@ -293,19 +319,51 @@ _TETROMINO_BLOCK_PATTERNS = (
 
 
 def _build_tetromino_piece_layout():
-    """Return the deterministic 25x8 field as 50 whole tetrominoes."""
+    """Return a deterministic 16x12 field tiled by 48 whole tetrominoes.
+
+    The field is still tiled exactly by 4x4 blocks, but piece *order* follows a
+    left-to-right staircase.  At low occupancy this produces a jagged Tetris
+    skyline instead of completing a neat rectangular progress-bar chunk first.
+    """
+    # Within a 4-row band, open the next 4x4 block only gradually.  This keeps
+    # the early pile connected/left-weighted while preserving exact full-board
+    # coverage at 100%.
+    staircase_order = (
+        (0, 0), (0, 1), (1, 0), (0, 2),
+        (1, 1), (0, 3), (1, 2), (2, 0),
+        (1, 3), (2, 1), (2, 2), (3, 0),
+        (2, 3), (3, 1), (3, 2), (3, 3),
+    )
+
     pieces = []
-    for band_index, band_y in enumerate((4, 0)):
-        for block_index in range(6):
-            pattern = _TETROMINO_BLOCK_PATTERNS[(block_index + band_index * 2) % len(_TETROMINO_BLOCK_PATTERNS)]
-            mirror = bool(band_index)
-            block_x = block_index * 4
+    block_index = 0
+    for band_y in (8, 4, 0):
+        blocks = []
+        for block_x in (0, 4, 8, 12):
+            pattern = _TETROMINO_BLOCK_PATTERNS[block_index % len(_TETROMINO_BLOCK_PATTERNS)]
+            mirror = bool((block_index // 2) % 2)
+            placed_block = []
             for shape, cells in pattern:
                 if mirror:
                     cells = tuple((3 - x, y) for x, y in cells)
                 placed = tuple((block_x + x, band_y + y) for x, y in cells)
-                pieces.append((shape, placed))
-        pieces.append(("I", ((24, band_y), (24, band_y + 1), (24, band_y + 2), (24, band_y + 3))))
+                placed_block.append((shape, placed))
+
+            # Pieces that touch the bottom of a band fall first; ties prefer the
+            # leftmost piece.  Combined with staircase_order this creates the
+            # irregular skyline expected from a falling-block game.
+            placed_block.sort(
+                key=lambda item: (
+                    -max(y for _x, y in item[1]),
+                    min(x for x, _y in item[1]),
+                )
+            )
+            blocks.append(tuple(placed_block))
+            block_index += 1
+
+        for block_slot, piece_slot in staircase_order:
+            pieces.append(blocks[block_slot][piece_slot])
+
     return tuple(pieces)
 
 def main():
@@ -313,7 +371,7 @@ def main():
     # its UI/core modules and builds snapshots.
     import dds_companion
 
-    dds_companion.__version__ = "0.8.7"
+    dds_companion.__version__ = "0.8.8"
     _patch_media_size_policy()
 
     from PySide6.QtCore import Qt, QTimer, QRectF, QPointF
@@ -340,8 +398,8 @@ def main():
     OriginalHealthPage = pages_mod.HealthPage
 
     class TetrisField(QWidget):
-        COLS = 25
-        ROWS = 8
+        COLS = 16
+        ROWS = 12
         TOTAL = COLS * ROWS
         PIECE_COUNT = TOTAL // 4
         COLORS = (
@@ -354,7 +412,7 @@ def main():
 
         def __init__(self, parent=None):
             super().__init__(parent)
-            self.setMinimumHeight(210)
+            self.setMinimumHeight(250)
             self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
             self._pieces = _build_tetromino_piece_layout()
             self._target_pieces = 0
@@ -428,35 +486,23 @@ def main():
             hi.setAlpha(46)
             shifted = {(col, row): float(row) + float(row_shift) for col, row in cells}
 
-            # Bridge only cells that belong to the same tetromino.  Neighbouring
-            # pieces keep the normal grid gap, while the four cells of one piece
-            # read as one connected Tetris shape instead of four unrelated tiles.
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(color)
+            # Each cell stays a true square.  Tetromino identity comes from shared
+            # color and adjacency, not from stretching/bridging cells into pills.
             for col, row in cells:
                 draw_row = shifted[(col, row)]
-                x = rect.left() + gap + col * (cell_w + gap)
-                y = rect.top() + gap + draw_row * (cell_h + gap)
-                if (col + 1, row) in shifted:
-                    painter.drawRect(QRectF(x + cell_w - 1.0, y + 2.0, gap + 2.0, max(1.0, cell_h - 4.0)))
-                if (col, row + 1) in shifted:
-                    painter.drawRect(QRectF(x + 2.0, y + cell_h - 1.0, max(1.0, cell_w - 4.0), gap + 2.0))
-
-            for col, row in cells:
-                draw_row = shifted[(col, row)]
-                x = rect.left() + gap + col * (cell_w + gap)
-                y = rect.top() + gap + draw_row * (cell_h + gap)
+                x = rect.left() + col * (cell_w + gap)
+                y = rect.top() + draw_row * (cell_h + gap)
                 cell = QRectF(x, y, cell_w, cell_h)
                 # A falling piece may still be partially above the playfield.
                 if cell.bottom() < rect.top() or cell.top() > rect.bottom():
                     continue
                 painter.setPen(Qt.NoPen)
                 painter.setBrush(glow)
-                painter.drawRoundedRect(cell.adjusted(-1.4, -1.4, 1.4, 1.4), 4, 4)
+                painter.drawRoundedRect(cell.adjusted(-1.0, -1.0, 1.0, 1.0), 2.5, 2.5)
                 painter.setBrush(color)
-                painter.drawRoundedRect(cell, 3.5, 3.5)
+                painter.drawRoundedRect(cell, 2.0, 2.0)
                 painter.setPen(QPen(hi, 1))
-                painter.drawLine(cell.topLeft() + QPointF(3, 2), cell.topRight() + QPointF(-3, 2))
+                painter.drawLine(cell.topLeft() + QPointF(2, 2), cell.topRight() + QPointF(-2, 2))
 
         def paintEvent(self, event):
             painter = QPainter(self)
@@ -471,27 +517,40 @@ def main():
             painter.drawPath(bg)
 
             gap = 3.0
-            cell_w = (rect.width() - gap * (self.COLS + 1)) / self.COLS
-            cell_h = (rect.height() - gap * (self.ROWS + 1)) / self.ROWS
-            if cell_w <= 1 or cell_h <= 1:
+            # Fit a 16x12 board into whatever space the dashboard gives us while
+            # preserving 1:1 cells.  This is the key visual rule: no capsules.
+            cell_size = min(
+                (rect.width() - gap * (self.COLS - 1)) / self.COLS,
+                (rect.height() - gap * (self.ROWS - 1)) / self.ROWS,
+            )
+            if cell_size <= 2:
                 return
+            grid_w = self.COLS * cell_size + (self.COLS - 1) * gap
+            grid_h = self.ROWS * cell_size + (self.ROWS - 1) * gap
+            grid_rect = QRectF(
+                rect.center().x() - grid_w / 2.0,
+                rect.center().y() - grid_h / 2.0,
+                grid_w,
+                grid_h,
+            )
+            cell_w = cell_h = cell_size
 
-            # Draw the quiet empty grid first.
-            empty = QColor("#111827")
-            empty_edge = QColor("#1D2A43")
+            # Draw the quiet empty square grid first.
+            empty = QColor("#0E1726")
+            empty_edge = QColor("#233657")
             for row in range(self.ROWS):
                 for col in range(self.COLS):
-                    x = rect.left() + gap + col * (cell_w + gap)
-                    y = rect.top() + gap + row * (cell_h + gap)
-                    cell = QRectF(x, y, cell_w, cell_h)
+                    x = grid_rect.left() + col * (cell_size + gap)
+                    y = grid_rect.top() + row * (cell_size + gap)
+                    cell = QRectF(x, y, cell_size, cell_size)
                     painter.setPen(QPen(empty_edge, 1))
                     painter.setBrush(empty)
-                    painter.drawRoundedRect(cell, 3.5, 3.5)
+                    painter.drawRoundedRect(cell, 2.0, 2.0)
 
             # Settled whole tetrominoes.
             for piece_index in range(min(self._locked_pieces, len(self._pieces))):
                 _shape, cells = self._pieces[piece_index]
-                self._draw_piece(painter, rect, gap, cell_w, cell_h, piece_index, cells)
+                self._draw_piece(painter, grid_rect, gap, cell_w, cell_h, piece_index, cells)
 
             # One active piece falls from above the field to its exact final cells.
             if self._locked_pieces < self._target_pieces and self._locked_pieces < len(self._pieces):
@@ -502,7 +561,7 @@ def main():
                 progress = min(1.0, self._active_fall_tick / max(1.0, float(self._fall_ticks_per_piece)))
                 eased = 1.0 - ((1.0 - progress) ** 3)
                 row_shift = start_shift_rows * (1.0 - eased)
-                self._draw_piece(painter, rect, gap, cell_w, cell_h, piece_index, cells, row_shift=row_shift)
+                self._draw_piece(painter, grid_rect, gap, cell_w, cell_h, piece_index, cells, row_shift=row_shift)
 
     class MediaStateCard(QFrame):
         def __init__(self, parent=None):
@@ -608,17 +667,18 @@ def main():
             settings = (snapshot or {}).get("settings") or {}
             media_bytes = _safe_int(stats.get("media_bytes"), 0)
             limit = settings.get("media_cache_limit_bytes")
+            percent, display_scale = _cache_visual_percent(media_bytes, limit)
             limit_int = _safe_int(limit, 0) if limit is not None else 0
-            percent = None
             if limit_int > 0:
-                percent = max(0.0, min(100.0, media_bytes * 100.0 / limit_int))
                 self.capacity.setText(f"{_human_bytes(media_bytes)} из {_human_bytes(limit_int)}")
                 self.percent.setText(f"{percent:.0f}% заполнено")
                 self.state.fill.setText(f"{percent:.0f}%")
             else:
+                # No hard capacity exists, so the board uses a clearly labelled
+                # rolling display scale instead of pretending there is a limit.
                 self.capacity.setText(f"{_human_bytes(media_bytes)} · без лимита")
-                self.percent.setText("Без ограничений")
-                self.state.fill.setText("—")
+                self.percent.setText(f"масштаб до {_human_bytes(display_scale)}")
+                self.state.fill.setText("∞")
             media_count = max(
                 _safe_int(stats.get("known_media"), 0),
                 _safe_int(stats.get("cached_media_files"), 0),
@@ -849,7 +909,7 @@ def main():
             grid = QVBoxLayout(info)
             grid.setContentsMargins(18, 16, 18, 16)
             grid.setSpacing(10)
-            self._dds_about_version = self._dds_info_row(grid, "Версия Companion", "0.8.7")
+            self._dds_about_version = self._dds_info_row(grid, "Версия Companion", "0.8.8")
             self._dds_about_plugin = self._dds_info_row(grid, "Версия Plugin", "—")
             self._dds_about_contract = self._dds_info_row(grid, "Контракт захвата", "—")
             self._dds_info_row(grid, "Авторы", "Mr_Dexter_Morgan · Masya")
@@ -895,7 +955,7 @@ def main():
             return right
 
         def _dds_copy_version_info(self):
-            companion = self._dds_about_version.text() if self._dds_about_version else "0.8.7"
+            companion = self._dds_about_version.text() if self._dds_about_version else "0.8.8"
             plugin = self._dds_about_plugin.text() if self._dds_about_plugin else "—"
             contract = self._dds_about_contract.text() if self._dds_about_contract else "—"
             text = "\n".join((
@@ -910,8 +970,8 @@ def main():
             super().update_snapshot(snapshot)
             try:
                 if self._dds_about_version is not None:
-                    value = self.version_value.text().strip() if hasattr(self, "version_value") else "0.8.7"
-                    self._dds_about_version.setText(value or "0.8.7")
+                    value = self.version_value.text().strip() if hasattr(self, "version_value") else "0.8.8"
+                    self._dds_about_version.setText(value or "0.8.8")
                 if self._dds_about_plugin is not None:
                     value = self.plugin_value.text().strip() if hasattr(self, "plugin_value") else "—"
                     self._dds_about_plugin.setText(value or "—")

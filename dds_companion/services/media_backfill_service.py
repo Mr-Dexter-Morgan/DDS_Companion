@@ -370,6 +370,163 @@ class MediaBackfillService:
         self._apply_outcome(outcome)
         return outcome
 
+    def recache_media_once(self, media_key: str, settings: CompanionSettings) -> DownloadOutcome | None:
+        """Honor one explicit "download again" request for an evicted cache item."""
+        if not self.registry.prepare_manual_recache(media_key):
+            return None
+        record = self.registry.get(media_key)
+        if record is None:
+            return None
+        if record.state == "UNRESOLVED":
+            return DownloadOutcome(
+                media_key=str(media_key),
+                state="UNRESOLVED",
+                error=record.last_error or "ожидает повторного обнаружения ссылки Discord",
+                failure_class=record.failure_class or "awaiting_rediscovery",
+            )
+        spec = self._claim_one(media_key)
+        if spec is None:
+            return None
+        outcome = self._download_one(spec, settings)
+        self._apply_outcome(outcome)
+        return outcome
+
+    def request_recache_scope(self, scope_kind: str, scope_id: str) -> int:
+        """Persist a user-requested re-cache operation for one archive branch."""
+        return self.registry.prepare_manual_recache_scope(scope_kind, scope_id)
+
+    def process_manual_recache_pending(
+        self, settings: CompanionSettings, *, now: datetime | None = None
+    ) -> MediaCycleResult:
+        """Continue explicit re-cache requests even while automatic backfill is off."""
+        stamp_dt = now or datetime.now(timezone.utc)
+        planned = self._plan_manual_recache(settings, stamp_dt)
+        specs = self._claim_manual(self.max_workers)
+        if not specs:
+            return MediaCycleResult(planned=planned)
+
+        outcomes: list[DownloadOutcome] = []
+        with ThreadPoolExecutor(max_workers=self.max_workers, thread_name_prefix="dds-media-manual") as executor:
+            future_map = {executor.submit(self._download_one, spec, settings): spec for spec in specs}
+            for future in as_completed(future_map):
+                spec = future_map[future]
+                try:
+                    outcomes.append(future.result())
+                except Exception as exc:
+                    outcomes.append(DownloadOutcome(
+                        media_key=spec.media_key, state="FAILED_RETRYABLE",
+                        error=f"{type(exc).__name__}: {exc}", failure_class="worker_exception",
+                    ))
+
+        counters = {
+            "cached": 0, "retryable_failed": 0, "permanent_failed": 0,
+            "stale_url": 0, "unresolved": 0, "too_large": 0, "skipped": 0,
+        }
+        for outcome in outcomes:
+            self._apply_outcome(outcome)
+            key = {
+                "CACHED": "cached", "FAILED_RETRYABLE": "retryable_failed",
+                "FAILED_PERMANENT": "permanent_failed", "STALE_URL": "stale_url",
+                "UNRESOLVED": "unresolved", "TOO_LARGE": "too_large", "SKIPPED": "skipped",
+            }.get(outcome.state)
+            if key:
+                counters[key] += 1
+        return MediaCycleResult(planned=planned, claimed=len(specs), **counters)
+
+    def _plan_manual_recache(self, settings: CompanionSettings, now: datetime) -> MediaPlanResult:
+        recovered = self._recover_abandoned(now)
+        stamp = now.isoformat()
+        queued = skipped = too_large = retry_promoted = 0
+        rows = self.connection.execute(
+            """
+            SELECT * FROM media_objects
+            WHERE manual_recache_requested=1
+              AND state IN ('KNOWN', 'FAILED_RETRYABLE')
+              AND EXISTS(SELECT 1 FROM media_refs mr WHERE mr.media_key=media_objects.media_key)
+            ORDER BY first_seen_at, media_key
+            LIMIT 200
+            """
+        ).fetchall()
+        with self.connection:
+            for row in rows:
+                state = str(row["state"] or "KNOWN")
+                if state == "FAILED_RETRYABLE":
+                    due = _parse_iso(row["next_retry_at"])
+                    if due is not None and due > now:
+                        continue
+                    if int(row["attempt_count"] or 0) >= self.MAX_ATTEMPTS:
+                        self._apply_outcome(DownloadOutcome(
+                            media_key=row["media_key"], state="FAILED_PERMANENT",
+                            error="retry limit exhausted", failure_class="retry_exhausted",
+                        ))
+                        continue
+                    retry_promoted += 1
+
+                expected_size = row["expected_size"]
+                max_bytes = settings.media_max_file_bytes
+                if settings.media_cache_limit_bytes is not None:
+                    max_bytes = settings.media_cache_limit_bytes if max_bytes is None else min(max_bytes, settings.media_cache_limit_bytes)
+                if expected_size is not None and max_bytes is not None and int(expected_size) > int(max_bytes):
+                    self._apply_outcome(DownloadOutcome(
+                        media_key=row["media_key"], state="TOO_LARGE",
+                        error="attachment exceeds configured cache policy", failure_class="policy_too_large",
+                    ))
+                    too_large += 1
+                    continue
+
+                url = row["current_url"]
+                if not url:
+                    self._apply_outcome(DownloadOutcome(
+                        media_key=row["media_key"], state="UNRESOLVED",
+                        error="ожидает повторного обнаружения ссылки Discord", failure_class="awaiting_rediscovery",
+                    ))
+                    continue
+                if not _is_allowed_discord_url(str(url)):
+                    self._apply_outcome(DownloadOutcome(
+                        media_key=row["media_key"], state="SKIPPED",
+                        error="URL is outside allowed Discord media hosts", failure_class="unsupported_url",
+                    ))
+                    skipped += 1
+                    continue
+                cursor = self.connection.execute(
+                    """UPDATE media_objects SET state='QUEUED', updated_at=?, next_retry_at=NULL,
+                              last_error=NULL, failure_class=NULL
+                       WHERE media_key=? AND manual_recache_requested=1
+                         AND state IN ('KNOWN', 'FAILED_RETRYABLE')""",
+                    (stamp, row["media_key"]),
+                )
+                queued += int(cursor.rowcount or 0)
+        return MediaPlanResult(
+            recovered_abandoned=recovered, queued=queued, skipped=skipped,
+            too_large=too_large, retry_promoted=retry_promoted,
+        )
+
+    def _claim_manual(self, limit: int) -> list[DownloadSpec]:
+        stamp = utc_now()
+        rows = self.connection.execute(
+            """SELECT media_key, current_url, filename, expected_size, content_type, attempt_count
+               FROM media_objects
+               WHERE state='QUEUED' AND manual_recache_requested=1
+               ORDER BY first_seen_at, media_key LIMIT ?""",
+            (max(1, int(limit)),),
+        ).fetchall()
+        claimed: list[DownloadSpec] = []
+        with self.connection:
+            for row in rows:
+                cursor = self.connection.execute(
+                    """UPDATE media_objects SET state='DOWNLOADING', last_attempt_at=?, updated_at=?,
+                              attempt_count=attempt_count+1
+                       WHERE media_key=? AND state='QUEUED' AND manual_recache_requested=1""",
+                    (stamp, stamp, row["media_key"]),
+                )
+                if cursor.rowcount:
+                    claimed.append(DownloadSpec(
+                        media_key=row["media_key"], url=row["current_url"], filename=row["filename"],
+                        expected_size=int(row["expected_size"]) if row["expected_size"] is not None else None,
+                        content_type=row["content_type"], attempt_count=int(row["attempt_count"] or 0) + 1,
+                    ))
+        return claimed
+
     def ignore_issue(self, media_key: str) -> bool:
         return self.registry.ignore_issue(media_key)
 
@@ -645,7 +802,8 @@ class MediaBackfillService:
                     UPDATE media_objects
                     SET state='CACHED', local_relpath=?, local_size=?, sha256=?,
                         cached_at=?, last_access_at=?, updated_at=?, next_retry_at=NULL,
-                        last_http_status=?, last_error=NULL, failure_class=NULL
+                        last_http_status=?, last_error=NULL, failure_class=NULL,
+                        manual_recache_requested=0
                     WHERE media_key=?
                     """,
                     (
@@ -686,7 +844,9 @@ class MediaBackfillService:
                     UPDATE media_objects
                     SET state=?, updated_at=?, next_retry_at=?, last_http_status=?,
                         last_error=?, failure_class=?,
-                        local_relpath=NULL, local_size=NULL, sha256=NULL, cached_at=NULL
+                        local_relpath=NULL, local_size=NULL, sha256=NULL, cached_at=NULL,
+                        manual_recache_requested=CASE WHEN ?='FAILED_RETRYABLE'
+                            THEN manual_recache_requested ELSE 0 END
                     WHERE media_key=?
                     """,
                     (
@@ -696,6 +856,7 @@ class MediaBackfillService:
                         outcome.http_status,
                         outcome.error,
                         outcome.failure_class,
+                        state,
                         outcome.media_key,
                     ),
                 )
@@ -763,7 +924,8 @@ class MediaBackfillService:
             """
             UPDATE media_objects
             SET state=?, updated_at=?, last_error=?, failure_class=?,
-                next_retry_at=CASE WHEN ?='FAILED_RETRYABLE' THEN next_retry_at ELSE NULL END
+                next_retry_at=CASE WHEN ?='FAILED_RETRYABLE' THEN next_retry_at ELSE NULL END,
+                manual_recache_requested=0
             WHERE media_key=?
             """,
             (state, stamp, error, failure_class, state, media_key),
