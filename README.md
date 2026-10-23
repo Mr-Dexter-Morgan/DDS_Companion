@@ -200,8 +200,6 @@ Expected output:
 
 DDS Companion 0.8.0 was accepted from exact source commit `4b691fe8369cf277e78a78323cb99c96b2fdeae7`. Windows CI passed 184 tests × 3, compile/version verification, native Windows build and package verification. The exact CI manual-test bundle passed the user Windows live gate, including tray-only autostart and clean tray exit. The same accepted CI run produced the published full Windows ZIP (SHA-256 `09d92556d391328cfcf0618b0ab363c843e486bb6ee4bfd7cd97049ee6a7860c`) and verified update package.
 
-DDS Companion **0.8.7** was promoted from Windows-live-tested local candidate r1. The accepted implementation overlay is byte-identical to the Drive archived 0.8.7 overlay; the exact accepted candidate ZIP SHA-256 is `bca3633a5d38a254621ee161af6d058de29eb5bf81ad7e8a706e7dc14f358d57`. PR #5 Windows CI and the main publication workflows passed; release/tag source commit is `66e730de44a60e531b00f7e981b62ec6c6bb27f8`. The separately CI-built published full ZIP SHA-256 is `6d44b1dd1c8a8d12e3013a05a263dd83bd5742bf0b09259234fb176fc69a5d02` and the update ZIP SHA-256 is `62ee08337fa9e2290697847f7aff76d3fff88b43f7130a86f785fc99d0b637e1`.
-
 DDS Companion **0.8.7** was promoted from the user-live-accepted **0.8.7-r2** candidate. PR #7 Windows CI run `39850305855` passed regression, compile/version checks, native Windows build, package verification and artifact upload. The stable publication workflow run `39850816081` passed regression, native build, payload verification and GitHub Release publication.
 
 Release/tag target commit: `0df1244375f9c40aafc3e9f1d4803f317148ecb3`.
