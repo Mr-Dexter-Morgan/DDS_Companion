@@ -1,69 +1,111 @@
-# DDS — Discord Data Snatcher
+# DDS Companion — Discord Data Snatcher
 
 [![Скачать DDS 0.8.8](https://img.shields.io/badge/%D0%A1%D0%9A%D0%90%D0%A7%D0%90%D0%A2%D0%AC_DDS-0.8.8-6C63FF?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/download/v0.8.8/DDS-0.8.8-windows-x64.zip)
 
-**Текущая стабильная версия: DDS Companion 0.8.8.**  
-Готовая Windows x64-сборка не требует установленного Python.
+**Current stable:** **DDS Companion 0.8.8** · Windows x64 · User Accepted.
 
-## Что такое DDS
+DDS Companion is the durable archive and desktop application of the DDS project. It imports local Plugin captures into SQLite, manages media lifecycle/cache, provides Library/Activity/Health UI and exports selected archive branches to ZIP.
 
-DDS — локальный архиватор Discord.
+## DDS components
 
-- **DDS Plugin** для BetterDiscord сохраняет данные, которые реально загрузил Discord-клиент.
-- **DDS Companion** импортирует их в локальный SQLite-архив, показывает Библиотеку, ведёт медиакэш и умеет упаковывать выбранные ветки в ZIP.
+| Component | Current public version | Role |
+|---|---|---|
+| **DDS Plugin** | **0.5.4 Stable** | Discord/BetterDiscord capture layer |
+| **DDS Companion** | **0.8.8 Stable** | SQLite archive, Library, media lifecycle/cache, ZIP export, desktop UI |
+| **DDS Installer** | **v0.9.0-rc.1 Preview** | Windows install/repair orchestration |
 
-DDS не выгружает сервер целиком через Discord API. В архив попадает то, что Discord-клиент фактически увидел и что Plugin успел сохранить.
+Repositories:
 
-## Установка
+- Plugin: https://github.com/Mr-Dexter-Morgan/DDS_BD_Plugin
+- Companion: https://github.com/Mr-Dexter-Morgan/DDS_Companion
+- Installer: https://github.com/Mr-Dexter-Morgan/DDS_Installer
 
-1. Установите Discord.
-2. Установите BetterDiscord.
-3. Установите и включите **DDS Plugin 0.5.4**:
+The three components use **independent version numbers**.
+
+## Data flow
+
+```text
+Discord Desktop
+      ↓
+BetterDiscord
+      ↓
+DDS Plugin
+      ↓
+%APPDATA%\BetterDiscord\DDS_Data
+      ↓
+DDS Companion
+      ↓
+%LOCALAPPDATA%\DDS_Companion
+      ↓
+SQLite archive → media cache / ZIP export
+```
+
+DDS Installer sits beside this path as the setup/repair control plane. It does not own the archive.
+
+## Installation
+
+### Recommended
+
+Use DDS Installer when its current preview scope matches the operation you need:
+
+https://github.com/Mr-Dexter-Morgan/DDS_Installer/releases
+
+### Manual / portable Companion setup
+
+1. Install Discord Desktop and BetterDiscord.
+2. Install and enable **DDS Plugin 0.5.4**:
    https://github.com/Mr-Dexter-Morgan/DDS_BD_Plugin/releases/tag/v0.5.4
-4. Скачайте **DDS-0.8.8-windows-x64.zip**:
+3. Download **DDS-0.8.8-windows-x64.zip**:
    https://github.com/Mr-Dexter-Morgan/DDS_Companion/releases/tag/v0.8.8
-5. Полностью распакуйте ZIP в отдельную папку.
-6. Запустите **DDS.exe**.
+4. Fully extract the ZIP.
+5. Start **DDS.exe**.
 
-Не запускайте отдельный `DDS.exe`, вытащенный из сборки: рядом должны оставаться `DDSUpdater.exe`, `current.json` и каталог `versions`.
+Keep `DDS.exe`, `DDSUpdater.exe`, `current.json` and `versions/` together.
 
-## Где хранятся данные
+## Data ownership
 
-DDS Plugin:
+Plugin hand-off data:
 
-`%APPDATA%\BetterDiscord\DDS_Data`
+```text
+%APPDATA%\BetterDiscord\DDS_Data
+```
 
-DDS Companion:
+Companion durable data:
 
-`%LOCALAPPDATA%\DDS_Companion`
+```text
+%LOCALAPPDATA%\DDS_Companion
+```
 
-SQLite-архив — долговечный источник истины. Медиакэш и экспортированные ZIP-файлы являются производными данными.
+The SQLite archive is the durable source of truth. Media cache and exported ZIP files are derived/rebuildable layers.
 
-## Что вошло в 0.8.8
+## 0.8.8 highlights
 
-- **Скачать снова / Manual Re-cache** для очищенных медиа.
-- Сохранение re-cache намерения через протухшую Discord-ссылку до fresh rediscovery.
-- Исправление ложного **Discord NOT RUNNING** на локализованной Windows.
+- **Скачать снова / Manual Re-cache** for evicted media.
+- Persisted re-cache intent through expired Discord URLs until fresh rediscovery.
+- Binary-safe Discord process detection on localized Windows.
 - Race-safe SQLite startup/migrations.
-- Новый квадратный **16×12 Tetris-style Media Cache**.
-- Адаптивный визуальный масштаб для режима медиакэша **Без ограничений**.
-- Reproducible Windows build на Python 3.11.
+- Square **16×12 Tetris-style Media Cache**.
+- Adaptive visual scale for unlimited media cache.
+- Reproducible Windows build on Python 3.11.
 
-Полные release notes: [docs/releases/RELEASE_NOTES_0.8.8.md](docs/releases/RELEASE_NOTES_0.8.8.md)
+Release notes: [docs/releases/RELEASE_NOTES_0.8.8.md](docs/releases/RELEASE_NOTES_0.8.8.md)
 
-## Архитектура
+## Architecture
 
-`Discord → BetterDiscord → DDS Plugin → DDS_Data → DDS Companion → SQLite archive → media cache / ZIP export`
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
-Обновление приложения идёт отдельным безопасным слоем:
+Core rule:
 
-`GitHub Release → verified update ZIP → DDSUpdater.exe → versioned app → startup ACK / rollback`
+```text
+Plugin captures → Companion archives/processes → Installer installs/repairs
+```
 
-Сетевые функции, GitHub и медиакэш не должны мешать чтению уже существующего локального архива.
+No component should silently take ownership of another component's durable data.
 
-## Сборка из исходников
+## Build from source
 
-Требования:
+Requirements:
+
 - Windows;
 - Python 3.11.
 
@@ -73,29 +115,34 @@ python -m venv .venv-build
 build_windows.bat
 ```
 
-Основные выходные файлы:
+GitHub CI validates regression, versioning, native Windows build and release packages.
 
-- `dist/DDS/DDS.exe`
-- `dist/DDS/DDSUpdater.exe`
-- `dist/release/DDS-<version>-windows-x64.zip`
-- `dist/release/DDS-<version>-update.zip`
-- `dist/release/DDS-<version>-update.json`
+## Repository layout
 
-## Что лежит в корне репозитория и зачем
+```text
+dds_companion/             runtime source + tests
+assets/                    application resources
+DDSApp.spec                application PyInstaller definition
+DDSLauncher.spec           stable launcher definition
+DDSUpdater.spec            updater definition
+run_companion.pyw          application build entrypoint
+run_launcher.pyw           launcher build entrypoint
+run_updater.py             updater build entrypoint
+build_windows.bat
+tools/
+docs/ARCHITECTURE.md
+docs/releases/RELEASE_NOTES_0.8.8.md
+.github/workflows/
+README.md
+ROADMAP.md
+```
 
-- `DDSApp.spec`, `DDSLauncher.spec`, `DDSUpdater.spec` — PyInstaller build definitions.
-- `run_companion.pyw`, `run_launcher.pyw`, `run_updater.py` — реальные build entrypoints.
-- `build_windows.bat`, `tools/`, `requirements-build.txt` — native Windows build/release pipeline.
-- `dds_companion/` и `dds_companion_patchxx.py` — runtime source.
-- `assets/` — ресурсы приложения.
-- `.github/workflows/` — CI и публикация релизов.
-- `ROADMAP.md` и текущие release notes — минимальная проектная документация.
+## Documentation
 
-## Документация
-
-- [ROADMAP.md](ROADMAP.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Roadmap](ROADMAP.md)
 - [Release notes 0.8.8](docs/releases/RELEASE_NOTES_0.8.8.md)
 
-## Лицензия
+## License
 
-Отдельная open-source лицензия пока не предоставлена. Репозиторий публичен для распространения, проверки и истории проекта.
+No separate open-source license has been granted. Public repository visibility alone does not grant general redistribution rights.
