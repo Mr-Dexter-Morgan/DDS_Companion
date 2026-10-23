@@ -1,0 +1,43 @@
+name: Apply DDS 0.8.8 Final Overlay
+
+on:
+  push:
+    branches: [release/0.8.8-final]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Stage DDS Companion 0.8.8 final overlay'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download and verify accepted overlay
+        shell: pwsh
+        run: |
+          $url = 'https://sdmntprnortheu.oaiusercontent.com/files/00000000-aeac-81f4-ba1f-88065427df04/raw?se=2026-10-23T12%3A51%3A40Z&sp=r&sv=2026-02-06&sr=b&scid=9c4480d6-de6f-5eec-a268-2ba90cdbd794&skoid=40ce4b34-a373-4a62-b0bf-44befe221915&sktid=a48cca56-e6da-484e-a814-9c849652bcb3&skt=2026-10-23T08%3A50%3A05Z&ske=2026-10-24T08%3A50%3A05Z&sks=b&skv=2026-02-06&sig=nNdFoQ7UoAwba5REYVrZNPb0AnIvh8jsyiH7AuctoEw%3D'
+          $zip = Join-Path $env:RUNNER_TEMP 'dds-0.8.8-final-overlay.zip'
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          $expected = '73ab10a9f935381b6dcc140b2245e842f179e7e11c5a641f7310c91b4692d0e2'
+          if ($actual -ne $expected) {
+            throw "Overlay SHA-256 mismatch: $actual"
+          }
+          Expand-Archive -LiteralPath $zip -DestinationPath . -Force
+
+      - name: Commit exact accepted source tree
+        shell: pwsh
+        run: |
+          Remove-Item '.github/workflows/apply-0.8.8-overlay.yml' -Force
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git status --short
+          git commit -m 'Apply DDS Companion 0.8.8 final source overlay'
+          git push origin HEAD:release/0.8.8-final
